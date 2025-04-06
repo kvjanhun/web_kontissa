@@ -1,0 +1,256 @@
+/* Import DM Sans font from Google Fonts */
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+
+body {
+    font-family: "DM Sans", sans-serif;
+    font-weight: 300;
+    background-color: #f9f9f9;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+a {
+    text-decoration: none;
+    font-weight: 400;
+    color: #333;
+}
+
+a:hover {
+    color: rgb(255, 100, 62);
+}
+
+/* Media query to adapt for wide screens */
+@media (min-width: 960px) {
+    body {
+        width: 80%;
+        max-width: 960px;
+        margin: 0 auto;
+    }
+}
+
+/* Media query to adapt for narrow screens */
+@media (max-width: 600px) {
+    .left_items #h2 {
+        display: none;
+    }
+
+    #terminal {
+        height: 8rem;
+    }
+}
+
+/* Container for main page divs: top, mid, bottom */
+.page {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    box-shadow: 0 4px 8px 0 rgba(0, 0, 0, 0.2), 0 6px 20px 0 rgba(0, 0, 0, 0.19);
+}
+
+/* Container for top section of header and navigation */
+.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    background-color: #333;
+    padding: 0 1.5rem;
+    height: 5.5rem;
+    border-bottom: 3px #f9f9f9 solid;
+}
+
+/* Container for headers: they're on the left */
+.left_items {
+    display: flex;
+    gap: 40px;
+    align-items: baseline;
+    font-weight: 400;
+    font-size: 1.5em;
+    line-height: 1.5em;
+}
+
+.left_items #h1 {
+    color: #fff;
+}
+
+.left_items #h1 a {
+    font-size: 1.5em;
+    color: #fff;
+}
+
+.left_items #h2 {
+    font-weight: 300;
+    color: #aaa;
+}
+
+/* Container for the navigation */
+.top #links {
+    display: flex;  
+    height: 100%;
+    align-items: center;
+}
+
+.top #links a {
+    text-decoration: none;
+    color: #fff;
+    padding: 0 15px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    box-sizing: border-box;
+    transition: background-color 0.4s ease;
+}
+
+.top #links a:hover {
+    background-color: #222;
+    color: rgb(255, 100, 62);
+}
+
+/* Mid section containing the mock terminal window and text */
+.mid {
+    flex-grow: 3;
+    padding: 1.5em;
+    background-color: #fff;
+    color: #333;
+    border-top: 4px rgb(255, 100, 62) solid;
+    border-bottom: 4px rgb(255, 100, 62) solid;
+}
+
+/* Terminal window */
+#terminal {
+    width: 80%;
+    height: 14rem;
+    box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.5);
+    margin-bottom: 2rem;
+}
+
+/* Terminal title bar */
+#terminal_bar {
+    display: flex;
+    width: 100%;
+    height: 2.2rem;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 1rem;
+    box-sizing: border-box;
+    border-top-left-radius: 5px;
+    border-top-right-radius: 5px;
+    background: linear-gradient(#504b45 0%, #3c3b37 100%);
+}
+
+/* Window adjustment buttons */
+.bar_buttons {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    font-family: monospace;
+    gap: 0.4em;
+}
+
+.bar_button {
+    color: #000;
+    font-size: 0.66rem;
+    height: 1rem;
+    width: 1rem;
+    box-sizing: border-box;
+    border: none;
+    border-radius: 100%;
+    background: linear-gradient(#7d7871 0%, #595953 100%);
+    text-shadow: 0px 1px 0px rgba(255, 255, 255, 0.2);
+    box-shadow: 0px 0px 1px 0px #41403A, 0px 1px 1px 0px #474642;
+}
+
+#exit_button {
+    background: linear-gradient(#ce4c4c 0%, #ca2222 100%);
+}
+
+/* Window title */
+#bar_user {
+    color: #d5d0ce;
+    font-size: 0.9em;
+    line-height: 1em;
+}
+
+/* Terminal body */
+#terminal_body {
+    background: rgba(56, 4, 40, 0.9);
+    font-family: monospace;
+    font-size: 0.85rem;
+    height: calc(100% - 2.4rem);
+    padding: 0.2em;
+    margin-top: -1px;
+    border: none;
+}
+
+/* Terminal prompt */
+#terminal_prompt {
+    display: flex;
+    margin-left: 0.2em;
+}
+
+#terminal_prompt-user {
+    color: #7eda28;
+}
+
+#terminal_prompt-location {
+    color: #4878c0;
+}
+
+#terminal_prompt-bling {
+    color: #dddddd;
+}
+
+#terminal_prompt-command {
+    margin-left: 1ch;
+    color: #ddd;
+}
+
+/* Cursor animation */
+#terminal_prompt-cursor {
+    display: block;
+    height: 1.1em;
+    width: 1.0ch;
+    margin-left: 0.2ch;
+    animation: blink 1200ms linear infinite;
+}
+
+@keyframes blink {
+    0%, 49% {
+        background: transparent;
+    }
+    50%, 100% {
+        background: #dddddd;
+    }
+}
+
+/* Text container */
+.text_block {
+    font-size: 1em;
+    line-height: 1.6em;
+    margin: 0 0 1.5rem 0;
+}
+
+.text_block h2 {
+    font-size: 1.5em;
+    line-height: 1.8em;
+    border-bottom: 1px #000 solid;
+    margin: 0;
+}
+
+.text_block .content {
+    padding: 0 1rem 0 1.5rem;
+}
+
+/* Bottom bar */
+.bottom {
+    flex-grow: 1;
+    background-color: #333;
+    margin: 0;
+    padding: 0.7rem 1.0rem;
+    height: 2.5em;
+    border-top: 3px #f9f9f9 solid;
+    color: #666;
+    box-sizing: border-box;
+}
