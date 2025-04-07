@@ -1,8 +1,18 @@
-FROM nginx:alpine
+FROM python:3.11-alpine
 
-# Copy site into Nginx's default static folder
-COPY ./public-html /usr/share/nginx/html
+# Install system dependencies
+RUN apk add --no-cache build-base libffi-dev
 
-# Optional: overwrite default Nginx config
-# COPY nginx.conf /etc/nginx/nginx.conf
+# Set working dir
+WORKDIR /app
 
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app code
+COPY app/ /app/
+
+# Expose port 80 and run
+CMD ["python", "main.py"]
+EXPOSE 80
