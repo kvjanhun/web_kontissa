@@ -6,6 +6,7 @@
     <title>erez.ac - Konsta Janhunen</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
     <link rel="favicon" href="{{ url_for('static', filename='favicon.ico') }}">
+    <script src="{{ url_for('static', filename='script/terminal.js') }}"></script>
 </head>
 <body>
     <div class="page">
@@ -32,13 +33,16 @@
                     </div>
                 </div>
                 <div id="terminal_body">
-                    <div id="terminal_prompt">
-                        <span id="terminal_prompt-user">konsta@erez.ac:</span>
-                        <span id="terminal_prompt-location">~</span>
-                        <span id="terminal_prompt-bling">$</span>
-                        <span id="terminal_prompt-command">cowsay moo</span>
-                        <span id="terminal_prompt-cursor"></span>
+                    <div class="line">
+                        <span class="terminal_prompt">
+                            <span id="user">konsta@erez.ac</span>
+                            <span>:</span>
+                            <span id="dir">~</span>
+                            <span id="bling">$</span>
+                        </span>
+                        <span id="command"></span>
                     </div>
+                    <pre id="output"></pre>
                 </div>
             </div>
             <div class="text_block">

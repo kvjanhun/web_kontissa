@@ -1,5 +1,6 @@
 /* Import DM Sans font from Google Fonts */
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,100..1000;1,9..40,100..1000&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Ubuntu+Mono&display=swap');
 
 body {
     font-family: "DM Sans", sans-serif;
@@ -28,6 +29,11 @@ a:hover {
         max-width: 960px;
         margin: 0 auto;
     }
+}
+
+pre {
+    white-space: pre-wrap;
+    font-family: monospace;
 }
 
 /* Media query to adapt for narrow screens */
@@ -121,7 +127,7 @@ a:hover {
 /* Terminal window */
 #terminal {
     width: 80%;
-    height: 14rem;
+    height: 17rem;
     box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.5);
     margin-bottom: 2rem;
 }
@@ -176,43 +182,69 @@ a:hover {
 /* Terminal body */
 #terminal_body {
     background: rgba(56, 4, 40, 0.9);
-    font-family: monospace;
+    font-family: 'Ubuntu Mono', monospace;
     font-size: 0.85rem;
     height: calc(100% - 2.4rem);
     padding: 0.2em;
     margin-top: -1px;
     border: none;
+    color: #fff;
+    display: block;
+}
+
+.line {
+    display: flex;
+    font-family: 'Ubuntu Mono', monospace;
+}
+
+.prompt {
+    color: #fff;
+    display: flex;
+    gap: 0;
+}
+
+#command {
+    color: #fff;
+}
+
+#output {
+    font-family: 'Ubuntu Mono', monospace;
+    color: #fff;
+    white-space: pre-wrap;
+    margin: 0;
 }
 
 /* Terminal prompt */
-#terminal_prompt {
+.terminal_prompt {
     display: flex;
     margin-left: 0.2em;
+    color: #ddd;
 }
 
-#terminal_prompt-user {
+.terminal_prompt #user {
     color: #7eda28;
 }
 
-#terminal_prompt-location {
-    color: #4878c0;
+.terminal_prompt #dir {
+    color: #6294cd;
 }
 
-#terminal_prompt-bling {
-    color: #dddddd;
+.terminal_prompt #bling {
+    margin-right: 1ch;
 }
 
-#terminal_prompt-command {
+.terminal_prompt #command {
     margin-left: 1ch;
     color: #ddd;
 }
 
 /* Cursor animation */
-#terminal_prompt-cursor {
+.terminal_prompt #cursor {
     display: block;
-    height: 1.1em;
-    width: 1.0ch;
-    margin-left: 0.2ch;
+    height: 0.9em;
+    width: 1px;
+    margin-top: 1px;
+    margin-bottom: 1px;
     animation: blink 1200ms linear infinite;
 }
 
