@@ -127,11 +127,6 @@ a:hover {
     margin-bottom: 2rem;
 }
 
-#terminal pre {
-    white-space: pre-wrap;
-    font-family: monospace;
-}
-
 /* Terminal title bar */
 #terminal_bar {
     display: flex;

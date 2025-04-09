@@ -1,6 +1,7 @@
 from flask import Flask, render_template, jsonify
 from flask_sqlalchemy import SQLAlchemy
 import os
+from datetime import datetime
 from cowsay import get_output_string
 
 app = Flask(__name__)
@@ -14,11 +15,21 @@ class Section(db.Model):
     slug = db.Column(db.String, unique=True, nullable=False)
     title = db.Column(db.String, nullable=False)
     content = db.Column(db.Text, nullable=False)
+    last_updated = db.Column(db.String, nullable=True)
+
+    #def update_timestamp(self):
+    #    self.last_updated = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 @app.route("/")
 def index():
     sections = Section.query.all()
-    return render_template("index.html", sections=sections)
+
+    updated_sections = [s for s in sections if s.last_updated]
+    last_updated = max(updated_sections, key=lambda s: s.last_updated).last_updated if updated_sections else None
+
+    update_date = datetime.fromisoformat(last_updated).strftime("%Y-%m-%d") if last_updated else "2025"
+
+    return render_template("index.html", sections=sections, last_updated=update_date)
 
 @app.route("/api/cowsay")
 def cowsay_route():
