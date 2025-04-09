@@ -4,4 +4,6 @@ services:
     command: gunicorn -w 2 -b 0.0.0.0:80 main:app
     ports:
       - "127.0.0.1:8080:80"
+    volumes:
+      - ./app/data:/app/data
     restart: unless-stopped
