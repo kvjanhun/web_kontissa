@@ -1,6 +1,5 @@
 ### 📄 `README.md`
 
-markdown
 # [erez.ac](https://erez.ac)
 
 **Personal portfolio website powered by Flask, Gunicorn, and SQLite**, containerized using Docker and orchestrated with Docker Compose.
