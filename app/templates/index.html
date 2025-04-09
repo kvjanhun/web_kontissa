@@ -45,39 +45,12 @@
                     <pre id="output"></pre>
                 </div>
             </div>
-            <div class="text_block">
-                <h2>Who am I?</h2>
-                <div class="content" id="who">
-                    <p>Konsta Janhunen, currently working as an Integration Developer at Digia Finland Oy,
-                    also a computer science student at University of Helsinki. My most common nickname 
-                    throughout the years has been <em>erezac</em>.</p>
-                </div>
+            {% for section in sections %}
+            <div class="text_block" id="{{ section.slug }}">
+                <h2>{{ section.title }}</h2>
+                <p>{{ section.content | safe }}</p>
             </div>
-            <div class="text_block">
-                <h2>What do I do?</h2>
-                <div class="content" id="what">
-                    <p>Integrations is all about tying multiple systems together with various technologies.
-                    My part involves a lot of trouble tackling and information hunting, SQL queries being an important tool.
-                    Transferring data securely is essential and I've become well-versed in the practicalities of encryption,
-                    for example, with GnuPG.</p>
-                    <p>On my free-time I tend to mostly stare at screens a bit more. Thankfully, our young flat-coated retriever
-                    keeps me active and forces me outside. I'm an avid PC gamer and my favourites include games in several genres from
-                    RPGs to FPSes, roguelikes to 4Xes.</p>
-                    <p>I also like reading about technology and trying new stuff. <a href="https://github.com/kvjanhun/web">This site</a>
-                    is self-hosted on an Intel NUC running Red Hat Linux. Currently I have an Apache HTTP-server (HTTPS) and an 
-                    OpenSSH-server running. DNS server and email-forwarding are provided by 
-                    <a href="https://www.domainhotelli.fi/domain/nimipalvelu-dns">Domainhotelli</a> and ImprovMX. The site itself
-                    is deployed in a Docker container that's exposed to internet with nginx. Changes to GitHub remote are automatically
-                    deployed with a webhook.</p>
-                </div>
-            </div>
-            <div class="text_block" id="where">
-                <h2>Where can you contact me?</h2>
-                <div class="content">
-                    <p>You can email me to konsta at erez.ac or message me in Telegram. I have a LinkedIn profile but I'm inactive there.
-                    I'm currently not looking for a new job.</p>
-                </div>
-            </div>
+            {% endfor %}
         </div>
         <div class="bottom">
             Last update 2025-04-06

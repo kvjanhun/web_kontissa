@@ -31,11 +31,6 @@ a:hover {
     }
 }
 
-pre {
-    white-space: pre-wrap;
-    font-family: monospace;
-}
-
 /* Media query to adapt for narrow screens */
 @media (max-width: 600px) {
     .left_items #h2 {
@@ -130,6 +125,11 @@ pre {
     height: 17rem;
     box-shadow: 2px 4px 5px rgba(0, 0, 0, 0.5);
     margin-bottom: 2rem;
+}
+
+#terminal pre {
+    white-space: pre-wrap;
+    font-family: monospace;
 }
 
 /* Terminal title bar */
