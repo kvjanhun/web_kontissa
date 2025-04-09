@@ -1,4 +1,4 @@
-FROM python:3.11-alpine
+FROM python:3.13-alpine
 
 # Install system dependencies
 RUN apk add --no-cache build-base libffi-dev
@@ -11,7 +11,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy app code
-COPY app/ /app/
+COPY app /app
 
 # Expose port 80
 EXPOSE 80

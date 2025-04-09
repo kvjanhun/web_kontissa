@@ -4,15 +4,4 @@ services:
     command: gunicorn -w 2 -b 0.0.0.0:80 main:app
     ports:
       - "127.0.0.1:8080:80"
-    depends_on:
-      - mongo
-
-  mongo:
-    image: mongo:4.4
-    container_name: flask-mongo
     restart: unless-stopped
-    volumes:
-      - mongo_data:/data/db
-
-volumes:
-  mongo_data:

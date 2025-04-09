@@ -2,4 +2,7 @@
 .DS_Store
 .AppleDouble
 .LSOverride
-
+# SQLite database
+*.db
+*.sqlite
+*.sqlite3
