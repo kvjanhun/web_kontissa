@@ -1,60 +1,51 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>erez.ac - Konsta Janhunen</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='assets/style.css') }}">
-    <link rel="favicon" href="{{ url_for('static', filename='favicon.ico') }}">
-    <script src="{{ url_for('static', filename='script/terminal.js') }}"></script>
-</head>
-<body>
-    <div class="page">
-        <div class="top">
-            <div class="left_items">
-                <div id="h1"><a href="/">erez.ac</a></div>
-                <div id="h2">Konsta Janhunen</div>
-            </div>
-            <div id="links">
-                <a href="#who">Who</a>
-                <a href="#what">What</a>
-                <a href="#where">Where</a>
-            </div>
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page">
+    <div class="top">
+        <div class="left_items">
+            <div id="h1"><a href="/">erez.ac</a></div>
+            <div id="h2">Konsta Janhunen</div>
         </div>
-        <div class="mid">
-            <div id="terminal">
-                <div id="terminal_bar">
-                    <div id="bar_filler"> </div>
-                    <div id="bar_user">konsta@erez.ac:~</div>
-                    <div class="bar_buttons">
-                        <button class="bar_button">–</button>
-                        <button class="bar_button">☐</button>
-                        <button class="bar_button" id="exit_button">✕</button>
-                    </div>
-                </div>
-                <div id="terminal_body">
-                    <div class="line">
-                        <span class="terminal_prompt">
-                            <span id="user">konsta@erez.ac</span>
-                            <span>:</span>
-                            <span id="dir">~</span>
-                            <span id="bling">$</span>
-                        </span>
-                        <span id="command"></span>
-                    </div>
-                    <pre id="output"></pre>
-                </div>
-            </div>
-            {% for section in sections %}
-            <div class="text_block" id="{{ section.slug }}">
-                <h2>{{ section.title }}</h2>
-                <p>{{ section.content | safe }}</p>
-            </div>
-            {% endfor %}
-        </div>
-        <div class="bottom">
-            Last updated: {{ last_updated }}
+        <div id="links">
+            <a href="#who">Who</a>
+            <a href="#what">What</a>
+            <a href="#where">Where</a>
         </div>
     </div>
-</body>
-</html>
+    <div class="mid">
+        <div id="terminal">
+            <div id="terminal_bar">
+                <div id="bar_filler"> </div>
+                <div id="bar_user">konsta@erez.ac:~</div>
+                <div class="bar_buttons">
+                    <button class="bar_button">–</button>
+                    <button class="bar_button">☐</button>
+                    <button class="bar_button" id="exit_button">✕</button>
+                </div>
+            </div>
+            <div id="terminal_body">
+                <div class="line">
+                    <span class="terminal_prompt">
+                        <span id="user">konsta@erez.ac</span>
+                        <span>:</span>
+                        <span id="dir">~</span>
+                        <span id="bling">$</span>
+                    </span>
+                    <span id="command"></span>
+                </div>
+                <pre id="output"></pre>
+            </div>
+        </div>
+        {% for section in sections %}
+        <div class="text_block" id="{{ section.slug }}">
+            <h2>{{ section.title }}</h2>
+            <p>{{ section.content | safe }}</p>
+        </div>
+        {% endfor %}
+    </div>
+    <div class="bottom">
+        Last updated: {{ last_updated }}
+    </div>
+</div>
+{% endblock %}
