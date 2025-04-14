@@ -1,17 +1,19 @@
+# Base image with Python + Alpine
 FROM python:3.13-alpine
 
-# Install system dependencies
-RUN apk add --no-cache build-base libffi-dev
-
-# Set working dir
+# Set working directory in container
 WORKDIR /app
 
-# Install Python dependencies
+# Install system dependencies
+RUN apk add --no-cache gcc musl-dev libffi-dev make
+
+# Copy dependencies list and install
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy app code
-COPY app /app
+# Copy the rest of the application
+COPY . .
 
-# Expose port 80
-EXPOSE 80
+# Run Gunicorn in production
+CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:80", "run:app"]
+

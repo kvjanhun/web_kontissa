@@ -1,9 +1,10 @@
 services:
   web:
     build: .
-    command: gunicorn -w 2 -b 0.0.0.0:80 main:app
+    command: gunicorn -w 2 -b 0.0.0.0:80 run:app
     ports:
       - "127.0.0.1:8080:80"
     volumes:
       - ./app/data:/app/data
     restart: unless-stopped
+    
