@@ -1,51 +1,187 @@
-{% extends "base.html" %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>erez.ac - Konsta Janhunen</title>
+    <link rel="stylesheet" href="/static/assets/style.css">
+    <link rel="icon" href="/static/favicon.ico">
+    <script type="application/ld+json">
+        {
+            "@context": "https://schema.org",
+            "@type": "Person",
+            "name": "Konsta Janhunen",
+            "url": "https://erez.ac"
+        }
+    </script>
+</head>
+<body>
+    <div id="app"></div>
 
-{% block content %}
-<div class="page">
-    <div class="top">
-        <div class="left_items">
-            <div id="h1"><a href="/">erez.ac</a></div>
-            <div id="h2">Konsta Janhunen</div>
-        </div>
-        <div id="links">
-            <a href="#who">Who</a>
-            <a href="#what">What</a>
-            <a href="#where">Where</a>
-        </div>
-    </div>
-    <div class="mid">
-        <div id="terminal">
-            <div id="terminal_bar">
-                <div id="bar_filler"> </div>
-                <div id="bar_user">konsta@erez.ac:~</div>
-                <div class="bar_buttons">
-                    <button class="bar_button">–</button>
-                    <button class="bar_button">☐</button>
-                    <button class="bar_button" id="exit_button">✕</button>
-                </div>
-            </div>
-            <div id="terminal_body">
-                <div class="line">
-                    <span class="terminal_prompt">
-                        <span id="user">konsta@erez.ac</span>
-                        <span>:</span>
-                        <span id="dir">~</span>
-                        <span id="bling">$</span>
-                    </span>
-                    <span id="command"></span>
-                </div>
-                <pre id="output"></pre>
-            </div>
-        </div>
-        {% for section in sections %}
-        <div class="text_block" id="{{ section.slug }}">
-            <h2>{{ section.title }}</h2>
-            <p>{{ section.content | safe }}</p>
-        </div>
-        {% endfor %}
-    </div>
-    <div class="bottom">
-        Last updated: {{ update_date }}
-    </div>
-</div>
-{% endblock %}
+    <script src="/static/script/vue.global.js"></script>
+    <script>
+    var createApp = Vue.createApp;
+    var ref = Vue.ref;
+    var onMounted = Vue.onMounted;
+
+        var AppHeader = {
+            template: [
+                '<div class="top">',
+                '  <div class="left_items">',
+                '    <div id="h1"><a href="/">erez.ac</a></div>',
+                '    <div id="h2">Konsta Janhunen</div>',
+                '  </div>',
+                '  <div id="links">',
+                '    <a v-for="link in navLinks" :key="link.slug" :href="\'#\' + link.slug">',
+                '      {% raw %}{{ link.label }}{% endraw %}',
+                '    </a>',
+                '  </div>',
+                '</div>'
+            ].join('\n'),
+            setup: function() {
+                var navLinks = ref([]);
+                onMounted(function() {
+                    fetch('/api/sections')
+                        .then(function(res) { return res.json(); })
+                        .then(function(sections) {
+                            navLinks.value = sections.map(function(s) {
+                                return { slug: s.slug, label: s.title };
+                            });
+                        })
+                        .catch(function() {
+                            navLinks.value = [
+                                { slug: 'who', label: 'Who' },
+                                { slug: 'what', label: 'What' },
+                                { slug: 'where', label: 'Where' }
+                            ];
+                        });
+                });
+                return { navLinks: navLinks };
+            }
+        };
+
+        var TerminalWindow = {
+            template: [
+                '<div id="terminal">',
+                '  <div id="terminal_bar">',
+                '    <div id="bar_filler">&nbsp;</div>',
+                '    <div id="bar_user">konsta@erez.ac:~</div>',
+                '    <div class="bar_buttons">',
+                '      <button class="bar_button">\u2013</button>',
+                '      <button class="bar_button">\u2610</button>',
+                '      <button class="bar_button" id="exit_button">\u2715</button>',
+                '    </div>',
+                '  </div>',
+                '  <div id="terminal_body">',
+                '    <div class="line">',
+                '      <span class="terminal_prompt">',
+                '        <span id="user">konsta@erez.ac</span>',
+                '        <span>:</span>',
+                '        <span id="dir">~</span>',
+                '        <span id="bling">$</span>',
+                '      </span>',
+                '      <span id="command">{% raw %}{{ typedCommand }}{% endraw %}</span>',
+                '    </div>',
+                '    <pre id="output">{% raw %}{{ cowsayOutput }}{% endraw %}</pre>',
+                '    <div class="line" v-if="showNewPrompt">',
+                '      <span class="terminal_prompt">',
+                '        <span id="user">konsta@erez.ac</span>',
+                '        <span>:</span>',
+                '        <span id="dir">~</span>',
+                '        <span id="bling">$</span>',
+                '        <span id="cursor"></span>',
+                '      </span>',
+                '    </div>',
+                '  </div>',
+                '</div>'
+            ].join('\n'),
+            setup: function() {
+                var typedCommand = ref('');
+                var cowsayOutput = ref('');
+                var showNewPrompt = ref(false);
+                var commandText = 'cowsay moo';
+                function typeCommand(i) {
+                    if (i < commandText.length) {
+                        typedCommand.value += commandText[i];
+                        setTimeout(function() { typeCommand(i + 1); }, 80);
+                    } else {
+                        setTimeout(fetchCowsay, 100);
+                    }
+                }
+                function fetchCowsay() {
+                    fetch('/api/cowsay')
+                        .then(function(res) { return res.json(); })
+                        .then(function(data) {
+                            cowsayOutput.value = data.output;
+                            showNewPrompt.value = true;
+                        })
+                        .catch(function() {
+                            cowsayOutput.value = 'Error fetching cowsay';
+                        });
+                }
+                onMounted(function() {
+                    setTimeout(function() { typeCommand(0); }, 3000);
+                });
+                return { typedCommand: typedCommand, cowsayOutput: cowsayOutput, showNewPrompt: showNewPrompt };
+            }
+        };
+
+        var SectionBlock = {
+            props: { section: { type: Object, required: true } },
+            template: [
+                '<div class="text_block" :id="section.slug">',
+                '  <h2>{% raw %}{{ section.title }}{% endraw %}</h2>',
+                '  <p v-html="section.content"></p>',
+                '</div>'
+            ].join('\n')
+        };
+
+        var AppFooter = {
+            props: { updateDate: { type: String, default: '' } },
+            template: [
+                '<div class="bottom">',
+                '  <span v-if="updateDate">Last updated: {% raw %}{{ updateDate }}{% endraw %}</span>',
+                '  <span v-else>&nbsp;</span>',
+                '</div>'
+            ].join('\n')
+        };
+
+        var app = createApp({
+            template: [
+                '<div class="page">',
+                '  <app-header></app-header>',
+                '  <div class="mid">',
+                '    <terminal-window></terminal-window>',
+                '    <section-block v-for="section in sections" :key="section.id" :section="section"></section-block>',
+                '  </div>',
+                '  <app-footer :update-date="updateDate"></app-footer>',
+                '</div>'
+            ].join('\n'),
+            components: {
+                'app-header': AppHeader,
+                'terminal-window': TerminalWindow,
+                'section-block': SectionBlock,
+                'app-footer': AppFooter
+            },
+            setup: function() {
+                var sections = ref([]);
+                var updateDate = ref('');
+                onMounted(function() {
+                    Promise.all([
+                        fetch('/api/sections').then(function(r) { return r.json(); }),
+                        fetch('/api/meta').then(function(r) { return r.json(); })
+                    ]).then(function(results) {
+                        sections.value = results[0];
+                        updateDate.value = results[1].update_date;
+                    }).catch(function(e) {
+                        console.error('Failed to load site data:', e);
+                    });
+                });
+                return { sections: sections, updateDate: updateDate };
+            }
+        });
+
+    app.mount('#app');
+    </script>
+</body>
+</html>

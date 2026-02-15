@@ -6,23 +6,33 @@ from . import app
 
 @app.route("/")
 def index():
-    sections = Section.query.all()
-
-    last_updated = get_latest_commit_date()
-    update_date = datetime.fromisoformat(last_updated).strftime("%Y-%m-%d") if last_updated else "2025"
-
-    return render_template("index.html", sections=sections, update_date=update_date)
+    return render_template("index.html")
 
 @app.route("/index.html")
 def legacy_index():
     return redirect(url_for("index"), code=301)
+
+@app.route("/api/sections")
+def api_sections():
+    sections = Section.query.all()
+    return jsonify([s.to_dict() for s in sections])
+
+@app.route("/api/meta")
+def api_meta():
+    last_updated = get_latest_commit_date()
+    update_date = datetime.fromisoformat(last_updated.replace("Z", "+00:00")).strftime("%Y-%m-%d") if last_updated else "2025"
+    return jsonify({
+        "site_name": "erez.ac",
+        "author": "Konsta Janhunen",
+        "update_date": update_date
+    })
 
 @app.route("/sitemap.xml")
 def generate_sitemap():
     pages = [
         {
             "loc": "https://erez.ac/",
-            "lastmod": get_latest_commit_date()[:10],  # just the date part
+            "lastmod": get_latest_commit_date()[:10],
             "changefreq": "monthly",
             "priority": "1.0"
         }
