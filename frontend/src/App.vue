@@ -2,10 +2,13 @@
 import { ref, onMounted } from 'vue'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
+import { useAuth } from './composables/useAuth'
 
+const { checkAuth } = useAuth()
 const updateDate = ref('')
 
 onMounted(async () => {
+  checkAuth()
   try {
     const res = await fetch('/api/meta')
     const meta = await res.json()

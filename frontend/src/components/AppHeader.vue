@@ -1,14 +1,30 @@
 <script setup>
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
+import { useAuth } from '../composables/useAuth'
 import ThemeToggle from './ThemeToggle.vue'
 
+const { isAuthenticated, isAdmin, logout } = useAuth()
 const mobileOpen = ref(false)
 
-const navLinks = [
-  { to: '/about', label: 'About' },
-  { to: '/contact', label: 'Contact' },
-  { to: '/login', label: 'Login' }
-]
+const navLinks = computed(() => {
+  const links = [
+    { to: '/about', label: 'About' },
+    { to: '/contact', label: 'Contact' }
+  ]
+  if (isAdmin.value) {
+    links.push({ to: '/admin', label: 'Admin' })
+  }
+  if (isAuthenticated.value) {
+    links.push({ to: '/login', label: 'Logout', action: handleLogout })
+  } else {
+    links.push({ to: '/login', label: 'Login' })
+  }
+  return links
+})
+
+async function handleLogout() {
+  await logout()
+}
 </script>
 
 <template>
@@ -32,6 +48,7 @@ const navLinks = [
           :key="link.to"
           :to="link.to"
           class="!text-stone-400 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+          @click="link.action && link.action()"
         >
           {{ link.label }}
         </router-link>
@@ -63,7 +80,7 @@ const navLinks = [
         :key="link.to"
         :to="link.to"
         class="!text-stone-400 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
-        @click="mobileOpen = false"
+        @click="mobileOpen = false; link.action && link.action()"
       >
         {{ link.label }}
       </router-link>

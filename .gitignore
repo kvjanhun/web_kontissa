@@ -13,3 +13,6 @@ app/static/dist/
 
 # Node modules
 frontend/node_modules/
+
+# Environment variables
+.env

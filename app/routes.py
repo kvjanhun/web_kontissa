@@ -1,9 +1,21 @@
 import os
-from flask import jsonify, redirect, url_for, Response, send_from_directory
-from .models import Section
+from functools import wraps
+from flask import jsonify, redirect, request, url_for, Response, send_from_directory
+from flask_login import login_required, current_user
+from .models import db, Section
 from .utils import get_latest_commit_date
 from datetime import datetime
 from . import app
+
+
+def admin_required(f):
+    @wraps(f)
+    @login_required
+    def decorated(*args, **kwargs):
+        if current_user.role != "admin":
+            return jsonify({"error": "Admin access required"}), 403
+        return f(*args, **kwargs)
+    return decorated
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "static", "dist")
 
@@ -54,6 +66,63 @@ def generate_sitemap():
     xml = "\n".join(xml_parts)
 
     return Response(xml, mimetype="application/xml")
+
+@app.route("/api/sections", methods=["POST"])
+@admin_required
+def api_create_section():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    title = data.get("title", "").strip()
+    slug = data.get("slug", "").strip()
+    content = data.get("content", "").strip()
+
+    if not title or not slug or not content:
+        return jsonify({"error": "title, slug, and content are required"}), 400
+
+    if Section.query.filter_by(slug=slug).first():
+        return jsonify({"error": "A section with this slug already exists"}), 409
+
+    section = Section(title=title, slug=slug, content=content)
+    db.session.add(section)
+    db.session.commit()
+    return jsonify(section.to_dict()), 201
+
+
+@app.route("/api/sections/<int:section_id>", methods=["PUT"])
+@admin_required
+def api_update_section(section_id):
+    section = db.session.get(Section, section_id)
+    if not section:
+        return jsonify({"error": "Section not found"}), 404
+
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    if "title" in data:
+        section.title = data["title"].strip()
+    if "slug" in data:
+        section.slug = data["slug"].strip()
+    if "content" in data:
+        section.content = data["content"].strip()
+
+    db.session.commit()
+    return jsonify(section.to_dict())
+
+
+@app.route("/api/sections/<int:section_id>", methods=["DELETE"])
+@admin_required
+def api_delete_section(section_id):
+    section = db.session.get(Section, section_id)
+    if not section:
+        return jsonify({"error": "Section not found"}), 404
+
+    db.session.delete(section)
+    db.session.commit()
+    return jsonify({"message": "Section deleted"})
+
 
 @app.route("/<path:path>")
 def catch_all(path):
