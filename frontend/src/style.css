@@ -18,6 +18,7 @@
 
 /* Warm stone palette — light mode */
 :root {
+  --color-bg-page: #e7e5e4;
   --color-bg-primary: #fafaf9;
   --color-bg-secondary: #f5f5f4;
   --color-bg-tertiary: #e7e5e4;
@@ -31,6 +32,7 @@
 
 /* Warm stone palette — dark mode */
 .dark {
+  --color-bg-page: #0c0a09;
   --color-bg-primary: #1c1917;
   --color-bg-secondary: #292524;
   --color-bg-tertiary: #3a3632;
@@ -44,6 +46,11 @@
 
 /* Base resets */
 @layer base {
+  html {
+    background-color: var(--color-bg-page);
+    transition: background-color 0.3s ease;
+  }
+
   body {
     @apply font-sans font-light m-0 p-0 w-full box-border max-w-[960px] mx-auto md:w-4/5;
     background-color: var(--color-bg-primary);
