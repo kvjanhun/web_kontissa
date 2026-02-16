@@ -4,13 +4,13 @@ Personal portfolio website by Konsta Janhunen.
 
 ## Stack
 
-- **Frontend**: Vue.js 3 (served locally, no build step)
+- **Frontend**: Vue.js 3 SFCs + Vite + Tailwind CSS
 - **Backend**: Flask (Python) with JSON API endpoints
 - **Database**: SQLite via Flask-SQLAlchemy
 - **Server**: Gunicorn (production), Flask dev server (local)
-- **Deployment**: Docker Compose, auto-deployed via GitHub webhook
+- **Deployment**: Docker Compose (multi-stage build), auto-deployed via GitHub webhook
 
-Vue 3 handles all rendering and interactivity in the browser, fetching data from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Flask serves a single HTML page that mounts the Vue app — no Node.js build tooling required.
+Vue 3 Single File Components handle all rendering and interactivity in the browser, fetching data from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Vite builds the frontend into static assets that Flask serves in production. During development, Vite's dev server provides HMR and proxies API requests to Flask.
 
 ## History
 
@@ -18,18 +18,40 @@ The site was originally built with Flask + Jinja2 server-rendered templates + va
 
 In February 2026, the frontend was migrated to Vue.js 3 with a hybrid CDN/local approach. This migration was carried out by Claude (Anthropic), orchestrated by Konsta. The Jinja2 templates were replaced with Vue components, Flask routes were converted to JSON API endpoints, and the terminal animation was rewritten as a Vue component.
 
+Later in February 2026, the frontend was migrated again to Vite + Vue Single File Components. The inline `<script>` with JS string templates was replaced by `.vue` SFCs with `<script setup>`, the Tailwind standalone CLI was replaced by the `@tailwindcss/vite` plugin, and the Dockerfile was rewritten as a multi-stage build (Node + Python).
+
 ## Project Structure
 
 ```
 web_kontissa/
-├── Dockerfile
+├── Dockerfile              # Multi-stage: Node builds frontend, Python runs app
 ├── README.md
+├── WALKTHROUGH.md
 ├── docker-compose.yml
 ├── requirements.txt
-├── run.py
-└── app/
+├── run.py                  # Flask entry point (port 5000 for dev)
+├── frontend/               # Vite + Vue 3 SFC project
+│   ├── index.html          # Vite entry point
+│   ├── package.json
+│   ├── vite.config.js      # Vue plugin, Tailwind, Flask proxy
+│   ├── public/
+│   │   └── favicon.ico
+│   └── src/
+│       ├── main.js         # App bootstrap
+│       ├── router.js       # Vue Router config
+│       ├── style.css       # Tailwind CSS + custom theme
+│       ├── App.vue         # Root layout + data fetching
+│       ├── components/
+│       │   ├── AppHeader.vue
+│       │   ├── AppFooter.vue
+│       │   ├── TerminalWindow.vue
+│       │   └── SectionBlock.vue
+│       └── views/
+│           ├── HomePage.vue
+│           └── NotFound.vue
+└── app/                    # Flask backend
     ├── __init__.py
-    ├── routes.py
+    ├── routes.py           # Serves dist/ + API routes
     ├── models.py
     ├── utils.py
     ├── api/
@@ -37,14 +59,9 @@ web_kontissa/
     │   └── cowsay.py
     ├── data/
     │   └── site.db
-    ├── templates/
-    │   └── index.html          # Vue 3 app (single page)
     └── static/
         ├── favicon.ico
-        ├── assets/
-        │   └── style.css
-        └── script/
-            └── vue.global.js   # Vue 3 runtime (local)
+        └── dist/           # Vite build output (gitignored)
 ```
 
 ## Running Locally
@@ -57,23 +74,37 @@ docker compose up --build -d
 
 Then visit: [http://localhost:8080](http://localhost:8080)
 
-### Without Docker
+### Without Docker (development)
 
 ```bash
+# Terminal 1 — Flask API
+cd web_kontissa
 pip install flask flask-sqlalchemy cowsay requests
-DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 -c "
-from app import app
-app.run(host='127.0.0.1', port=5555)
-"
+DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
+
+# Terminal 2 — Vite dev server with HMR
+cd web_kontissa/frontend
+npm install
+npm run dev
 ```
 
-Then visit: [http://localhost:5555](http://localhost:5555)
+Then visit: [http://localhost:5173](http://localhost:5173)
+
+Vite proxies `/api/*` requests to Flask on port 5000.
+
+### Production build (without Docker)
+
+```bash
+cd frontend && npm run build
+# Output: app/static/dist/
+# Then start Flask: python3 run.py (serves from dist/)
+```
 
 ## API Endpoints
 
 | Endpoint | Description |
 |---|---|
-| `GET /` | Serves the Vue app |
+| `GET /` | Serves the Vue app (from `app/static/dist/`) |
 | `GET /api/sections` | Returns all content sections as JSON |
 | `GET /api/meta` | Returns site metadata (update date, author) |
 | `GET /api/cowsay` | Returns cowsay ASCII art as JSON |
@@ -86,8 +117,9 @@ No external `.env` file required. The SQLite database is at `/app/data/site.db` 
 
 ## Production Notes
 
+- Multi-stage Docker build: Node builds the frontend, final image is Python-only
 - Gunicorn is used as the WSGI server inside the container
-- The Flask app binds to `0.0.0.0:80`
+- The Flask app binds to `0.0.0.0:80` in production
 - Nginx and SSL termination (Let's Encrypt) are configured outside this repo
 - Changes pushed to GitHub are automatically deployed via webhook
 
