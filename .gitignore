@@ -6,3 +6,9 @@
 *.db
 *.sqlite
 *.sqlite3
+
+# Tailwind CSS build output (regenerated during Docker build)
+app/static/assets/style.css
+
+# Tailwind standalone CLI binary (local dev)
+tailwindcss-macos-*

@@ -19,20 +19,24 @@
     <div id="app"></div>
 
     <script src="/static/script/vue.global.js"></script>
+    <script src="/static/script/vue-router.global.prod.js"></script>
     <script>
     var createApp = Vue.createApp;
     var ref = Vue.ref;
     var onMounted = Vue.onMounted;
+    var createRouter = VueRouter.createRouter;
+    var createWebHistory = VueRouter.createWebHistory;
 
         var AppHeader = {
             template: [
-                '<div class="top">',
-                '  <div class="left_items">',
-                '    <div id="h1"><a href="/">erez.ac</a></div>',
-                '    <div id="h2">Konsta Janhunen</div>',
+                '<div class="flex justify-between items-baseline bg-dark px-6 h-[5.5rem] border-b-[3px] border-light">',
+                '  <div class="left_items flex gap-10 items-baseline font-normal text-2xl leading-6">',
+                '    <div class="text-white"><router-link to="/" class="!text-white text-4xl">erez.ac</router-link></div>',
+                '    <div id="h2" class="font-light text-gray-400">Konsta Janhunen</div>',
                 '  </div>',
-                '  <div id="links">',
-                '    <a v-for="link in navLinks" :key="link.slug" :href="\'#\' + link.slug">',
+                '  <div class="flex h-full items-center">',
+                '    <a v-for="link in navLinks" :key="link.slug" :href="\'#\' + link.slug"',
+                '       class="!text-white px-4 flex items-center justify-center h-full box-border transition-colors duration-300 hover:bg-[#222] hover:!text-accent">',
                 '      {% raw %}{{ link.label }}{% endraw %}',
                 '    </a>',
                 '  </div>',
@@ -64,7 +68,7 @@
             template: [
                 '<div id="terminal">',
                 '  <div id="terminal_bar">',
-                '    <div id="bar_filler">&nbsp;</div>',
+                '    <div>&nbsp;</div>',
                 '    <div id="bar_user">konsta@erez.ac:~</div>',
                 '    <div class="bar_buttons">',
                 '      <button class="bar_button">\u2013</button>',
@@ -129,8 +133,8 @@
         var SectionBlock = {
             props: { section: { type: Object, required: true } },
             template: [
-                '<div class="text_block" :id="section.slug">',
-                '  <h2>{% raw %}{{ section.title }}{% endraw %}</h2>',
+                '<div class="text-base leading-relaxed mb-6" :id="section.slug">',
+                '  <h2 class="text-2xl leading-loose border-b border-black m-0">{% raw %}{{ section.title }}{% endraw %}</h2>',
                 '  <p v-html="section.content"></p>',
                 '</div>'
             ].join('\n')
@@ -139,33 +143,79 @@
         var AppFooter = {
             props: { updateDate: { type: String, default: '' } },
             template: [
-                '<div class="bottom">',
+                '<div class="flex-grow bg-dark m-0 px-4 py-3 h-10 border-t-[3px] border-light text-gray-500 box-border">',
                 '  <span v-if="updateDate">Last updated: {% raw %}{{ updateDate }}{% endraw %}</span>',
                 '  <span v-else>&nbsp;</span>',
                 '</div>'
             ].join('\n')
         };
 
+        var NotFound = {
+            template: [
+                '<div class="flex flex-col items-center justify-center py-20 text-center">',
+                '  <h1 class="text-6xl font-bold text-dark mb-4">404</h1>',
+                '  <p class="text-xl text-gray-500 mb-8">Page not found</p>',
+                '  <router-link to="/" class="text-accent hover:underline text-lg">Back to home</router-link>',
+                '</div>'
+            ].join('\n')
+        };
+
+        var HomePage = {
+            template: [
+                '<div>',
+                '  <terminal-window></terminal-window>',
+                '  <div v-if="loading" class="space-y-6">',
+                '    <div v-for="n in 3" :key="n" class="animate-pulse">',
+                '      <div class="h-8 bg-gray-200 rounded w-1/4 mb-3"></div>',
+                '      <div class="h-4 bg-gray-100 rounded w-full mb-2"></div>',
+                '      <div class="h-4 bg-gray-100 rounded w-3/4"></div>',
+                '    </div>',
+                '  </div>',
+                '  <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">',
+                '    <p class="text-red-600 mb-2">Failed to load content.</p>',
+                '    <p class="text-gray-500 text-sm">Please try refreshing the page.</p>',
+                '  </div>',
+                '  <template v-else>',
+                '    <section-block v-for="section in sections" :key="section.id" :section="section"></section-block>',
+                '  </template>',
+                '</div>'
+            ].join('\n'),
+            components: {
+                'terminal-window': TerminalWindow,
+                'section-block': SectionBlock
+            },
+            props: ['sections', 'loading', 'error']
+        };
+
+        var routes = [
+            { path: '/', component: HomePage },
+            { path: '/:pathMatch(.*)*', component: NotFound }
+        ];
+
+        var router = createRouter({
+            history: createWebHistory(),
+            routes: routes
+        });
+
         var app = createApp({
             template: [
-                '<div class="page">',
+                '<div class="flex flex-col h-full shadow-lg">',
                 '  <app-header></app-header>',
-                '  <div class="mid">',
-                '    <terminal-window></terminal-window>',
-                '    <section-block v-for="section in sections" :key="section.id" :section="section"></section-block>',
+                '  <div class="flex-grow p-6 bg-white text-dark border-t-4 border-b-4 border-accent">',
+                '    <router-view :sections="sections" :loading="loading" :error="error"></router-view>',
                 '  </div>',
                 '  <app-footer :update-date="updateDate"></app-footer>',
                 '</div>'
             ].join('\n'),
             components: {
                 'app-header': AppHeader,
-                'terminal-window': TerminalWindow,
-                'section-block': SectionBlock,
                 'app-footer': AppFooter
             },
             setup: function() {
                 var sections = ref([]);
                 var updateDate = ref('');
+                var loading = ref(true);
+                var error = ref(null);
                 onMounted(function() {
                     Promise.all([
                         fetch('/api/sections').then(function(r) { return r.json(); }),
@@ -173,14 +223,18 @@
                     ]).then(function(results) {
                         sections.value = results[0];
                         updateDate.value = results[1].update_date;
+                        loading.value = false;
                     }).catch(function(e) {
                         console.error('Failed to load site data:', e);
+                        error.value = e;
+                        loading.value = false;
                     });
                 });
-                return { sections: sections, updateDate: updateDate };
+                return { sections: sections, updateDate: updateDate, loading: loading, error: error };
             }
         });
 
+    app.use(router);
     app.mount('#app');
     </script>
 </body>

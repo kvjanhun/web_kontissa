@@ -27,6 +27,11 @@ def api_meta():
         "update_date": update_date
     })
 
+@app.route("/<path:path>")
+def catch_all(path):
+    """Let Vue Router handle client-side routing (including 404s)."""
+    return render_template("index.html")
+
 @app.route("/sitemap.xml")
 def generate_sitemap():
     pages = [
