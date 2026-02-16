@@ -1,12 +1,15 @@
-from flask import render_template, jsonify, redirect, url_for, Response
+import os
+from flask import jsonify, redirect, url_for, Response, send_from_directory
 from .models import Section
 from .utils import get_latest_commit_date
 from datetime import datetime
 from . import app
 
+DIST_DIR = os.path.join(os.path.dirname(__file__), "static", "dist")
+
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return send_from_directory(DIST_DIR, "index.html")
 
 @app.route("/index.html")
 def legacy_index():
@@ -26,11 +29,6 @@ def api_meta():
         "author": "Konsta Janhunen",
         "update_date": update_date
     })
-
-@app.route("/<path:path>")
-def catch_all(path):
-    """Let Vue Router handle client-side routing (including 404s)."""
-    return render_template("index.html")
 
 @app.route("/sitemap.xml")
 def generate_sitemap():
@@ -56,3 +54,11 @@ def generate_sitemap():
     xml = "\n".join(xml_parts)
 
     return Response(xml, mimetype="application/xml")
+
+@app.route("/<path:path>")
+def catch_all(path):
+    """Serve static file from dist/ if it exists, otherwise fall back to index.html for Vue Router."""
+    file_path = os.path.join(DIST_DIR, path)
+    if os.path.isfile(file_path):
+        return send_from_directory(DIST_DIR, path)
+    return send_from_directory(DIST_DIR, "index.html")
