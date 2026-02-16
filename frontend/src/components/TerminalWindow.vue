@@ -32,19 +32,10 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="w-4/5 h-68 max-sm:h-32 mb-8 shadow-[2px_4px_5px_rgba(0,0,0,0.5)]">
-    <div class="flex w-full h-9 items-center justify-between px-4 rounded-t-md term-bar-bg">
-      <div>&nbsp;</div>
-      <span class="text-[#d5d0ce] text-sm leading-none">konsta@erez.ac:~</span>
-      <div class="flex items-center gap-1.5 font-mono">
-        <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-bg">&#x2013;</button>
-        <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-bg">&#x2610;</button>
-        <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-close">&#x2715;</button>
-      </div>
-    </div>
-    <div class="bg-term-bg font-mono text-sm text-white block p-0.5 -mt-px h-[calc(100%-2.4rem)]">
+  <div class="w-full rounded-lg overflow-hidden shadow-lg">
+    <div class="bg-term-bg font-mono text-sm text-white p-4">
       <div class="flex font-mono">
-        <span class="flex ml-1 text-gray-300">
+        <span class="flex text-gray-300">
           <span class="text-term-user">konsta@erez.ac</span>
           <span>:</span>
           <span class="text-term-dir">~</span>
@@ -54,7 +45,7 @@ onMounted(() => {
       </div>
       <pre class="font-mono text-white whitespace-pre-wrap m-0">{{ cowsayOutput }}</pre>
       <div class="flex font-mono" v-if="showNewPrompt">
-        <span class="flex ml-1 text-gray-300">
+        <span class="flex text-gray-300">
           <span class="text-term-user">konsta@erez.ac</span>
           <span>:</span>
           <span class="text-term-dir">~</span>

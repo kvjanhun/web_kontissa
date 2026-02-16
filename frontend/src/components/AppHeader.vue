@@ -1,35 +1,66 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref } from 'vue'
+import ThemeToggle from './ThemeToggle.vue'
 
-const navLinks = ref([])
+const mobileOpen = ref(false)
 
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/sections')
-    const sections = await res.json()
-    navLinks.value = sections.map(s => ({ slug: s.slug, label: s.title }))
-  } catch {
-    navLinks.value = [
-      { slug: 'who', label: 'Who' },
-      { slug: 'what', label: 'What' },
-      { slug: 'where', label: 'Where' }
-    ]
-  }
-})
+const navLinks = [
+  { to: '/about', label: 'About' },
+  { to: '/contact', label: 'Contact' },
+  { to: '/login', label: 'Login' }
+]
 </script>
 
 <template>
-  <header class="flex justify-between items-baseline bg-dark px-6 h-22 border-b-3 border-light">
-    <div class="flex gap-10 items-baseline font-normal text-2xl leading-6">
-      <router-link to="/" class="!text-white text-4xl">erez.ac</router-link>
-      <span class="font-light text-gray-400 max-sm:hidden">Konsta Janhunen</span>
+  <header class="sticky top-0 z-50 flex justify-between items-center px-6 h-16" :style="{ backgroundColor: 'var(--color-header-bg)' }">
+    <div class="flex gap-6 items-center">
+      <router-link to="/" class="!text-white text-2xl font-normal">erez.ac</router-link>
+      <span class="font-light text-gray-400 text-sm max-sm:hidden">Konsta Janhunen</span>
     </div>
-    <nav class="flex h-full items-center">
-      <a v-for="link in navLinks" :key="link.slug" :href="'#' + link.slug"
-         class="!text-white px-4 flex items-center justify-center h-full
-                transition-colors duration-300 hover:bg-[#222] hover:!text-accent">
+
+    <div class="flex items-center gap-2">
+      <!-- Desktop nav -->
+      <nav class="hidden sm:flex items-center gap-1">
+        <router-link
+          v-for="link in navLinks"
+          :key="link.to"
+          :to="link.to"
+          class="!text-gray-300 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+        >
+          {{ link.label }}
+        </router-link>
+      </nav>
+
+      <ThemeToggle class="text-gray-300" />
+
+      <!-- Mobile hamburger -->
+      <button
+        class="sm:hidden p-2 text-gray-300 hover:text-white"
+        @click="mobileOpen = !mobileOpen"
+        aria-label="Toggle menu"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path v-if="!mobileOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
+          <path v-else stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Mobile dropdown -->
+    <nav
+      v-if="mobileOpen"
+      class="absolute top-16 left-0 right-0 sm:hidden flex flex-col py-2 shadow-lg"
+      :style="{ backgroundColor: 'var(--color-header-bg)' }"
+    >
+      <router-link
+        v-for="link in navLinks"
+        :key="link.to"
+        :to="link.to"
+        class="!text-gray-300 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+        @click="mobileOpen = false"
+      >
         {{ link.label }}
-      </a>
+      </router-link>
     </nav>
   </header>
 </template>
