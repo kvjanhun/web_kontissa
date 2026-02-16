@@ -7,10 +7,11 @@ Personal portfolio website by Konsta Janhunen.
 - **Frontend**: Vue.js 3 SFCs + Vite + Tailwind CSS v4
 - **Backend**: Flask (Python) with JSON API endpoints
 - **Database**: SQLite via Flask-SQLAlchemy
+- **Auth**: Flask-Login with session cookies
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Deployment**: Docker Compose (multi-stage build), auto-deployed via GitHub webhook
 
-Multi-page Vue app with client-side routing, dark/light mode with warm stone-orange theme, and a terminal animation on the home page. Vue Router handles five routes (`/`, `/about`, `/contact`, `/login`, `404`). Data is fetched from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Vite builds the frontend into static assets that Flask serves in production.
+Multi-page Vue app with client-side routing, dark/light mode with warm stone-orange theme, and a terminal animation on the home page. Vue Router handles six routes (`/`, `/about`, `/contact`, `/login`, `/admin`, `404`). Data is fetched from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Session-based authentication via Flask-Login allows the admin to manage content sections through a protected admin panel. Vite builds the frontend into static assets that Flask serves in production.
 
 ## History
 
@@ -21,6 +22,8 @@ In February 2026, the frontend was migrated to Vue.js 3 with a hybrid CDN/local 
 Later in February 2026, the frontend was migrated again to Vite + Vue Single File Components. The inline `<script>` with JS string templates was replaced by `.vue` SFCs with `<script setup>`, the Tailwind standalone CLI was replaced by the `@tailwindcss/vite` plugin, and the Dockerfile was rewritten as a multi-stage build (Node + Python).
 
 The site was then reworked into a multi-page layout with Vue Router, dark/light mode toggle, and a warm stone-orange color palette. The terminal was simplified from Ubuntu window chrome to a plain dark terminal. New pages were added for About, Contact, and Login.
+
+Session-based authentication was added with Flask-Login, along with an admin panel for managing database sections (add, edit, delete) through the website. The login page was wired to the backend and the header was made auth-aware.
 
 ## Project Structure
 
@@ -44,7 +47,8 @@ web_kontissa/
 │       ├── style.css       # Tailwind CSS + warm stone theme + dark mode
 │       ├── App.vue         # Root layout shell (header, router-view, footer)
 │       ├── composables/
-│       │   └── useDarkMode.js  # Shared dark mode state + localStorage
+│       │   ├── useAuth.js       # Auth state, login/logout/checkAuth
+│       │   └── useDarkMode.js   # Shared dark mode state + localStorage
 │       ├── components/
 │       │   ├── AppHeader.vue       # Sticky nav, route links, theme toggle, mobile menu
 │       │   ├── AppFooter.vue       # Footer with quick links
@@ -55,12 +59,15 @@ web_kontissa/
 │           ├── HomePage.vue    # Hero: name, terminal, CTA buttons
 │           ├── AboutPage.vue   # Sections fetched from API
 │           ├── ContactPage.vue # Email, GitHub, LinkedIn links
-│           ├── LoginPage.vue   # Form UI (no backend)
+│           ├── LoginPage.vue   # Auth form, wired to backend
+│           ├── AdminPage.vue   # Protected section CRUD
 │           └── NotFound.vue    # 404 page
 └── app/                    # Flask backend
     ├── __init__.py
-    ├── routes.py           # Serves dist/ + API routes
-    ├── models.py
+    ├── routes.py           # Serves dist/ + API routes + section CRUD
+    ├── auth.py             # Login/logout/me endpoints
+    ├── models.py           # Section + User models
+    ├── create_admin.py     # Utility to create admin user
     ├── utils.py
     ├── api/
     │   ├── __init__.py
@@ -87,7 +94,7 @@ Then visit: [http://localhost:8080](http://localhost:8080)
 ```bash
 # Terminal 1 — Flask API
 cd web_kontissa
-pip install flask flask-sqlalchemy cowsay requests
+pip install flask flask-sqlalchemy flask-login cowsay requests
 DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
 
 # Terminal 2 — Vite dev server with HMR
@@ -114,6 +121,12 @@ cd frontend && npm run build
 |---|---|
 | `GET /` | Serves the Vue app (from `app/static/dist/`) |
 | `GET /api/sections` | Returns all content sections as JSON |
+| `POST /api/sections` | Create section (admin) |
+| `PUT /api/sections/<id>` | Update section (admin) |
+| `DELETE /api/sections/<id>` | Delete section (admin) |
+| `POST /api/login` | Authenticate user, start session |
+| `POST /api/logout` | End session |
+| `GET /api/me` | Current user info (or 401) |
 | `GET /api/meta` | Returns site metadata (update date, author) |
 | `GET /api/cowsay` | Returns cowsay ASCII art as JSON |
 | `GET /sitemap.xml` | XML sitemap for SEO |
@@ -121,7 +134,12 @@ cd frontend && npm run build
 
 ## Configuration
 
-No external `.env` file required. The SQLite database is at `/app/data/site.db` (container path). For local development, set the `DATABASE_URI` environment variable to point to the local database.
+A `.env` file is required with at least `SECRET_KEY` for session signing. The SQLite database is at `/app/data/site.db` (container path). For local development, set the `DATABASE_URI` environment variable to point to the local database.
+
+To create an admin user:
+```bash
+docker compose exec web python3 -c "from app.create_admin import create; create('username', 'email', 'password')"
+```
 
 ## Production Notes
 
