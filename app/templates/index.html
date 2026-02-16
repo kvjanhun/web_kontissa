@@ -27,212 +27,213 @@
     var createRouter = VueRouter.createRouter;
     var createWebHistory = VueRouter.createWebHistory;
 
-        var AppHeader = {
-            template: [
-                '<div class="flex justify-between items-baseline bg-dark px-6 h-[5.5rem] border-b-[3px] border-light">',
-                '  <div class="left_items flex gap-10 items-baseline font-normal text-2xl leading-6">',
-                '    <div class="text-white"><router-link to="/" class="!text-white text-4xl">erez.ac</router-link></div>',
-                '    <div id="h2" class="font-light text-gray-400">Konsta Janhunen</div>',
-                '  </div>',
-                '  <div class="flex h-full items-center">',
-                '    <a v-for="link in navLinks" :key="link.slug" :href="\'#\' + link.slug"',
-                '       class="!text-white px-4 flex items-center justify-center h-full box-border transition-colors duration-300 hover:bg-[#222] hover:!text-accent">',
-                '      {% raw %}{{ link.label }}{% endraw %}',
-                '    </a>',
-                '  </div>',
-                '</div>'
-            ].join('\n'),
-            setup: function() {
-                var navLinks = ref([]);
-                onMounted(function() {
-                    fetch('/api/sections')
-                        .then(function(res) { return res.json(); })
-                        .then(function(sections) {
-                            navLinks.value = sections.map(function(s) {
-                                return { slug: s.slug, label: s.title };
-                            });
-                        })
-                        .catch(function() {
-                            navLinks.value = [
-                                { slug: 'who', label: 'Who' },
-                                { slug: 'what', label: 'What' },
-                                { slug: 'where', label: 'Where' }
-                            ];
+    var AppHeader = {
+        template: [
+            '<header class="flex justify-between items-baseline bg-dark px-6 h-22 border-b-3 border-light">',
+            '  <div class="flex gap-10 items-baseline font-normal text-2xl leading-6">',
+            '    <router-link to="/" class="!text-white text-4xl">erez.ac</router-link>',
+            '    <span class="font-light text-gray-400 max-sm:hidden">Konsta Janhunen</span>',
+            '  </div>',
+            '  <nav class="flex h-full items-center">',
+            '    <a v-for="link in navLinks" :key="link.slug" :href="\'#\' + link.slug"',
+            '       class="!text-white px-4 flex items-center justify-center h-full',
+            '              transition-colors duration-300 hover:bg-[#222] hover:!text-accent">',
+            '      {% raw %}{{ link.label }}{% endraw %}',
+            '    </a>',
+            '  </nav>',
+            '</header>'
+        ].join('\n'),
+        setup: function() {
+            var navLinks = ref([]);
+            onMounted(function() {
+                fetch('/api/sections')
+                    .then(function(res) { return res.json(); })
+                    .then(function(sections) {
+                        navLinks.value = sections.map(function(s) {
+                            return { slug: s.slug, label: s.title };
                         });
-                });
-                return { navLinks: navLinks };
-            }
-        };
-
-        var TerminalWindow = {
-            template: [
-                '<div id="terminal">',
-                '  <div id="terminal_bar">',
-                '    <div>&nbsp;</div>',
-                '    <div id="bar_user">konsta@erez.ac:~</div>',
-                '    <div class="bar_buttons">',
-                '      <button class="bar_button">\u2013</button>',
-                '      <button class="bar_button">\u2610</button>',
-                '      <button class="bar_button" id="exit_button">\u2715</button>',
-                '    </div>',
-                '  </div>',
-                '  <div id="terminal_body">',
-                '    <div class="line">',
-                '      <span class="terminal_prompt">',
-                '        <span id="user">konsta@erez.ac</span>',
-                '        <span>:</span>',
-                '        <span id="dir">~</span>',
-                '        <span id="bling">$</span>',
-                '      </span>',
-                '      <span id="command">{% raw %}{{ typedCommand }}{% endraw %}</span>',
-                '    </div>',
-                '    <pre id="output">{% raw %}{{ cowsayOutput }}{% endraw %}</pre>',
-                '    <div class="line" v-if="showNewPrompt">',
-                '      <span class="terminal_prompt">',
-                '        <span id="user">konsta@erez.ac</span>',
-                '        <span>:</span>',
-                '        <span id="dir">~</span>',
-                '        <span id="bling">$</span>',
-                '        <span id="cursor"></span>',
-                '      </span>',
-                '    </div>',
-                '  </div>',
-                '</div>'
-            ].join('\n'),
-            setup: function() {
-                var typedCommand = ref('');
-                var cowsayOutput = ref('');
-                var showNewPrompt = ref(false);
-                var commandText = 'cowsay moo';
-                function typeCommand(i) {
-                    if (i < commandText.length) {
-                        typedCommand.value += commandText[i];
-                        setTimeout(function() { typeCommand(i + 1); }, 80);
-                    } else {
-                        setTimeout(fetchCowsay, 100);
-                    }
-                }
-                function fetchCowsay() {
-                    fetch('/api/cowsay')
-                        .then(function(res) { return res.json(); })
-                        .then(function(data) {
-                            cowsayOutput.value = data.output;
-                            showNewPrompt.value = true;
-                        })
-                        .catch(function() {
-                            cowsayOutput.value = 'Error fetching cowsay';
-                        });
-                }
-                onMounted(function() {
-                    setTimeout(function() { typeCommand(0); }, 3000);
-                });
-                return { typedCommand: typedCommand, cowsayOutput: cowsayOutput, showNewPrompt: showNewPrompt };
-            }
-        };
-
-        var SectionBlock = {
-            props: { section: { type: Object, required: true } },
-            template: [
-                '<div class="text-base leading-relaxed mb-6" :id="section.slug">',
-                '  <h2 class="text-2xl leading-loose border-b border-black m-0">{% raw %}{{ section.title }}{% endraw %}</h2>',
-                '  <p v-html="section.content"></p>',
-                '</div>'
-            ].join('\n')
-        };
-
-        var AppFooter = {
-            props: { updateDate: { type: String, default: '' } },
-            template: [
-                '<div class="flex-grow bg-dark m-0 px-4 py-3 h-10 border-t-[3px] border-light text-gray-500 box-border">',
-                '  <span v-if="updateDate">Last updated: {% raw %}{{ updateDate }}{% endraw %}</span>',
-                '  <span v-else>&nbsp;</span>',
-                '</div>'
-            ].join('\n')
-        };
-
-        var NotFound = {
-            template: [
-                '<div class="flex flex-col items-center justify-center py-20 text-center">',
-                '  <h1 class="text-6xl font-bold text-dark mb-4">404</h1>',
-                '  <p class="text-xl text-gray-500 mb-8">Page not found</p>',
-                '  <router-link to="/" class="text-accent hover:underline text-lg">Back to home</router-link>',
-                '</div>'
-            ].join('\n')
-        };
-
-        var HomePage = {
-            template: [
-                '<div>',
-                '  <terminal-window></terminal-window>',
-                '  <div v-if="loading" class="space-y-6">',
-                '    <div v-for="n in 3" :key="n" class="animate-pulse">',
-                '      <div class="h-8 bg-gray-200 rounded w-1/4 mb-3"></div>',
-                '      <div class="h-4 bg-gray-100 rounded w-full mb-2"></div>',
-                '      <div class="h-4 bg-gray-100 rounded w-3/4"></div>',
-                '    </div>',
-                '  </div>',
-                '  <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">',
-                '    <p class="text-red-600 mb-2">Failed to load content.</p>',
-                '    <p class="text-gray-500 text-sm">Please try refreshing the page.</p>',
-                '  </div>',
-                '  <template v-else>',
-                '    <section-block v-for="section in sections" :key="section.id" :section="section"></section-block>',
-                '  </template>',
-                '</div>'
-            ].join('\n'),
-            components: {
-                'terminal-window': TerminalWindow,
-                'section-block': SectionBlock
-            },
-            props: ['sections', 'loading', 'error']
-        };
-
-        var routes = [
-            { path: '/', component: HomePage },
-            { path: '/:pathMatch(.*)*', component: NotFound }
-        ];
-
-        var router = createRouter({
-            history: createWebHistory(),
-            routes: routes
-        });
-
-        var app = createApp({
-            template: [
-                '<div class="flex flex-col h-full shadow-lg">',
-                '  <app-header></app-header>',
-                '  <div class="flex-grow p-6 bg-white text-dark border-t-4 border-b-4 border-accent">',
-                '    <router-view :sections="sections" :loading="loading" :error="error"></router-view>',
-                '  </div>',
-                '  <app-footer :update-date="updateDate"></app-footer>',
-                '</div>'
-            ].join('\n'),
-            components: {
-                'app-header': AppHeader,
-                'app-footer': AppFooter
-            },
-            setup: function() {
-                var sections = ref([]);
-                var updateDate = ref('');
-                var loading = ref(true);
-                var error = ref(null);
-                onMounted(function() {
-                    Promise.all([
-                        fetch('/api/sections').then(function(r) { return r.json(); }),
-                        fetch('/api/meta').then(function(r) { return r.json(); })
-                    ]).then(function(results) {
-                        sections.value = results[0];
-                        updateDate.value = results[1].update_date;
-                        loading.value = false;
-                    }).catch(function(e) {
-                        console.error('Failed to load site data:', e);
-                        error.value = e;
-                        loading.value = false;
+                    })
+                    .catch(function() {
+                        navLinks.value = [
+                            { slug: 'who', label: 'Who' },
+                            { slug: 'what', label: 'What' },
+                            { slug: 'where', label: 'Where' }
+                        ];
                     });
-                });
-                return { sections: sections, updateDate: updateDate, loading: loading, error: error };
+            });
+            return { navLinks: navLinks };
+        }
+    };
+
+    var TerminalWindow = {
+        template: [
+            '<div class="w-4/5 h-68 max-sm:h-32 mb-8 shadow-[2px_4px_5px_rgba(0,0,0,0.5)]">',
+            '  <div class="flex w-full h-9 items-center justify-between px-4 rounded-t-md term-bar-bg">',
+            '    <div>&nbsp;</div>',
+            '    <span class="text-[#d5d0ce] text-sm leading-none">konsta@erez.ac:~</span>',
+            '    <div class="flex items-center gap-1.5 font-mono">',
+            '      <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-bg">\u2013</button>',
+            '      <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-bg">\u2610</button>',
+            '      <button class="text-black text-[0.66rem] size-4 border-none rounded-full term-btn-close">\u2715</button>',
+            '    </div>',
+            '  </div>',
+            '  <div class="bg-term-bg font-mono text-sm text-white block p-0.5 -mt-px h-[calc(100%-2.4rem)]">',
+            '    <div class="flex font-mono">',
+            '      <span class="flex ml-1 text-gray-300">',
+            '        <span class="text-term-user">konsta@erez.ac</span>',
+            '        <span>:</span>',
+            '        <span class="text-term-dir">~</span>',
+            '        <span class="mr-[1ch]">$</span>',
+            '      </span>',
+            '      <span class="text-white">{% raw %}{{ typedCommand }}{% endraw %}</span>',
+            '    </div>',
+            '    <pre class="font-mono text-white whitespace-pre-wrap m-0">{% raw %}{{ cowsayOutput }}{% endraw %}</pre>',
+            '    <div class="flex font-mono" v-if="showNewPrompt">',
+            '      <span class="flex ml-1 text-gray-300">',
+            '        <span class="text-term-user">konsta@erez.ac</span>',
+            '        <span>:</span>',
+            '        <span class="text-term-dir">~</span>',
+            '        <span class="mr-[1ch]">$</span>',
+            '        <span class="block h-3.5 w-px my-px cursor-blink"></span>',
+            '      </span>',
+            '    </div>',
+            '  </div>',
+            '</div>'
+        ].join('\n'),
+        setup: function() {
+            var typedCommand = ref('');
+            var cowsayOutput = ref('');
+            var showNewPrompt = ref(false);
+            var commandText = 'cowsay moo';
+            function typeCommand(i) {
+                if (i < commandText.length) {
+                    typedCommand.value += commandText[i];
+                    setTimeout(function() { typeCommand(i + 1); }, 80);
+                } else {
+                    setTimeout(fetchCowsay, 100);
+                }
             }
-        });
+            function fetchCowsay() {
+                fetch('/api/cowsay')
+                    .then(function(res) { return res.json(); })
+                    .then(function(data) {
+                        cowsayOutput.value = data.output;
+                        showNewPrompt.value = true;
+                    })
+                    .catch(function() {
+                        cowsayOutput.value = 'Error fetching cowsay';
+                    });
+            }
+            onMounted(function() {
+                setTimeout(function() { typeCommand(0); }, 3000);
+            });
+            return { typedCommand: typedCommand, cowsayOutput: cowsayOutput, showNewPrompt: showNewPrompt };
+        }
+    };
+
+    var SectionBlock = {
+        props: { section: { type: Object, required: true } },
+        template: [
+            '<article class="text-base leading-relaxed mb-6" :id="section.slug">',
+            '  <h2 class="text-2xl leading-loose border-b border-black m-0">{% raw %}{{ section.title }}{% endraw %}</h2>',
+            '  <div class="py-1 px-4" v-html="section.content"></div>',
+            '</article>'
+        ].join('\n')
+    };
+
+    var AppFooter = {
+        props: { updateDate: { type: String, default: '' } },
+        template: [
+            '<footer class="grow bg-dark px-4 py-3 h-10 border-t-3 border-light text-gray-500">',
+            '  <span v-if="updateDate">Last updated: {% raw %}{{ updateDate }}{% endraw %}</span>',
+            '  <span v-else>&nbsp;</span>',
+            '</footer>'
+        ].join('\n')
+    };
+
+    var NotFound = {
+        template: [
+            '<div class="flex flex-col items-center justify-center py-20 text-center">',
+            '  <h1 class="text-6xl font-bold text-dark mb-4">404</h1>',
+            '  <p class="text-xl text-gray-500 mb-8">Page not found</p>',
+            '  <router-link to="/" class="text-accent hover:underline text-lg">Back to home</router-link>',
+            '</div>'
+        ].join('\n')
+    };
+
+    var HomePage = {
+        template: [
+            '<div>',
+            '  <terminal-window></terminal-window>',
+            '  <div v-if="loading" class="space-y-6">',
+            '    <div v-for="n in 3" :key="n" class="animate-pulse">',
+            '      <div class="h-8 bg-gray-200 rounded w-1/4 mb-3"></div>',
+            '      <div class="h-4 bg-gray-100 rounded w-full mb-2"></div>',
+            '      <div class="h-4 bg-gray-100 rounded w-3/4"></div>',
+            '    </div>',
+            '  </div>',
+            '  <div v-else-if="error" class="bg-red-50 border border-red-200 rounded-lg p-6 text-center">',
+            '    <p class="text-red-600 mb-2">Failed to load content.</p>',
+            '    <p class="text-gray-500 text-sm">Please try refreshing the page.</p>',
+            '  </div>',
+            '  <template v-else>',
+            '    <section-block v-for="section in sections" :key="section.id" :section="section"></section-block>',
+            '  </template>',
+            '</div>'
+        ].join('\n'),
+        components: {
+            'terminal-window': TerminalWindow,
+            'section-block': SectionBlock
+        },
+        props: ['sections', 'loading', 'error']
+    };
+
+    var routes = [
+        { path: '/', component: HomePage },
+        { path: '/:pathMatch(.*)*', component: NotFound }
+    ];
+
+    var router = createRouter({
+        history: createWebHistory(),
+        routes: routes
+    });
+
+    var app = createApp({
+        template: [
+            '<div class="flex flex-col min-h-full shadow-lg">',
+            '  <app-header></app-header>',
+            '  <main class="grow p-6 bg-white text-dark border-t-4 border-b-4 border-accent">',
+            '    <router-view :sections="sections" :loading="loading" :error="error"></router-view>',
+            '  </main>',
+            '  <app-footer :update-date="updateDate"></app-footer>',
+            '</div>'
+        ].join('\n'),
+        components: {
+            'app-header': AppHeader,
+            'app-footer': AppFooter
+        },
+        setup: function() {
+            var sections = ref([]);
+            var updateDate = ref('');
+            var loading = ref(true);
+            var error = ref(null);
+            onMounted(function() {
+                Promise.all([
+                    fetch('/api/sections').then(function(r) { return r.json(); }),
+                    fetch('/api/meta').then(function(r) { return r.json(); })
+                ]).then(function(results) {
+                    sections.value = results[0];
+                    updateDate.value = results[1].update_date;
+                    loading.value = false;
+                }).catch(function(e) {
+                    console.error('Failed to load site data:', e);
+                    error.value = e;
+                    loading.value = false;
+                });
+            });
+            return { sections: sections, updateDate: updateDate, loading: loading, error: error };
+        }
+    });
 
     app.use(router);
     app.mount('#app');
