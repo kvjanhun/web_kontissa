@@ -12,10 +12,16 @@ const navLinks = [
 </script>
 
 <template>
-  <header class="sticky top-0 z-50 flex justify-between items-center px-6 h-16" :style="{ backgroundColor: 'var(--color-header-bg)' }">
+  <header
+    class="sticky top-0 z-50 px-6 h-16 flex justify-between items-center"
+    :style="{
+      backgroundColor: 'var(--color-header-bg)',
+      borderBottom: '2px solid var(--color-header-border)'
+    }"
+  >
     <div class="flex gap-6 items-center">
-      <router-link to="/" class="!text-white text-2xl font-normal">erez.ac</router-link>
-      <span class="font-light text-gray-400 text-sm max-sm:hidden">Konsta Janhunen</span>
+      <router-link to="/" class="!text-white text-2xl font-normal tracking-tight">erez.ac</router-link>
+      <span class="font-light text-stone-400 text-sm max-sm:hidden">Konsta Janhunen</span>
     </div>
 
     <div class="flex items-center gap-2">
@@ -25,17 +31,17 @@ const navLinks = [
           v-for="link in navLinks"
           :key="link.to"
           :to="link.to"
-          class="!text-gray-300 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+          class="!text-stone-400 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
         >
           {{ link.label }}
         </router-link>
       </nav>
 
-      <ThemeToggle class="text-gray-300" />
+      <ThemeToggle class="text-stone-400" />
 
       <!-- Mobile hamburger -->
       <button
-        class="sm:hidden p-2 text-gray-300 hover:text-white"
+        class="sm:hidden p-2 text-stone-400 hover:text-white"
         @click="mobileOpen = !mobileOpen"
         aria-label="Toggle menu"
       >
@@ -50,13 +56,13 @@ const navLinks = [
     <nav
       v-if="mobileOpen"
       class="absolute top-16 left-0 right-0 sm:hidden flex flex-col py-2 shadow-lg"
-      :style="{ backgroundColor: 'var(--color-header-bg)' }"
+      :style="{ backgroundColor: 'var(--color-header-bg)', borderBottom: '2px solid var(--color-header-border)' }"
     >
       <router-link
         v-for="link in navLinks"
         :key="link.to"
         :to="link.to"
-        class="!text-gray-300 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+        class="!text-stone-400 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
         @click="mobileOpen = false"
       >
         {{ link.label }}
