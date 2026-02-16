@@ -16,7 +16,7 @@
       </a>
 
       <a
-        href="https://github.com/kjanhunen"
+        href="https://github.com/kvjanhun"
         target="_blank"
         rel="noopener noreferrer"
         class="flex items-center gap-3 p-4 rounded-lg transition-colors duration-200"
@@ -29,7 +29,7 @@
       </a>
 
       <a
-        href="https://linkedin.com/in/kjanhunen"
+        href="https://linkedin.com/in/konsta-janhunen"
         target="_blank"
         rel="noopener noreferrer"
         class="flex items-center gap-3 p-4 rounded-lg transition-colors duration-200"

@@ -4,13 +4,13 @@ Personal portfolio website by Konsta Janhunen.
 
 ## Stack
 
-- **Frontend**: Vue.js 3 SFCs + Vite + Tailwind CSS
+- **Frontend**: Vue.js 3 SFCs + Vite + Tailwind CSS v4
 - **Backend**: Flask (Python) with JSON API endpoints
 - **Database**: SQLite via Flask-SQLAlchemy
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Deployment**: Docker Compose (multi-stage build), auto-deployed via GitHub webhook
 
-Vue 3 Single File Components handle all rendering and interactivity in the browser, fetching data from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Vite builds the frontend into static assets that Flask serves in production. During development, Vite's dev server provides HMR and proxies API requests to Flask.
+Multi-page Vue app with client-side routing, dark/light mode with warm stone-orange theme, and a terminal animation on the home page. Vue Router handles five routes (`/`, `/about`, `/contact`, `/login`, `404`). Data is fetched from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Vite builds the frontend into static assets that Flask serves in production.
 
 ## History
 
@@ -19,6 +19,8 @@ The site was originally built with Flask + Jinja2 server-rendered templates + va
 In February 2026, the frontend was migrated to Vue.js 3 with a hybrid CDN/local approach. This migration was carried out by Claude (Anthropic), orchestrated by Konsta. The Jinja2 templates were replaced with Vue components, Flask routes were converted to JSON API endpoints, and the terminal animation was rewritten as a Vue component.
 
 Later in February 2026, the frontend was migrated again to Vite + Vue Single File Components. The inline `<script>` with JS string templates was replaced by `.vue` SFCs with `<script setup>`, the Tailwind standalone CLI was replaced by the `@tailwindcss/vite` plugin, and the Dockerfile was rewritten as a multi-stage build (Node + Python).
+
+The site was then reworked into a multi-page layout with Vue Router, dark/light mode toggle, and a warm stone-orange color palette. The terminal was simplified from Ubuntu window chrome to a plain dark terminal. New pages were added for About, Contact, and Login.
 
 ## Project Structure
 
@@ -31,24 +33,30 @@ web_kontissa/
 ├── requirements.txt
 ├── run.py                  # Flask entry point (port 5000 for dev)
 ├── frontend/               # Vite + Vue 3 SFC project
-│   ├── index.html          # Vite entry point
+│   ├── index.html          # Vite entry point + dark mode flash prevention
 │   ├── package.json
 │   ├── vite.config.js      # Vue plugin, Tailwind, Flask proxy
 │   ├── public/
 │   │   └── favicon.ico
 │   └── src/
 │       ├── main.js         # App bootstrap
-│       ├── router.js       # Vue Router config
-│       ├── style.css       # Tailwind CSS + custom theme
-│       ├── App.vue         # Root layout + data fetching
+│       ├── router.js       # Vue Router: 5 routes with lazy loading
+│       ├── style.css       # Tailwind CSS + warm stone theme + dark mode
+│       ├── App.vue         # Root layout shell (header, router-view, footer)
+│       ├── composables/
+│       │   └── useDarkMode.js  # Shared dark mode state + localStorage
 │       ├── components/
-│       │   ├── AppHeader.vue
-│       │   ├── AppFooter.vue
-│       │   ├── TerminalWindow.vue
-│       │   └── SectionBlock.vue
+│       │   ├── AppHeader.vue       # Sticky nav, route links, theme toggle, mobile menu
+│       │   ├── AppFooter.vue       # Footer with quick links
+│       │   ├── ThemeToggle.vue     # Sun/moon dark mode toggle button
+│       │   ├── TerminalWindow.vue  # Animated terminal with typing + cowsay
+│       │   └── SectionBlock.vue    # Renders one content section
 │       └── views/
-│           ├── HomePage.vue
-│           └── NotFound.vue
+│           ├── HomePage.vue    # Hero: name, terminal, CTA buttons
+│           ├── AboutPage.vue   # Sections fetched from API
+│           ├── ContactPage.vue # Email, GitHub, LinkedIn links
+│           ├── LoginPage.vue   # Form UI (no backend)
+│           └── NotFound.vue    # 404 page
 └── app/                    # Flask backend
     ├── __init__.py
     ├── routes.py           # Serves dist/ + API routes

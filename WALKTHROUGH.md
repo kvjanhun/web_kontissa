@@ -15,16 +15,19 @@ Browser                         Vite / Flask                    Database
   |  <-- index.html + JS bundle   |                              |
   |  (Vite build output)          |                              |
   |                                 |                              |
-  |  Vue + Router mount, fires:    |                              |
-  |                                 |                              |
-  |  GET /api/sections ----------->|  SELECT * FROM section       |
-  |  <-- JSON [{slug, title, ...}] |<-----------------------------|
+  |  Vue + Router mount            |                              |
+  |  Dark mode applied from        |                              |
+  |  localStorage / system pref    |                              |
   |                                 |                              |
   |  GET /api/meta --------------->|  fetch GitHub API (cached)   |
   |  <-- JSON {update_date, ...}   |                              |
   |                                 |                              |
   |  GET /api/cowsay -------------->|  cowsay.get_output_string()  |
   |  <-- JSON {output: "..."}      |                              |
+  |                                 |                              |
+  |  Navigate to /about:           |                              |
+  |  GET /api/sections ----------->|  SELECT * FROM section       |
+  |  <-- JSON [{slug, title, ...}] |<-----------------------------|
   |                                 |                              |
   |  Vue renders everything        |                              |
 ```
@@ -109,65 +112,92 @@ The terminal animation in the browser fetches this after "typing" the command.
 
 ## The Frontend (`frontend/`)
 
-The frontend is a Vite + Vue 3 project using Single File Components (SFCs).
+The frontend is a Vite + Vue 3 project using Single File Components (SFCs), with multi-page routing and dark/light mode.
 
 ### Structure
 
 ```
 frontend/
-├── index.html              Vite entry point (minimal HTML shell)
+├── index.html              Vite entry point + dark mode flash prevention script
 ├── package.json            Dependencies: vue, vue-router, vite, tailwindcss
 ├── vite.config.js          Vite config with Vue plugin, Tailwind, Flask proxy
 ├── public/
 │   └── favicon.ico         Static assets copied as-is
 └── src/
     ├── main.js             App bootstrap: creates Vue app, adds router, mounts
-    ├── router.js           Vue Router config: / → HomePage, * → NotFound
-    ├── style.css           Tailwind CSS with custom theme and utilities
-    ├── App.vue             Root layout: header, router-view, footer + data fetching
+    ├── router.js           Vue Router: 5 routes with lazy loading + title updates
+    ├── style.css           Tailwind CSS + warm stone theme tokens + dark mode
+    ├── App.vue             Root layout shell: header, router-view, footer
+    ├── composables/
+    │   └── useDarkMode.js  Shared reactive dark mode state + localStorage persistence
     ├── components/
-    │   ├── AppHeader.vue   Top bar with site name + nav links (fetched from API)
-    │   ├── AppFooter.vue   Bottom bar with last updated date
-    │   ├── TerminalWindow.vue  Animated terminal with typing + cowsay
-    │   └── SectionBlock.vue    Renders one content section
+    │   ├── AppHeader.vue       Sticky header with route links, ThemeToggle, mobile hamburger
+    │   ├── AppFooter.vue       Footer with last-updated date + quick links
+    │   ├── ThemeToggle.vue     Sun/moon SVG button using useDarkMode composable
+    │   ├── TerminalWindow.vue  Animated terminal with typing + cowsay fetch
+    │   └── SectionBlock.vue    Renders one content section (title + HTML body)
     └── views/
-        ├── HomePage.vue    Home route: terminal + sections + loading/error states
-        └── NotFound.vue    404 page for unknown routes
+        ├── HomePage.vue    Hero layout: name, subtitle, centered terminal, CTA buttons
+        ├── AboutPage.vue   Fetches /api/sections, renders SectionBlocks
+        ├── ContactPage.vue Static contact links: email, GitHub, LinkedIn
+        ├── LoginPage.vue   Form UI (email + password, no backend)
+        └── NotFound.vue    404 page with accent styling
 ```
+
+### Routing
+
+Vue Router manages five routes with lazy loading for non-home views:
+
+| Route | View | Content |
+|-------|------|---------|
+| `/` | HomePage | Hero with terminal animation + CTA buttons |
+| `/about` | AboutPage | Sections fetched from `/api/sections` |
+| `/contact` | ContactPage | Static email, GitHub, LinkedIn links |
+| `/login` | LoginPage | Form UI (logs to console, no backend) |
+| `*` | NotFound | 404 with accent styling |
+
+`router.afterEach` updates `document.title` from route `meta.title`. `scrollBehavior` scrolls to top on navigation.
 
 ### How Vue Renders the Page
 
 1. Browser loads `index.html` — a minimal shell with `<div id="app">`
-2. Vite-bundled JS loads (includes Vue, Vue Router, all components)
-3. `main.js` creates the app, registers the router, and mounts to `#app`
-4. The root `App.vue`'s `setup()` runs `onMounted`:
-   - Fetches `/api/sections` and `/api/meta` in parallel
-   - On success: stores results in reactive `ref()` variables
-   - On failure: sets `error` ref
-   - Vue automatically re-renders when these change
-5. Vue Router matches the current URL:
-   - `/` → **HomePage** component (terminal + sections)
-   - Any other path → **NotFound** component (404 page)
-6. Components render:
-   - **AppHeader** fetches `/api/sections` to build nav links
-   - **HomePage** shows loading skeleton while data fetches, error state if it fails, or sections when ready
-   - **TerminalWindow** waits 3 seconds, then "types" `cowsay moo` character by character, fetches `/api/cowsay`, and displays the output
-   - **SectionBlock** renders each section's title + HTML content
-   - **AppFooter** shows the last updated date from metadata
+2. An inline `<script>` in `<head>` synchronously sets `.dark` on `<html>` based on localStorage or system preference (prevents flash of wrong theme)
+3. Vite-bundled JS loads (includes Vue, Vue Router, all components)
+4. `main.js` creates the app, registers the router, and mounts to `#app`
+5. The root `App.vue` runs `onMounted`:
+   - Fetches `/api/meta` for footer update date
+   - Vue automatically re-renders when data arrives
+6. Vue Router matches the current URL and renders the corresponding view
+7. Components render:
+   - **AppHeader** — sticky nav with static route links, ThemeToggle button, mobile hamburger menu
+   - **HomePage** — hero layout with name/subtitle, TerminalWindow (typing animation + cowsay), and CTA buttons
+   - **AboutPage** — fetches `/api/sections`, shows loading skeleton or error state, then renders SectionBlocks
+   - **ContactPage** — static links to email, GitHub, LinkedIn
+   - **LoginPage** — email/password form (submit logs to console)
+   - **AppFooter** — last-updated date + quick links to About and Contact
+
+### Dark Mode
+
+Dark mode uses a class-based approach:
+
+1. **Flash prevention**: inline `<script>` in `index.html` `<head>` checks localStorage then `prefers-color-scheme` and sets `.dark` on `<html>` synchronously before CSS loads
+2. **Composable** (`useDarkMode.js`): shared reactive `isDark` ref, persists to localStorage, toggles `.dark` class on `<html>`
+3. **CSS custom properties**: `:root` and `.dark` blocks in `style.css` define all theme tokens
+4. **`@variant dark`**: Tailwind v4 directive enables `dark:` variant based on `.dark` class
+5. **ThemeToggle.vue**: sun/moon SVG button that calls `toggleDark()` from the composable
 
 ### Loading & Error States
 
-The app tracks two reactive values:
-- `loading` (boolean) — `true` while API calls are in-flight
-- `error` (object) — set if `Promise.all` rejects
+The AboutPage tracks its own loading and error state:
+- `loading` (boolean) — `true` while `/api/sections` is in-flight
+- `error` (object) — set if the fetch fails
 
-While loading, the HomePage shows pulsing placeholder skeletons (3 blocks).
-On error, it shows a red-tinted message box: "Failed to load content. Please try refreshing."
+While loading, pulsing placeholder skeletons are shown. On error, a message box with "Failed to load content" appears.
 The terminal component handles its own error state independently.
 
 ---
 
-## Styling (Tailwind CSS)
+## Styling (Tailwind CSS v4)
 
 CSS is built by the **`@tailwindcss/vite` plugin** — integrated into the Vite build pipeline.
 
@@ -180,16 +210,36 @@ CSS is built by the **`@tailwindcss/vite` plugin** — integrated into the Vite 
 ### What's in `style.css`
 
 - `@import "tailwindcss"` directive
-- `@theme` block with custom colors, fonts
-- Base layer: body font, link styles
-- Custom utilities: terminal-specific CSS (window chrome, prompt colors, cursor blink animation)
+- `@variant dark` directive for class-based dark mode
+- `@theme` block with accent color, terminal colors, fonts
+- `:root` and `.dark` blocks with warm stone color palette (CSS custom properties)
+- Base layer: html/body styling with theme transitions
+- Custom utility: `cursor-blink` animation for terminal cursor
+
+### Color Palette
+
+Warm stone greys that complement the orange accent:
+
+| Token | Light | Dark |
+|-------|-------|------|
+| `--color-bg-page` | `#e7e5e4` | `#0c0a09` |
+| `--color-bg-primary` | `#fafaf9` | `#1c1917` |
+| `--color-bg-secondary` | `#f5f5f4` | `#292524` |
+| `--color-bg-tertiary` | `#e7e5e4` | `#3a3632` |
+| `--color-text-primary` | `#292524` | `#e7e5e4` |
+| `--color-text-secondary` | `#78716c` | `#a8a29e` |
+| `--color-text-tertiary` | `#a8a29e` | `#78716c` |
+| `--color-border` | `#d6d3d1` | `#44403c` |
+
+Shared across modes: accent `#ff643e`, terminal bg `#0a0a0a`, terminal user `#7eda28`, terminal dir `#6294cd`.
+
+The `html` element uses `--color-bg-page` (a darker shade) while the `body` (max-width 960px centered) uses `--color-bg-primary`, creating a visual card effect.
 
 ### Design Tokens
 
-Defined in `@theme` block in `style.css`:
+Defined in `@theme` block:
 - **Fonts**: DM Sans (body), Ubuntu Mono (terminal)
-- **Colors**: `dark` (#333), `light` (#f9f9f9), `accent` (rgb(255, 100, 62))
-- **Terminal**: `term-bg`, `term-user`, `term-dir`
+- **Colors**: `accent` (#ff643e), `term-bg`, `term-user`, `term-dir`
 - **Layout**: max-width 960px, flexbox column
 
 ---
@@ -261,9 +311,21 @@ cd frontend && npm run build
 GET / → 200 (index.html from dist/, ~1KB)
 GET /assets/index-[hash].js → 200 (Vue app bundle, cached)
 GET /assets/index-[hash].css → 200 (Tailwind compiled, cached)
-GET /api/sections → 200 (JSON, ~1KB)
 GET /api/meta → 200 (JSON, ~80 bytes)
 GET /api/cowsay → 200 (JSON, ~200 bytes, after 3s delay)
+```
+
+**Navigate to /about (client-side):**
+```
+No page reload — Vue Router swaps the view
+GET /api/sections → 200 (JSON, ~1KB)
+```
+
+**Direct visit to /about:**
+```
+GET /about → 200 (index.html — Flask catch-all, Vue Router renders AboutPage)
+GET /api/meta → 200
+GET /api/sections → 200
 ```
 
 **Unknown page (e.g. /nonexistent):**
@@ -282,11 +344,14 @@ GET / → 200 (index.html — note: crawlers may not execute JS)
 ## Key Design Decisions
 
 1. **Vite + Vue SFCs** — Single File Components with `<script setup>`, scoped styles, and HMR for a modern dev experience
-2. **`@tailwindcss/vite` plugin** — CSS processing integrated into Vite, no standalone CLI needed
-3. **Multi-stage Docker build** — Node builds the frontend, final image is Python-only (no Node.js in production)
-4. **Vue Router with catch-all Flask route** — client-side routing with clean URLs, Flask serves dist files or falls back to index.html
-5. **Loading/error states** — pulsing skeleton placeholders while fetching, error message if API fails
-6. **DATABASE_URI env var** — allows local development without Docker by pointing to the local DB file
-7. **Parallel API fetches** — sections and metadata load simultaneously for faster page render
-8. **GitHub API caching** — 6-hour TTL avoids rate limiting while keeping the "last updated" reasonably fresh
-9. **Vite dev proxy** — Vite dev server proxies API requests to Flask, enabling HMR during development
+2. **Multi-page routing** — Vue Router with lazy-loaded views for About, Contact, Login; `afterEach` hook updates document title
+3. **Class-based dark mode** — `.dark` on `<html>` with CSS custom properties, inline flash prevention script, localStorage persistence with system preference fallback
+4. **Warm stone palette** — Tailwind stone greys with orange accent for a cohesive, non-stark color scheme
+5. **Composables** — `useDarkMode` extracts shared reactive state, reusable across components
+6. **`@tailwindcss/vite` plugin** — CSS processing integrated into Vite, no standalone CLI needed
+7. **Multi-stage Docker build** — Node builds the frontend, final image is Python-only (no Node.js in production)
+8. **Vue Router with catch-all Flask route** — client-side routing with clean URLs, Flask serves dist files or falls back to index.html
+9. **Loading/error states** — pulsing skeleton placeholders while fetching, error message if API fails
+10. **DATABASE_URI env var** — allows local development without Docker by pointing to the local DB file
+11. **GitHub API caching** — 6-hour TTL avoids rate limiting while keeping the "last updated" reasonably fresh
+12. **Vite dev proxy** — Vite dev server proxies API requests to Flask, enabling HMR during development
