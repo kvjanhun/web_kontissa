@@ -13,6 +13,7 @@ from app.models import db, User
 
 def create(username, email, password):
     with app.app_context():
+        db.create_all()
         if User.query.filter_by(email=email).first():
             print(f"User with email {email} already exists.")
             return
