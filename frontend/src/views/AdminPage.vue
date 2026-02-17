@@ -1,7 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { useHead } from '@unhead/vue'
 import { useAuth } from '../composables/useAuth'
+
+useHead({
+  meta: [
+    { name: 'robots', content: 'noindex' }
+  ]
+})
 
 const router = useRouter()
 const { isAdmin } = useAuth()

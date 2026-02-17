@@ -21,11 +21,12 @@ function toggleDark() {
 }
 
 watch(isDark, (val) => {
+  if (typeof window === 'undefined') return
   localStorage.setItem('theme', val ? 'dark' : 'light')
   applyClass()
 })
 
-initDarkMode()
+if (typeof window !== 'undefined') initDarkMode()
 
 export function useDarkMode() {
   return { isDark, toggleDark }

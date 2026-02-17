@@ -1,5 +1,13 @@
 <script setup>
+import { useHead } from '@unhead/vue'
 import TerminalWindow from '../components/TerminalWindow.vue'
+
+useHead({
+  title: 'erez.ac — Konsta Janhunen',
+  meta: [
+    { name: 'description', content: 'Konsta Janhunen — Developer & tinkerer. Integration developer, CS student, and technology enthusiast.' }
+  ]
+})
 </script>
 
 <template>

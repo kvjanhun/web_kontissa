@@ -1,7 +1,14 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { useHead } from '@unhead/vue'
 import { useAuth } from '../composables/useAuth'
+
+useHead({
+  meta: [
+    { name: 'robots', content: 'noindex' }
+  ]
+})
 
 const router = useRouter()
 const { user, isAuthenticated, login, logout } = useAuth()

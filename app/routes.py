@@ -130,4 +130,7 @@ def catch_all(path):
     file_path = os.path.join(DIST_DIR, path)
     if os.path.isfile(file_path):
         return send_from_directory(DIST_DIR, path)
+    index_path = os.path.join(DIST_DIR, path, "index.html")
+    if os.path.isfile(index_path):
+        return send_from_directory(os.path.join(DIST_DIR, path), "index.html")
     return send_from_directory(DIST_DIR, "index.html")

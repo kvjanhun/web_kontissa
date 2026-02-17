@@ -1,3 +1,14 @@
+<script setup>
+import { useHead } from '@unhead/vue'
+
+useHead({
+  title: 'Contact — erez.ac',
+  meta: [
+    { name: 'description', content: 'Get in touch with Konsta Janhunen — email, GitHub, and LinkedIn.' }
+  ]
+})
+</script>
+
 <template>
   <div>
     <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">Contact</h1>

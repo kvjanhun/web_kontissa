@@ -14,5 +14,11 @@ export default defineConfig({
   build: {
     outDir: resolve(__dirname, '../app/static/dist'),
     emptyDirBeforeWrite: true,
+  },
+  ssgOptions: {
+    script: 'async',
+    formatting: 'minify',
+    dirStyle: 'nested',
+    includedRoutes: () => ['/', '/about', '/contact', '/login']
   }
 })

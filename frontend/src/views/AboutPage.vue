@@ -1,6 +1,14 @@
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useHead } from '@unhead/vue'
 import SectionBlock from '../components/SectionBlock.vue'
+
+useHead({
+  title: 'About — erez.ac',
+  meta: [
+    { name: 'description', content: 'About Konsta Janhunen — Integration developer at Digia, CS student, and technology enthusiast.' }
+  ]
+})
 
 const sections = ref([])
 const loading = ref(true)
