@@ -61,6 +61,7 @@ async function handleLogout() {
             id="email"
             v-model="email"
             type="email"
+            autocomplete="email"
             required
             class="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors duration-200 focus:ring-2 focus:ring-accent"
             :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
@@ -73,6 +74,7 @@ async function handleLogout() {
             id="password"
             v-model="password"
             type="password"
+            autocomplete="current-password"
             required
             class="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors duration-200 focus:ring-2 focus:ring-accent"
             :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
