@@ -17,7 +17,10 @@ db.init_app(app)
 login_manager = LoginManager()
 login_manager.init_app(app)
 
-limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
+limiter = Limiter(
+    get_remote_address, app=app, storage_uri="memory://",
+    default_limits=["30/minute"],
+)
 
 
 @login_manager.user_loader

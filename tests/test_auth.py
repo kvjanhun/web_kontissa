@@ -49,6 +49,20 @@ class TestLogout:
         assert res.status_code == 401
 
 
+class TestRateLimit:
+    def test_login_rate_limited(self, app, client):
+        from app import limiter
+        limiter.enabled = True
+        try:
+            for _ in range(5):
+                client.post("/api/login", json={"email": "x@x.com", "password": "x"})
+            res = client.post("/api/login", json={"email": "x@x.com", "password": "x"})
+            assert res.status_code == 429
+        finally:
+            limiter.enabled = False
+            limiter.reset()
+
+
 class TestMe:
     def test_me_authenticated(self, logged_in_admin, admin_user):
         res = logged_in_admin.get("/api/me")
