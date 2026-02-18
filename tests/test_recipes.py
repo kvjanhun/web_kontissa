@@ -112,6 +112,18 @@ class TestCreateRecipe:
         res = logged_in_user.post("/api/recipes", json=self._recipe_payload(steps=[]))
         assert res.status_code == 400
 
+    def test_create_too_many_ingredients(self, logged_in_user):
+        ingredients = [{"name": f"item-{i}"} for i in range(101)]
+        res = logged_in_user.post("/api/recipes", json=self._recipe_payload(ingredients=ingredients))
+        assert res.status_code == 400
+        assert "Too many ingredients" in res.get_json()["error"]
+
+    def test_create_too_many_steps(self, logged_in_user):
+        steps = [{"content": f"step {i}"} for i in range(201)]
+        res = logged_in_user.post("/api/recipes", json=self._recipe_payload(steps=steps))
+        assert res.status_code == 400
+        assert "Too many steps" in res.get_json()["error"]
+
     def test_create_ingredient_missing_name(self, logged_in_user):
         res = logged_in_user.post("/api/recipes", json=self._recipe_payload(
             ingredients=[{"amount": "1"}]

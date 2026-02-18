@@ -9,6 +9,9 @@ VALID_CATEGORIES = [
     "Snack", "Baking", "Drinks", "Other",
 ]
 
+MAX_INGREDIENTS = 100
+MAX_STEPS = 200
+
 
 def slugify(text):
     """Convert text to URL-friendly slug."""
@@ -119,10 +122,14 @@ def api_create_recipe():
     raw_ingredients = data.get("ingredients", [])
     if not raw_ingredients:
         return jsonify({"error": "At least one ingredient is required"}), 400
+    if len(raw_ingredients) > MAX_INGREDIENTS:
+        return jsonify({"error": f"Too many ingredients (max {MAX_INGREDIENTS})"}), 400
 
     raw_steps = data.get("steps", [])
     if not raw_steps:
         return jsonify({"error": "At least one step is required"}), 400
+    if len(raw_steps) > MAX_STEPS:
+        return jsonify({"error": f"Too many steps (max {MAX_STEPS})"}), 400
 
     ingredients, err = _parse_ingredients(raw_ingredients)
     if err:
@@ -168,10 +175,14 @@ def api_update_recipe(recipe_id):
     raw_ingredients = data.get("ingredients", [])
     if not raw_ingredients:
         return jsonify({"error": "At least one ingredient is required"}), 400
+    if len(raw_ingredients) > MAX_INGREDIENTS:
+        return jsonify({"error": f"Too many ingredients (max {MAX_INGREDIENTS})"}), 400
 
     raw_steps = data.get("steps", [])
     if not raw_steps:
         return jsonify({"error": "At least one step is required"}), 400
+    if len(raw_steps) > MAX_STEPS:
+        return jsonify({"error": f"Too many steps (max {MAX_STEPS})"}), 400
 
     ingredients, err = _parse_ingredients(raw_ingredients)
     if err:
