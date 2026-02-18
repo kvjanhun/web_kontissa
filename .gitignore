@@ -16,3 +16,6 @@ frontend/node_modules/
 
 # Environment variables
 .env
+
+# Internal planning docs
+ROADMAP.md

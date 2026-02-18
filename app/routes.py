@@ -44,10 +44,12 @@ def api_meta():
 
 @app.route("/sitemap.xml")
 def generate_sitemap():
+    commit_date = get_latest_commit_date()
+    lastmod = commit_date[:10] if commit_date else "2025-01-01"
     pages = [
         {
             "loc": "https://erez.ac/",
-            "lastmod": get_latest_commit_date()[:10],
+            "lastmod": lastmod,
             "changefreq": "monthly",
             "priority": "1.0"
         }
