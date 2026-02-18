@@ -1,6 +1,8 @@
 import os
 from flask import Flask
 from flask_login import LoginManager
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 from .models import db, User
 
 app = Flask(__name__)
@@ -14,6 +16,8 @@ db.init_app(app)
 
 login_manager = LoginManager()
 login_manager.init_app(app)
+
+limiter = Limiter(get_remote_address, app=app, storage_uri="memory://")
 
 
 @login_manager.user_loader

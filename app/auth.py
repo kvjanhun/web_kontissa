@@ -1,10 +1,11 @@
 from flask import request, jsonify
 from flask_login import login_user, logout_user, current_user, login_required
 from .models import db, User
-from . import app
+from . import app, limiter
 
 
 @app.route("/api/login", methods=["POST"])
+@limiter.limit("5/minute")
 def api_login():
     data = request.get_json()
     if not data:

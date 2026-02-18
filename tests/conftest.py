@@ -5,7 +5,7 @@ import pytest
 os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 
 
-from app import app as flask_app
+from app import app as flask_app, limiter
 from app.models import db, User, Section
 from werkzeug.security import generate_password_hash
 
@@ -18,6 +18,7 @@ def app(tmp_path):
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{db_path}",
         "SECRET_KEY": "test-secret",
     })
+    limiter.enabled = False
     with flask_app.app_context():
         db.create_all()
         yield flask_app
