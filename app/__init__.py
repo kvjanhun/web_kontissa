@@ -34,6 +34,10 @@ def unauthorized():
     return jsonify({"error": "Authentication required"}), 401
 
 
+with app.app_context():
+    db.create_all()
+
 from . import routes  # registers the routes with the app
 from . import auth
+from . import recipes
 from .api import cowsay

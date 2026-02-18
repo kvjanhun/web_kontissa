@@ -11,6 +11,9 @@ const navLinks = computed(() => {
     { to: '/about', label: 'About' },
     { to: '/contact', label: 'Contact' }
   ]
+  if (isAuthenticated.value) {
+    links.push({ to: '/recipes', label: 'Recipes' })
+  }
   if (isAdmin.value) {
     links.push({ to: '/admin', label: 'Admin' })
   }

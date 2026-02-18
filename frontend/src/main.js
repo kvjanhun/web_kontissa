@@ -13,6 +13,10 @@ export const createApp = ViteSSG(
         const { isAdmin } = useAuth()
         if (!isAdmin.value) return '/login'
       }
+      if (to.meta.requiresAuth) {
+        const { isAuthenticated } = useAuth()
+        if (!isAuthenticated.value) return '/login'
+      }
     })
     router.afterEach((to) => {
       if (isClient) document.title = to.meta.title || 'erez.ac'

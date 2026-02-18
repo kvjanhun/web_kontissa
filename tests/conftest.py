@@ -6,7 +6,7 @@ os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 
 
 from app import app as flask_app, limiter
-from app.models import db, User, Section
+from app.models import db, User, Section, Recipe, Ingredient, Step
 from werkzeug.security import generate_password_hash
 
 
@@ -61,9 +61,42 @@ def logged_in_admin(client, admin_user):
 
 
 @pytest.fixture()
+def logged_in_user(client, regular_user):
+    client.post("/api/login", json={
+        "email": regular_user["email"],
+        "password": regular_user["password"],
+    })
+    return client
+
+
+@pytest.fixture()
 def sample_section(app):
     with app.app_context():
         section = Section(title="Test Section", slug="test", content="<p>Hello</p>")
         db.session.add(section)
         db.session.commit()
         return {"id": section.id, "slug": "test"}
+
+
+@pytest.fixture()
+def sample_recipe(app, regular_user):
+    with app.app_context():
+        recipe = Recipe(
+            title="Pancakes",
+            slug="pancakes",
+            category="Breakfast",
+            created_by=regular_user["id"],
+        )
+        recipe.ingredients = [
+            Ingredient(name="Flour", amount="2", unit="cups", position=0),
+            Ingredient(name="Eggs", amount="2", unit=None, position=1),
+            Ingredient(name="Milk", amount="1", unit="cup", position=2),
+        ]
+        recipe.steps = [
+            Step(content="Mix dry ingredients", position=0),
+            Step(content="Add wet ingredients and stir", position=1),
+            Step(content="Cook on griddle until golden", position=2),
+        ]
+        db.session.add(recipe)
+        db.session.commit()
+        return {"id": recipe.id, "slug": "pancakes"}

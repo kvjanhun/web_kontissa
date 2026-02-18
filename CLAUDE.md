@@ -42,14 +42,14 @@ web_kontissa/
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
 │   └── src/
 │       ├── main.js             # createApp, router, mount
-│       ├── router.js           # 6 routes, lazy loading, admin guard via beforeEach
+│       ├── router.js           # 10 routes, lazy loading, admin + auth guards via beforeEach
 │       ├── style.css           # Tailwind import, CSS custom properties theme, dark mode, DM Sans + Ubuntu Mono
 │       ├── App.vue             # Layout shell: AppHeader, router-view, AppFooter. Calls checkAuth() on mount
 │       ├── composables/
 │       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
 │       │   └── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
 │       ├── components/
-│       │   ├── AppHeader.vue   # Sticky nav, auth-aware links (Admin/Login/Logout), mobile hamburger
+│       │   ├── AppHeader.vue   # Sticky nav, auth-aware links (Recipes/Admin/Login/Logout), mobile hamburger
 │       │   ├── AppFooter.vue   # Last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay fetch
@@ -60,12 +60,16 @@ web_kontissa/
 │           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
 │           ├── AdminPage.vue   # Protected section CRUD (add/edit/delete)
+│           ├── RecipeListPage.vue    # Recipe cards with search + category filter
+│           ├── RecipeDetailPage.vue  # Single recipe with ingredients + numbered steps
+│           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
 │           └── NotFound.vue    # 404
 └── app/
     ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager setup
-    ├── models.py               # User (UserMixin, password hashing, role) + Section
+    ├── models.py               # User, Section, Recipe, Ingredient, Step models
     ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
     ├── auth.py                 # /api/login, /api/logout, /api/me
+    ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
     ├── utils.py                # GitHub API commit date with 6-hour cache
     ├── create_admin.py         # One-time utility: create admin user with db.create_all()
     ├── api/
@@ -86,6 +90,12 @@ web_kontissa/
 | POST | `/api/logout` | Login | End session |
 | GET | `/api/me` | Public | Current user or 401 |
 | GET | `/api/meta` | Public | Site metadata (author, update date) |
+| GET | `/api/recipes?q=&category=` | Login | List recipes with optional search + category filter |
+| GET | `/api/recipes/<slug>` | Login | Single recipe with nested ingredients + steps |
+| POST | `/api/recipes` | Login | Create recipe with nested arrays |
+| PUT | `/api/recipes/<id>` | Login | Update recipe (replaces all ingredients/steps) |
+| DELETE | `/api/recipes/<id>` | Login | Delete recipe (cascades) |
+| GET | `/api/recipes/categories` | Login | Valid category list |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
@@ -138,6 +148,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Flask app object lives in `app/__init__.py`, imported by modules
 - Routes use `@app.route()` directly on the app (no blueprints)
 - Admin protection via `@admin_required` decorator (wraps `@login_required` + role check)
+- Recipe endpoints use `@login_required` — any authenticated user can CRUD any recipe (shared cookbook)
 - All API endpoints return JSON
 - `catch_all` route at the bottom of `routes.py` serves Vue SPA for client-side routing
 - GitHub API responses cached for 6 hours in `utils.py`
@@ -149,6 +160,8 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
 - `v-html` used for section content (admin-authored, trusted)
+- Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
+- `requiresAuth` route meta guard redirects unauthenticated users to `/login`
 
 ### Design
 - Warm stone-grey palette with orange accent (#ff643e)
@@ -161,7 +174,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - **Session signing**: `SECRET_KEY` from `.env` — random fallback for local dev only. Production MUST have a proper key.
 - **Passwords**: Werkzeug scrypt hashing with random salt. Never logged or exposed via API.
 - **SQL injection**: Not possible — SQLAlchemy parameterized queries throughout.
-- **XSS**: Vue auto-escapes `{{ }}`. Section content uses `v-html` but is admin-authored only.
+- **XSS**: Vue auto-escapes `{{ }}`. Section content uses `v-html` but is admin-authored only. Recipe content never uses `v-html`.
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`). Browsers won't send `Content-Type: application/json` cross-origin from forms.
 - **Network**: Container port (8080) only on localhost. Nginx handles TLS. Firewall blocks all non-essential ports.
 - **SSH**: Key-based, restricted to specific LAN IPs via iptables.
