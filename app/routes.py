@@ -47,12 +47,9 @@ def generate_sitemap():
     commit_date = get_latest_commit_date()
     lastmod = commit_date[:10] if commit_date else "2025-01-01"
     pages = [
-        {
-            "loc": "https://erez.ac/",
-            "lastmod": lastmod,
-            "changefreq": "monthly",
-            "priority": "1.0"
-        }
+        {"loc": "https://erez.ac/", "lastmod": lastmod, "changefreq": "monthly", "priority": "1.0"},
+        {"loc": "https://erez.ac/about", "lastmod": lastmod, "changefreq": "monthly", "priority": "0.8"},
+        {"loc": "https://erez.ac/contact", "lastmod": lastmod, "changefreq": "monthly", "priority": "0.5"},
     ]
 
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>',
