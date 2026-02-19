@@ -2,6 +2,7 @@ import { ViteSSG } from 'vite-ssg'
 import App from './App.vue'
 import { routes } from './router.js'
 import { useAuth } from './composables/useAuth'
+import { useI18n } from './composables/useI18n'
 import './style.css'
 
 export const createApp = ViteSSG(
@@ -19,7 +20,10 @@ export const createApp = ViteSSG(
       }
     })
     router.afterEach((to) => {
-      if (isClient) document.title = to.meta.title || 'erez.ac'
+      if (isClient) {
+        const { t } = useI18n()
+        document.title = to.meta.titleKey ? t(to.meta.titleKey) : 'erez.ac'
+      }
     })
   }
 )

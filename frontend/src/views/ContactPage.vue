@@ -1,17 +1,21 @@
 <script setup>
+import { computed } from 'vue'
 import { useHead } from '@unhead/vue'
+import { useI18n } from '../composables/useI18n.js'
+
+const { t } = useI18n()
 
 useHead({
-  title: 'Contact — erez.ac',
+  title: computed(() => t('contact.metaTitle')),
   meta: [
-    { name: 'description', content: 'Get in touch with Konsta Janhunen — email, GitHub, and LinkedIn.' }
+    { name: 'description', content: computed(() => t('contact.metaDescription')) }
   ]
 })
 </script>
 
 <template>
   <div>
-    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">Contact</h1>
+    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('contact.heading') }}</h1>
 
     <div class="space-y-4">
       <a

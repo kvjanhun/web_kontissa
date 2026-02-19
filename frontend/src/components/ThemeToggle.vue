@@ -1,14 +1,16 @@
 <script setup>
 import { useDarkMode } from '../composables/useDarkMode.js'
+import { useI18n } from '../composables/useI18n.js'
 
 const { isDark, toggleDark } = useDarkMode()
+const { t } = useI18n()
 </script>
 
 <template>
   <button
     @click="toggleDark"
     class="p-2 rounded-lg transition-colors duration-200 hover:bg-white/10"
-    :aria-label="isDark ? 'Switch to light mode' : 'Switch to dark mode'"
+    :aria-label="isDark ? t('theme.switchToLight') : t('theme.switchToDark')"
   >
     <!-- Sun icon (shown in dark mode) -->
     <svg v-if="isDark" xmlns="http://www.w3.org/2000/svg" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

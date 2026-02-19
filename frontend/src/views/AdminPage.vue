@@ -3,6 +3,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { useAuth } from '../composables/useAuth'
+import { useI18n } from '../composables/useI18n.js'
 
 useHead({
   meta: [
@@ -12,6 +13,7 @@ useHead({
 
 const router = useRouter()
 const { isAdmin } = useAuth()
+const { t } = useI18n()
 
 const sections = ref([])
 const editingId = ref(null)
@@ -52,7 +54,7 @@ async function createSection() {
     return
   }
   form.value = { title: '', slug: '', content: '' }
-  success.value = 'Section created'
+  success.value = t('admin.created')
   await loadSections()
 }
 
@@ -78,12 +80,12 @@ async function saveEdit(id) {
     return
   }
   editingId.value = null
-  success.value = 'Section updated'
+  success.value = t('admin.updated')
   await loadSections()
 }
 
 async function deleteSection(id) {
-  if (!confirm('Delete this section?')) return
+  if (!confirm(t('admin.confirmDelete'))) return
   clearMessages()
   const res = await fetch(`/api/sections/${id}`, { method: 'DELETE' })
   if (!res.ok) {
@@ -91,14 +93,14 @@ async function deleteSection(id) {
     error.value = data.error
     return
   }
-  success.value = 'Section deleted'
+  success.value = t('admin.deleted')
   await loadSections()
 }
 </script>
 
 <template>
   <div class="max-w-3xl mx-auto mt-8">
-    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">Admin — Sections</h1>
+    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('admin.heading') }}</h1>
 
     <!-- Messages -->
     <div v-if="error" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
@@ -110,19 +112,19 @@ async function deleteSection(id) {
 
     <!-- Add new section -->
     <div class="mb-8 p-4 rounded-lg" :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }">
-      <h2 class="text-lg font-medium mb-3" :style="{ color: 'var(--color-text-primary)' }">Add Section</h2>
+      <h2 class="text-lg font-medium mb-3" :style="{ color: 'var(--color-text-primary)' }">{{ t('admin.addSection') }}</h2>
       <form @submit.prevent="createSection" class="space-y-3">
         <div class="flex gap-3">
           <input
             v-model="form.title"
-            placeholder="Title"
+            :placeholder="t('admin.title')"
             required
             class="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
             :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
           />
           <input
             v-model="form.slug"
-            placeholder="slug"
+            :placeholder="t('admin.slug')"
             required
             class="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
             :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
@@ -130,7 +132,7 @@ async function deleteSection(id) {
         </div>
         <textarea
           v-model="form.content"
-          placeholder="Content (HTML)"
+          :placeholder="t('admin.contentHtml')"
           required
           rows="4"
           class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y"
@@ -140,7 +142,7 @@ async function deleteSection(id) {
           type="submit"
           class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90"
         >
-          Add Section
+          {{ t('admin.addSection') }}
         </button>
       </form>
     </div>
@@ -166,14 +168,14 @@ async function deleteSection(id) {
                 class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-white/10"
                 :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }"
               >
-                Edit
+                {{ t('admin.edit') }}
               </button>
               <button
                 @click="deleteSection(section.id)"
                 class="text-xs px-3 py-1 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10"
                 :style="{ border: '1px solid var(--color-border)' }"
               >
-                Delete
+                {{ t('admin.delete') }}
               </button>
             </div>
           </div>
@@ -208,7 +210,7 @@ async function deleteSection(id) {
               type="submit"
               class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90"
             >
-              Save
+              {{ t('admin.save') }}
             </button>
             <button
               type="button"
@@ -216,7 +218,7 @@ async function deleteSection(id) {
               class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10"
               :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }"
             >
-              Cancel
+              {{ t('admin.cancel') }}
             </button>
           </div>
         </form>
@@ -224,7 +226,7 @@ async function deleteSection(id) {
     </div>
 
     <p v-if="!sections.length" class="text-center py-8" :style="{ color: 'var(--color-text-secondary)' }">
-      No sections yet. Add one above.
+      {{ t('admin.noSections') }}
     </p>
   </div>
 </template>

@@ -2,46 +2,46 @@ import HomePage from './views/HomePage.vue'
 import NotFound from './views/NotFound.vue'
 
 export const routes = [
-  { path: '/', component: HomePage, meta: { title: 'erez.ac' } },
+  { path: '/', component: HomePage, meta: { titleKey: 'title.home' } },
   {
     path: '/about',
     component: () => import('./views/AboutPage.vue'),
-    meta: { title: 'About - erez.ac' }
+    meta: { titleKey: 'title.about' }
   },
   {
     path: '/contact',
     component: () => import('./views/ContactPage.vue'),
-    meta: { title: 'Contact - erez.ac' }
+    meta: { titleKey: 'title.contact' }
   },
   {
     path: '/login',
     component: () => import('./views/LoginPage.vue'),
-    meta: { title: 'Login - erez.ac' }
+    meta: { titleKey: 'title.login' }
   },
   {
     path: '/admin',
     component: () => import('./views/AdminPage.vue'),
-    meta: { title: 'Admin - erez.ac', requiresAdmin: true }
+    meta: { titleKey: 'title.admin', requiresAdmin: true }
   },
   {
     path: '/recipes',
     component: () => import('./views/RecipeListPage.vue'),
-    meta: { title: 'Recipes - erez.ac', requiresAuth: true }
+    meta: { titleKey: 'title.recipes', requiresAuth: true }
   },
   {
     path: '/recipes/new',
     component: () => import('./views/RecipeFormPage.vue'),
-    meta: { title: 'New Recipe - erez.ac', requiresAuth: true }
+    meta: { titleKey: 'title.newRecipe', requiresAuth: true }
   },
   {
     path: '/recipes/:slug',
     component: () => import('./views/RecipeDetailPage.vue'),
-    meta: { title: 'Recipe - erez.ac', requiresAuth: true }
+    meta: { titleKey: 'title.recipe', requiresAuth: true }
   },
   {
     path: '/recipes/:slug/edit',
     component: () => import('./views/RecipeFormPage.vue'),
-    meta: { title: 'Edit Recipe - erez.ac', requiresAuth: true }
+    meta: { titleKey: 'title.editRecipe', requiresAuth: true }
   },
-  { path: '/:pathMatch(.*)*', component: NotFound, meta: { title: '404 - erez.ac' } }
+  { path: '/:pathMatch(.*)*', component: NotFound, meta: { titleKey: 'title.notFound' } }
 ]

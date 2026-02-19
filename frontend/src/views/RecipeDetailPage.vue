@@ -1,9 +1,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from '../composables/useI18n.js'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 const recipe = ref(null)
 const loading = ref(true)
 const error = ref('')
@@ -43,10 +45,10 @@ async function fetchRecipe() {
   try {
     const res = await fetch(`/api/recipes/${route.params.slug}`)
     if (res.status === 404) {
-      error.value = 'Recipe not found'
+      error.value = t('recipe.notFound')
       return
     }
-    if (!res.ok) throw new Error('Failed to load recipe')
+    if (!res.ok) throw new Error(t('recipe.loadError'))
     recipe.value = await res.json()
   } catch (e) {
     error.value = e.message
@@ -56,10 +58,10 @@ async function fetchRecipe() {
 }
 
 async function deleteRecipe() {
-  if (!confirm('Delete this recipe?')) return
+  if (!confirm(t('recipe.confirmDelete'))) return
   try {
     const res = await fetch(`/api/recipes/${recipe.value.id}`, { method: 'DELETE' })
-    if (!res.ok) throw new Error('Failed to delete')
+    if (!res.ok) throw new Error(t('recipe.deleteError'))
     router.push('/recipes')
   } catch (e) {
     error.value = e.message
@@ -84,7 +86,7 @@ onUnmounted(() => {
       v-if="loading"
       class="text-center py-12"
       :style="{ color: 'var(--color-text-secondary)' }"
-    >Loading...</p>
+    >{{ t('recipes.loading') }}</p>
 
     <p v-else-if="error" class="text-center py-12 text-red-500">{{ error }}</p>
 
@@ -114,14 +116,14 @@ onUnmounted(() => {
               color: 'var(--color-text-primary)'
             }"
           >
-            Edit
+            {{ t('recipe.edit') }}
           </router-link>
           <button
             @click="deleteRecipe"
             class="px-3 py-1.5 rounded-lg text-sm text-red-500 transition-colors duration-200 hover:bg-red-500/10"
             :style="{ border: '1px solid var(--color-border)' }"
           >
-            Delete
+            {{ t('recipe.delete') }}
           </button>
         </div>
       </div>
@@ -131,7 +133,7 @@ onUnmounted(() => {
           class="text-xl font-medium mb-3 pb-2"
           :style="{ color: 'var(--color-text-primary)', borderBottom: '1px solid var(--color-border)' }"
         >
-          Ingredients
+          {{ t('recipe.ingredients') }}
         </h2>
         <ul class="space-y-1">
           <li
@@ -151,7 +153,7 @@ onUnmounted(() => {
           class="text-xl font-medium mb-3 pb-2"
           :style="{ color: 'var(--color-text-primary)', borderBottom: '1px solid var(--color-border)' }"
         >
-          Steps
+          {{ t('recipe.steps') }}
         </h2>
         <ol class="space-y-3">
           <li
@@ -181,7 +183,7 @@ onUnmounted(() => {
           class="text-sm transition-colors duration-200"
           :style="{ color: 'var(--color-text-secondary)' }"
         >
-          &larr; Back to recipes
+          {{ t('recipe.backToRecipes') }}
         </router-link>
       </div>
     </template>

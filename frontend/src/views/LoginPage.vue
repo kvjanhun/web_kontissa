@@ -3,6 +3,7 @@ import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { useAuth } from '../composables/useAuth'
+import { useI18n } from '../composables/useI18n.js'
 
 useHead({
   meta: [
@@ -12,6 +13,7 @@ useHead({
 
 const router = useRouter()
 const { user, isAuthenticated, login, logout } = useAuth()
+const { t } = useI18n()
 
 const email = ref('')
 const password = ref('')
@@ -41,21 +43,21 @@ async function handleLogout() {
   <div class="max-w-sm mx-auto mt-12">
     <!-- Already logged in -->
     <div v-if="isAuthenticated" class="text-center space-y-4">
-      <h1 class="text-3xl font-light mb-4" :style="{ color: 'var(--color-text-primary)' }">Logged in</h1>
+      <h1 class="text-3xl font-light mb-4" :style="{ color: 'var(--color-text-primary)' }">{{ t('login.loggedIn') }}</h1>
       <p :style="{ color: 'var(--color-text-secondary)' }">
-        Signed in as <strong>{{ user.username }}</strong> ({{ user.email }})
+        {{ t('login.signedInAs') }} <strong>{{ user.username }}</strong> ({{ user.email }})
       </p>
       <button
         @click="handleLogout"
         class="bg-accent text-white px-6 py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90"
       >
-        Logout
+        {{ t('nav.logout') }}
       </button>
     </div>
 
     <!-- Login form -->
     <div v-else>
-      <h1 class="text-3xl font-light mb-8 text-center" :style="{ color: 'var(--color-text-primary)' }">Login</h1>
+      <h1 class="text-3xl font-light mb-8 text-center" :style="{ color: 'var(--color-text-primary)' }">{{ t('login.heading') }}</h1>
 
       <div v-if="error" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
         {{ error }}
@@ -63,7 +65,7 @@ async function handleLogout() {
 
       <form @submit.prevent="handleSubmit" class="space-y-4">
         <div>
-          <label for="email" class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">Email</label>
+          <label for="email" class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">{{ t('login.email') }}</label>
           <input
             id="email"
             v-model="email"
@@ -76,7 +78,7 @@ async function handleLogout() {
         </div>
 
         <div>
-          <label for="password" class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">Password</label>
+          <label for="password" class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">{{ t('login.password') }}</label>
           <input
             id="password"
             v-model="password"
@@ -93,7 +95,7 @@ async function handleLogout() {
           :disabled="loading"
           class="w-full bg-accent text-white py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90 disabled:opacity-50"
         >
-          {{ loading ? 'Signing in...' : 'Sign in' }}
+          {{ loading ? t('login.signingIn') : t('login.signIn') }}
         </button>
       </form>
     </div>

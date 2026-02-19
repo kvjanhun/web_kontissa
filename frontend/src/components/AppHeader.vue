@@ -1,26 +1,29 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import { useI18n } from '../composables/useI18n.js'
 import ThemeToggle from './ThemeToggle.vue'
+import LangToggle from './LangToggle.vue'
 
 const { isAuthenticated, isAdmin, logout } = useAuth()
+const { t } = useI18n()
 const mobileOpen = ref(false)
 
 const navLinks = computed(() => {
   const links = [
-    { to: '/about', label: 'About' },
-    { to: '/contact', label: 'Contact' }
+    { to: '/about', labelKey: 'nav.about' },
+    { to: '/contact', labelKey: 'nav.contact' }
   ]
   if (isAuthenticated.value) {
-    links.push({ to: '/recipes', label: 'Recipes' })
+    links.push({ to: '/recipes', labelKey: 'nav.recipes' })
   }
   if (isAdmin.value) {
-    links.push({ to: '/admin', label: 'Admin' })
+    links.push({ to: '/admin', labelKey: 'nav.admin' })
   }
   if (isAuthenticated.value) {
-    links.push({ to: '/login', label: 'Logout', action: handleLogout })
+    links.push({ to: '/login', labelKey: 'nav.logout', action: handleLogout })
   } else {
-    links.push({ to: '/login', label: 'Login' })
+    links.push({ to: '/login', labelKey: 'nav.login' })
   }
   return links
 })
@@ -53,17 +56,18 @@ async function handleLogout() {
           class="!text-stone-400 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
           @click="link.action && link.action()"
         >
-          {{ link.label }}
+          {{ t(link.labelKey) }}
         </router-link>
       </nav>
 
+      <LangToggle />
       <ThemeToggle class="text-stone-400" />
 
       <!-- Mobile hamburger -->
       <button
         class="sm:hidden p-2 text-stone-400 hover:text-white"
         @click="mobileOpen = !mobileOpen"
-        aria-label="Toggle menu"
+        :aria-label="t('nav.toggleMenu')"
       >
         <svg xmlns="http://www.w3.org/2000/svg" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path v-if="!mobileOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
@@ -85,7 +89,7 @@ async function handleLogout() {
         class="!text-stone-400 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
         @click="mobileOpen = false; link.action && link.action()"
       >
-        {{ link.label }}
+        {{ t(link.labelKey) }}
       </router-link>
     </nav>
   </header>

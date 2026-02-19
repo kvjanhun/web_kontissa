@@ -1,12 +1,15 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useHead } from '@unhead/vue'
+import { useI18n } from '../composables/useI18n.js'
 import SectionBlock from '../components/SectionBlock.vue'
 
+const { t } = useI18n()
+
 useHead({
-  title: 'About — erez.ac',
+  title: computed(() => t('about.metaTitle')),
   meta: [
-    { name: 'description', content: 'About Konsta Janhunen — Integration developer at Digia, CS student, and technology enthusiast.' }
+    { name: 'description', content: computed(() => t('about.metaDescription')) }
   ]
 })
 
@@ -29,7 +32,7 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">About</h1>
+    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('about.heading') }}</h1>
 
     <div v-if="loading" class="space-y-6">
       <div v-for="n in 3" :key="n" class="animate-pulse">
@@ -40,8 +43,8 @@ onMounted(async () => {
     </div>
 
     <div v-else-if="error" class="rounded-lg p-6 text-center" :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }">
-      <p class="text-red-500 mb-2">Failed to load content.</p>
-      <p :style="{ color: 'var(--color-text-tertiary)' }" class="text-sm">Please try refreshing the page.</p>
+      <p class="text-red-500 mb-2">{{ t('about.loadError') }}</p>
+      <p :style="{ color: 'var(--color-text-tertiary)' }" class="text-sm">{{ t('about.loadErrorHint') }}</p>
     </div>
 
     <template v-else>

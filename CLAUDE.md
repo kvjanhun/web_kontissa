@@ -47,11 +47,16 @@ web_kontissa/
 │       ├── App.vue             # Layout shell: AppHeader, router-view, AppFooter. Calls checkAuth() on mount
 │       ├── composables/
 │       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
-│       │   └── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
+│       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
+│       │   └── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
+│       ├── locales/
+│       │   ├── en.json         # English translations (~90 keys)
+│       │   └── fi.json         # Finnish translations
 │       ├── components/
-│       │   ├── AppHeader.vue   # Sticky nav, auth-aware links (Recipes/Admin/Login/Logout), mobile hamburger
+│       │   ├── AppHeader.vue   # Sticky nav, auth-aware links (Recipes/Admin/Login/Logout), mobile hamburger, LangToggle
 │       │   ├── AppFooter.vue   # Last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
+│       │   ├── LangToggle.vue  # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay fetch
 │       │   └── SectionBlock.vue    # Renders section title + HTML content via v-html
 │       └── views/
@@ -155,13 +160,14 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 ### Frontend
 - Composition API with `<script setup>` exclusively — no Options API
-- Composables for shared state (`useAuth`, `useDarkMode`) — module-level refs for singleton pattern
+- Composables for shared state (`useAuth`, `useDarkMode`, `useI18n`) — module-level refs for singleton pattern
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
 - `v-html` used for section content (admin-authored, trusted)
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
 - `requiresAuth` route meta guard redirects unauthenticated users to `/login`
+- i18n via custom `useI18n` composable — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` meta resolved in `main.js` afterEach. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
 
 ### Design
 - Warm stone-grey palette with orange accent (#ff643e)

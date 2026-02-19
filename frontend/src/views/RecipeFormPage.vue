@@ -1,9 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { useI18n } from '../composables/useI18n.js'
 
 const route = useRoute()
 const router = useRouter()
+const { t } = useI18n()
 
 const isEdit = computed(() => !!route.params.slug)
 const recipeId = ref(null)
@@ -43,7 +45,7 @@ async function fetchRecipe() {
   loading.value = true
   try {
     const res = await fetch(`/api/recipes/${route.params.slug}`)
-    if (!res.ok) throw new Error('Recipe not found')
+    if (!res.ok) throw new Error(t('recipeForm.notFound'))
     const data = await res.json()
     recipeId.value = data.id
     title.value = data.title
@@ -82,7 +84,7 @@ async function submit() {
     })
 
     const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Failed to save recipe')
+    if (!res.ok) throw new Error(data.error || t('recipeForm.saveError'))
 
     router.push(`/recipes/${data.slug}`)
   } catch (e) {
@@ -101,18 +103,18 @@ onMounted(() => {
 <template>
   <div class="max-w-3xl mx-auto py-8 px-4">
     <h1 class="text-3xl font-light mb-6" :style="{ color: 'var(--color-text-primary)' }">
-      {{ isEdit ? 'Edit Recipe' : 'New Recipe' }}
+      {{ isEdit ? t('recipeForm.editHeading') : t('recipeForm.newHeading') }}
     </h1>
 
     <p v-if="loading" class="text-center py-12" :style="{ color: 'var(--color-text-secondary)' }">
-      Loading...
+      {{ t('recipes.loading') }}
     </p>
 
     <form v-else @submit.prevent="submit" class="space-y-6">
       <p v-if="error" class="text-red-500 text-sm">{{ error }}</p>
 
       <div>
-        <label class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">Title</label>
+        <label class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">{{ t('recipeForm.title') }}</label>
         <input
           v-model="title"
           type="text"
@@ -127,7 +129,7 @@ onMounted(() => {
       </div>
 
       <div>
-        <label class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">Category</label>
+        <label class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">{{ t('recipeForm.category') }}</label>
         <select
           v-model="category"
           class="w-full px-4 py-2 rounded-lg text-sm outline-none"
@@ -137,18 +139,18 @@ onMounted(() => {
             color: 'var(--color-text-primary)'
           }"
         >
-          <option value="">None</option>
+          <option value="">{{ t('recipeForm.none') }}</option>
           <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
         </select>
       </div>
 
       <div>
-        <label class="block text-sm mb-2" :style="{ color: 'var(--color-text-secondary)' }">Ingredients</label>
+        <label class="block text-sm mb-2" :style="{ color: 'var(--color-text-secondary)' }">{{ t('recipeForm.ingredients') }}</label>
         <div v-for="(ing, i) in ingredients" :key="i" class="flex gap-2 mb-2">
           <input
             v-model="ing.amount"
             type="text"
-            placeholder="Amount"
+            :placeholder="t('recipeForm.amount')"
             class="w-20 px-3 py-2 rounded-lg text-sm outline-none"
             :style="{
               backgroundColor: 'var(--color-input-bg)',
@@ -159,7 +161,7 @@ onMounted(() => {
           <input
             v-model="ing.unit"
             type="text"
-            placeholder="Unit"
+            :placeholder="t('recipeForm.unit')"
             class="w-20 px-3 py-2 rounded-lg text-sm outline-none"
             :style="{
               backgroundColor: 'var(--color-input-bg)',
@@ -170,7 +172,7 @@ onMounted(() => {
           <input
             v-model="ing.name"
             type="text"
-            placeholder="Ingredient name"
+            :placeholder="t('recipeForm.ingredientName')"
             class="flex-1 px-3 py-2 rounded-lg text-sm outline-none"
             :style="{
               backgroundColor: 'var(--color-input-bg)',
@@ -193,17 +195,17 @@ onMounted(() => {
           class="text-sm transition-colors duration-200 hover:opacity-80"
           :style="{ color: 'var(--color-text-secondary)' }"
         >
-          + Add ingredient
+          {{ t('recipeForm.addIngredient') }}
         </button>
       </div>
 
       <div>
-        <label class="block text-sm mb-2" :style="{ color: 'var(--color-text-secondary)' }">Steps</label>
+        <label class="block text-sm mb-2" :style="{ color: 'var(--color-text-secondary)' }">{{ t('recipeForm.steps') }}</label>
         <div v-for="(step, i) in steps" :key="i" class="flex gap-2 mb-2">
           <span class="py-2 text-sm w-6 text-right" :style="{ color: 'var(--color-text-secondary)' }">{{ i + 1 }}.</span>
           <textarea
             v-model="step.content"
-            placeholder="Describe this step..."
+            :placeholder="t('recipeForm.stepPlaceholder')"
             rows="2"
             class="flex-1 px-3 py-2 rounded-lg text-sm outline-none resize-y"
             :style="{
@@ -227,7 +229,7 @@ onMounted(() => {
           class="text-sm transition-colors duration-200 hover:opacity-80"
           :style="{ color: 'var(--color-text-secondary)' }"
         >
-          + Add step
+          {{ t('recipeForm.addStep') }}
         </button>
       </div>
 
@@ -237,7 +239,7 @@ onMounted(() => {
           :disabled="saving"
           class="px-6 py-2 bg-accent text-white rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90 disabled:opacity-50"
         >
-          {{ saving ? 'Saving...' : (isEdit ? 'Update Recipe' : 'Create Recipe') }}
+          {{ saving ? t('recipeForm.saving') : (isEdit ? t('recipeForm.update') : t('recipeForm.create')) }}
         </button>
         <router-link
           :to="isEdit ? `/recipes/${route.params.slug}` : '/recipes'"
@@ -247,7 +249,7 @@ onMounted(() => {
             color: 'var(--color-text-primary)'
           }"
         >
-          Cancel
+          {{ t('recipeForm.cancel') }}
         </router-link>
       </div>
     </form>
