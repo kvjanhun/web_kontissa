@@ -180,6 +180,15 @@ class TestWawaToCondition:
     def test_snow_showers(self):
         assert _wawa_to_condition(87) == ("Snow showers", "Lumikuuroja")
 
+    def test_freezing_rain(self):
+        assert _wawa_to_condition(24) == ("Freezing rain", "Jäätävää sadetta")
+
+    def test_wawa_21_rain(self):
+        assert _wawa_to_condition(21) == ("Rain", "Sadetta")
+
+    def test_wawa_22_snow(self):
+        assert _wawa_to_condition(22) == ("Snow", "Lumisadetta")
+
     def test_none(self):
         assert _wawa_to_condition(None) == ("N/A", "N/A")
 

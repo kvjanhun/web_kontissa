@@ -74,8 +74,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="w-full rounded-lg overflow-hidden shadow-lg min-h-[280px]">
-    <div class="bg-term-bg font-mono text-sm text-white p-4 min-h-[280px]">
+  <div class="w-full rounded-lg overflow-hidden shadow-lg min-h-[340px]">
+    <div class="bg-term-bg font-mono text-sm text-white p-4 min-h-[340px]">
       <div class="flex font-mono">
         <span class="flex text-gray-300">
           <span class="text-term-user">konsta@erez.ac</span>
