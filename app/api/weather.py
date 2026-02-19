@@ -98,16 +98,16 @@ def _parse_fmi_xml(xml_text):
         points = obs.findall(
             ".//wml2:MeasurementTimeseries/wml2:point/wml2:MeasurementTVP", ns
         )
-        if not points:
-            continue
-        last = points[-1]
-        time_el = last.find("wml2:time", ns)
-        value_el = last.find("wml2:value", ns)
-        if value_el is not None and value_el.text and value_el.text.strip() != "NaN":
-            results[param_name] = {
-                "value": float(value_el.text),
-                "time": time_el.text.strip() if time_el is not None and time_el.text else None,
-            }
+        # Walk backwards to find the most recent non-NaN value
+        for point in reversed(points):
+            value_el = point.find("wml2:value", ns)
+            if value_el is not None and value_el.text and value_el.text.strip() != "NaN":
+                time_el = point.find("wml2:time", ns)
+                results[param_name] = {
+                    "value": float(value_el.text),
+                    "time": time_el.text.strip() if time_el is not None and time_el.text else None,
+                }
+                break
 
     return results
 

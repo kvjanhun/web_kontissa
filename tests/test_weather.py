@@ -94,6 +94,36 @@ NAN_XML = """\
 </wfs:FeatureCollection>
 """
 
+# Latest value is NaN but earlier values are valid (common for wawa)
+NAN_TRAILING_XML = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<wfs:FeatureCollection
+    xmlns:wfs="http://www.opengis.net/wfs/2.0"
+    xmlns:om="http://www.opengis.net/om/2.0"
+    xmlns:omso="http://inspire.ec.europa.eu/schemas/omso/3.0"
+    xmlns:wml2="http://www.opengis.net/waterml/2.0"
+    xmlns:xlink="http://www.w3.org/1999/xlink"
+    xmlns:gml="http://www.opengis.net/gml/3.2">
+  <wfs:member>
+    <omso:PointTimeSeriesObservation gml:id="obs-1">
+      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=wawa&amp;language=eng"/>
+      <om:result>
+        <wml2:MeasurementTimeseries gml:id="obs-obs-1-1-wawa">
+          <wml2:point><wml2:MeasurementTVP>
+            <wml2:time>2026-02-19T19:20:00Z</wml2:time>
+            <wml2:value>24.0</wml2:value>
+          </wml2:MeasurementTVP></wml2:point>
+          <wml2:point><wml2:MeasurementTVP>
+            <wml2:time>2026-02-19T19:30:00Z</wml2:time>
+            <wml2:value>NaN</wml2:value>
+          </wml2:MeasurementTVP></wml2:point>
+        </wml2:MeasurementTimeseries>
+      </om:result>
+    </omso:PointTimeSeriesObservation>
+  </wfs:member>
+</wfs:FeatureCollection>
+"""
+
 
 @pytest.fixture(autouse=True)
 def reset_cache():
@@ -214,6 +244,12 @@ class TestParseFmiXml:
     def test_nan_values_skipped(self):
         result = _parse_fmi_xml(NAN_XML)
         assert "t2m" not in result
+
+    def test_nan_trailing_falls_back_to_previous(self):
+        result = _parse_fmi_xml(NAN_TRAILING_XML)
+        assert "wawa" in result
+        assert result["wawa"]["value"] == 24.0
+        assert result["wawa"]["time"] == "2026-02-19T19:20:00Z"
 
     def test_empty_collection(self):
         xml = (
