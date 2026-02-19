@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 
 const route = useRoute()
@@ -7,6 +7,35 @@ const router = useRouter()
 const recipe = ref(null)
 const loading = ref(true)
 const error = ref('')
+const completedSteps = ref(new Set())
+
+// Screen Wake Lock — keeps display on while cooking
+let wakeLock = null
+
+async function acquireWakeLock() {
+  if (!('wakeLock' in navigator)) return
+  try {
+    wakeLock = await navigator.wakeLock.request('screen')
+    wakeLock.addEventListener('release', () => { wakeLock = null })
+  } catch {}
+}
+
+function releaseWakeLock() {
+  if (wakeLock) {
+    wakeLock.release()
+    wakeLock = null
+  }
+}
+
+function handleVisibilityChange() {
+  if (document.visibilityState === 'visible') acquireWakeLock()
+}
+
+function toggleStep(id) {
+  const s = completedSteps.value
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+}
 
 async function fetchRecipe() {
   loading.value = true
@@ -37,7 +66,16 @@ async function deleteRecipe() {
   }
 }
 
-onMounted(fetchRecipe)
+onMounted(() => {
+  fetchRecipe()
+  acquireWakeLock()
+  document.addEventListener('visibilitychange', handleVisibilityChange)
+})
+
+onUnmounted(() => {
+  releaseWakeLock()
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
+})
 </script>
 
 <template>
@@ -115,13 +153,24 @@ onMounted(fetchRecipe)
         >
           Steps
         </h2>
-        <ol class="space-y-3 list-decimal list-inside">
+        <ol class="space-y-3">
           <li
-            v-for="step in recipe.steps"
+            v-for="(step, i) in recipe.steps"
             :key="step.id"
-            :style="{ color: 'var(--color-text-primary)' }"
+            class="flex items-start gap-3 cursor-pointer select-none transition-opacity duration-200"
+            :style="{ color: 'var(--color-text-primary)', opacity: completedSteps.has(step.id) ? 0.4 : 1 }"
+            @click="toggleStep(step.id)"
           >
-            {{ step.content }}
+            <input
+              type="checkbox"
+              :checked="completedSteps.has(step.id)"
+              class="mt-1 shrink-0 accent-[var(--color-accent,#ff643e)]"
+              @click.stop="toggleStep(step.id)"
+            />
+            <span>
+              <span class="font-medium" :style="{ color: 'var(--color-text-secondary)' }">{{ i + 1 }}.</span>
+              {{ step.content }}
+            </span>
           </li>
         </ol>
       </section>

@@ -61,7 +61,7 @@ web_kontissa/
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
 │           ├── AdminPage.vue   # Protected section CRUD (add/edit/delete)
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
-│           ├── RecipeDetailPage.vue  # Single recipe with ingredients + numbered steps
+│           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
 │           └── NotFound.vue    # 404
 └── app/
