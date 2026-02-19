@@ -86,9 +86,10 @@ onUnmounted(() => {
       v-if="loading"
       class="text-center py-12"
       :style="{ color: 'var(--color-text-secondary)' }"
+      role="status"
     >{{ t('recipes.loading') }}</p>
 
-    <p v-else-if="error" class="text-center py-12 text-red-500">{{ error }}</p>
+    <p v-else-if="error" class="text-center py-12 text-red-500" role="alert">{{ error }}</p>
 
     <template v-else-if="recipe">
       <div class="flex justify-between items-start mb-6">
@@ -166,6 +167,7 @@ onUnmounted(() => {
             <input
               type="checkbox"
               :checked="completedSteps.has(step.id)"
+              :aria-label="`${t('recipe.steps')} ${i + 1}: ${step.content}`"
               class="mt-1 shrink-0 accent-[var(--color-accent,#ff643e)]"
               @click.stop="toggleStep(step.id)"
             />

@@ -13,6 +13,7 @@ function toggle() {
     @click="toggle"
     class="px-2 py-1 rounded text-xs font-medium transition-colors duration-200 hover:bg-white/10"
     :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }"
+    :aria-label="locale === 'fi' ? 'Switch to English' : 'Vaihda suomeksi'"
   >
     {{ locale === 'fi' ? 'EN' : 'FI' }}
   </button>

@@ -103,10 +103,10 @@ async function deleteSection(id) {
     <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('admin.heading') }}</h1>
 
     <!-- Messages -->
-    <div v-if="error" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
+    <div v-if="error" role="alert" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
       {{ error }}
     </div>
-    <div v-if="success" class="mb-4 p-3 rounded-lg text-sm bg-green-500/10 text-green-400 border border-green-500/20">
+    <div v-if="success" role="status" class="mb-4 p-3 rounded-lg text-sm bg-green-500/10 text-green-400 border border-green-500/20">
       {{ success }}
     </div>
 

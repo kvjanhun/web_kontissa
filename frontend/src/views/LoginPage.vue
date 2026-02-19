@@ -59,7 +59,7 @@ async function handleLogout() {
     <div v-else>
       <h1 class="text-3xl font-light mb-8 text-center" :style="{ color: 'var(--color-text-primary)' }">{{ t('login.heading') }}</h1>
 
-      <div v-if="error" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
+      <div v-if="error" id="login-error" role="alert" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">
         {{ error }}
       </div>
 
@@ -72,6 +72,8 @@ async function handleLogout() {
             type="email"
             autocomplete="email"
             required
+            :aria-invalid="!!error"
+            :aria-describedby="error ? 'login-error' : undefined"
             class="w-full px-3 py-2 rounded-lg text-sm outline-none transition-colors duration-200 focus:ring-2 focus:ring-accent"
             :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
           />

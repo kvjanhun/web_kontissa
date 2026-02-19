@@ -106,12 +106,12 @@ onMounted(() => {
       {{ isEdit ? t('recipeForm.editHeading') : t('recipeForm.newHeading') }}
     </h1>
 
-    <p v-if="loading" class="text-center py-12" :style="{ color: 'var(--color-text-secondary)' }">
+    <p v-if="loading" class="text-center py-12" :style="{ color: 'var(--color-text-secondary)' }" role="status">
       {{ t('recipes.loading') }}
     </p>
 
     <form v-else @submit.prevent="submit" class="space-y-6">
-      <p v-if="error" class="text-red-500 text-sm">{{ error }}</p>
+      <p v-if="error" class="text-red-500 text-sm" role="alert">{{ error }}</p>
 
       <div>
         <label class="block text-sm mb-1" :style="{ color: 'var(--color-text-secondary)' }">{{ t('recipeForm.title') }}</label>

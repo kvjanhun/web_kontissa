@@ -90,12 +90,13 @@ onMounted(() => {
       </select>
     </div>
 
-    <p v-if="error" class="text-red-500 mb-4">{{ error }}</p>
+    <p v-if="error" class="text-red-500 mb-4" role="alert">{{ error }}</p>
 
     <p
       v-if="loading"
       class="text-center py-12"
       :style="{ color: 'var(--color-text-secondary)' }"
+      role="status"
     >{{ t('recipes.loading') }}</p>
 
     <p

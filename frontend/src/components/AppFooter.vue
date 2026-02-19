@@ -19,11 +19,11 @@ defineProps({
   >
     <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 text-sm">
       <div>
-        <span v-if="updateDate" class="text-stone-500">{{ t('footer.lastUpdated', { date: updateDate }) }}</span>
+        <span v-if="updateDate" class="text-stone-400">{{ t('footer.lastUpdated', { date: updateDate }) }}</span>
       </div>
-      <nav class="flex gap-4">
-        <router-link to="/about" class="!text-stone-500 hover:!text-accent">{{ t('nav.about') }}</router-link>
-        <router-link to="/contact" class="!text-stone-500 hover:!text-accent">{{ t('nav.contact') }}</router-link>
+      <nav class="flex gap-4" aria-label="Footer">
+        <router-link to="/about" class="!text-stone-400 hover:!text-accent">{{ t('nav.about') }}</router-link>
+        <router-link to="/contact" class="!text-stone-400 hover:!text-accent">{{ t('nav.contact') }}</router-link>
       </nav>
     </div>
   </footer>

@@ -168,6 +168,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
 - `requiresAuth` route meta guard redirects unauthenticated users to `/login`
 - i18n via custom `useI18n` composable — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` meta resolved in `main.js` afterEach. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
+- Accessibility: skip-to-content link, `:focus-visible` ring on all interactive elements, `aria-expanded` on mobile menu with Escape-to-close, `aria-live` route announcer in App.vue, `role="alert"` on error messages, `role="status"` on loading/success states, `aria-hidden="true"` on decorative SVGs, `aria-label` on icon-only buttons, `prefers-reduced-motion` respected via CSS
 
 ### Design
 - Warm stone-grey palette with orange accent (#ff643e)
