@@ -31,6 +31,8 @@ English/Finnish language support was added via a custom `useI18n` composable wit
 
 Accessibility improvements were added: skip-to-content link, keyboard focus indicators, ARIA attributes on interactive elements, screen reader announcements for route changes and dynamic content, and `prefers-reduced-motion` support.
 
+Real-time weather data from the Finnish Meteorological Institute (FMI) open data API was added to the terminal animation. After the cowsay output, the terminal types a `weather` command and displays current temperature, wind chill, wind speed, and weather condition for Helsinki-Vantaa. The backend fetches from the FMI WFS API, parses the XML response, calculates wind chill, maps WMO wawa codes (table 4680) to human-readable conditions in English and Finnish, and caches results for 10 minutes.
+
 ## Project Structure
 
 ```
@@ -64,7 +66,7 @@ web_kontissa/
 │       │   ├── AppFooter.vue       # Footer with last-updated date + quick links
 │       │   ├── ThemeToggle.vue     # Sun/moon dark mode toggle button
 │       │   ├── LangToggle.vue      # EN/FI language toggle button
-│       │   ├── TerminalWindow.vue  # Animated terminal with typing + cowsay
+│       │   ├── TerminalWindow.vue  # Animated terminal with typing + cowsay + weather
 │       │   └── SectionBlock.vue    # Renders one content section
 │       └── views/
 │           ├── HomePage.vue        # Hero: name, terminal, CTA buttons
@@ -85,7 +87,8 @@ web_kontissa/
     ├── create_admin.py     # Utility to create admin user
     ├── utils.py            # GitHub API commit date with caching
     ├── api/
-    │   └── cowsay.py
+    │   ├── cowsay.py
+    │   └── weather.py          # FMI weather data with caching
     ├── data/
     │   └── site.db
     └── static/
@@ -149,6 +152,7 @@ cd frontend && npm run build
 | `DELETE /api/recipes/<id>` | Delete recipe (auth) |
 | `GET /api/recipes/categories` | Valid category list (auth) |
 | `GET /api/cowsay` | Returns cowsay ASCII art as JSON |
+| `GET /api/weather` | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | `GET /sitemap.xml` | XML sitemap for SEO |
 
 ## Configuration

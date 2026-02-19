@@ -57,7 +57,7 @@ web_kontissa/
 │       │   ├── AppFooter.vue   # Last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
-│       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay fetch
+│       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay + /api/weather fetch
 │       │   └── SectionBlock.vue    # Renders section title + HTML content via v-html
 │       └── views/
 │           ├── HomePage.vue    # Hero with terminal animation
@@ -78,7 +78,8 @@ web_kontissa/
     ├── utils.py                # GitHub API commit date with 6-hour cache
     ├── create_admin.py         # One-time utility: create admin user with db.create_all()
     ├── api/
-    │   └── cowsay.py           # GET /api/cowsay
+    │   ├── cowsay.py           # GET /api/cowsay
+    │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
     └── data/
         └── site.db             # SQLite database (Docker volume mounted)
 ```
@@ -102,6 +103,7 @@ web_kontissa/
 | DELETE | `/api/recipes/<id>` | Login | Delete recipe (cascades) |
 | GET | `/api/recipes/categories` | Login | Valid category list |
 | GET | `/api/cowsay` | Public | ASCII cow art |
+| GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
 ## Development
@@ -157,6 +159,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - All API endpoints return JSON
 - `catch_all` route at the bottom of `routes.py` serves Vue SPA for client-side routing
 - GitHub API responses cached for 6 hours in `utils.py`
+- FMI weather data cached for 10 minutes in `api/weather.py`, with stale-cache fallback on API errors
 
 ### Frontend
 - Composition API with `<script setup>` exclusively — no Options API

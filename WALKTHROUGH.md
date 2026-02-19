@@ -27,6 +27,9 @@ Browser                         Vite / Flask                    Database
   |  GET /api/cowsay -------------->|  cowsay.get_output_string()  |
   |  <-- JSON {output: "..."}      |                              |
   |                                 |                              |
+  |  GET /api/weather ------------->|  FMI API (cached 10 min)     |
+  |  <-- JSON {temp, wind, ...}    |                              |
+  |                                 |                              |
   |  Navigate to /about:           |                              |
   |  GET /api/sections ----------->|  SELECT * FROM section       |
   |  <-- JSON [{slug, title, ...}] |<-----------------------------|
@@ -64,7 +67,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 
 - Default DB path is `/app/data/site.db` (inside the Docker container)
 - For local dev, you override this with the `DATABASE_URI` env var
-- Imports `routes`, `auth`, `recipes`, and `api.cowsay` at the bottom, which registers all URL routes
+- Imports `routes`, `auth`, `recipes`, `api.cowsay`, and `api.weather` at the bottom, which registers all URL routes
 
 ### `app/models.py` — Database Models
 
@@ -131,6 +134,20 @@ GET /api/cowsay → {"output": "  ___\n| moo |\n  ===\n   \\\n ..."}
 Uses the Python `cowsay` library to generate ASCII art.
 The terminal animation in the browser fetches this after "typing" the command.
 
+### `app/api/weather.py` — Weather Endpoint
+
+```
+GET /api/weather → {"temperature": -12.4, "feels_like": -18.2, "wind_speed": 2.7, "condition": "Snow", ...}
+```
+
+Fetches real-time weather observations from the Finnish Meteorological Institute (FMI) open data WFS API for Helsinki-Vantaa airport (FMISID 100968):
+
+- **XML parsing**: Extracts the latest non-NaN measurement for each parameter (`t2m`, `ws_10min`, `wawa`) from `omso:PointTimeSeriesObservation` elements
+- **Wind chill**: Calculated server-side using the Environment Canada / NWS formula (applies when T ≤ 10°C and wind > 4.8 km/h)
+- **Condition mapping**: WMO code table 4680 (automatic weather station present weather codes) mapped to human-readable strings in both English and Finnish
+- **Caching**: Results cached for 10 minutes (matching FMI's update interval). Falls back to cached data if the API is down
+- The terminal animation fetches this after the cowsay output, displaying temperature, wind chill, wind speed, and condition
+
 ---
 
 ## The Frontend (`frontend/`)
@@ -163,7 +180,7 @@ frontend/
     │   ├── AppFooter.vue       Footer with last-updated date + quick links
     │   ├── ThemeToggle.vue     Sun/moon SVG button using useDarkMode composable
     │   ├── LangToggle.vue      EN/FI toggle button using useI18n composable
-    │   ├── TerminalWindow.vue  Animated terminal with typing + cowsay fetch
+    │   ├── TerminalWindow.vue  Animated terminal with typing + cowsay + weather fetch
     │   └── SectionBlock.vue    Renders one content section (title + HTML body)
     └── views/
         ├── HomePage.vue        Hero layout: name, subtitle, terminal, CTA buttons
@@ -209,7 +226,7 @@ Routes use `titleKey` meta (e.g., `'title.about'`) resolved via `t()` in `main.j
 6. Vue Router matches the current URL and renders the corresponding view
 7. Components render:
    - **AppHeader** — sticky nav with auth-aware links, LangToggle (EN/FI), ThemeToggle (sun/moon), mobile hamburger with Escape-to-close
-   - **HomePage** — hero layout with name/subtitle, TerminalWindow (typing animation + cowsay), and CTA buttons
+   - **HomePage** — hero layout with name/subtitle, TerminalWindow (typing animation + cowsay + weather), and CTA buttons
    - **AboutPage** — fetches `/api/sections`, shows loading skeleton or error state, then renders SectionBlocks
    - **ContactPage** — static links to email, GitHub, LinkedIn
    - **LoginPage** — email/password form wired to `/api/login`, or logged-in state with logout button
@@ -385,6 +402,7 @@ GET /assets/index-[hash].js → 200 (Vue app bundle, cached)
 GET /assets/index-[hash].css → 200 (Tailwind compiled, cached)
 GET /api/meta → 200 (JSON, ~80 bytes)
 GET /api/cowsay → 200 (JSON, ~200 bytes, after 3s delay)
+GET /api/weather → 200 (JSON, ~200 bytes, after cowsay completes)
 ```
 
 **Navigate to /about (client-side):**
