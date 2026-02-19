@@ -41,3 +41,4 @@ from . import routes  # registers the routes with the app
 from . import auth
 from . import recipes
 from .api import cowsay
+from .api import weather
