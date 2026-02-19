@@ -116,7 +116,12 @@
   }
 
   /* Visible focus ring for keyboard navigation only */
-  :focus-visible {
+  a:focus-visible,
+  button:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [tabindex]:focus-visible {
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }

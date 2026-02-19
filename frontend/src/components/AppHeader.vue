@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, nextTick } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n.js'
 import ThemeToggle from './ThemeToggle.vue'
@@ -8,7 +8,6 @@ import LangToggle from './LangToggle.vue'
 const { isAuthenticated, isAdmin, logout } = useAuth()
 const { t } = useI18n()
 const mobileOpen = ref(false)
-const mobileNav = ref(null)
 
 const navLinks = computed(() => {
   const links = [
@@ -33,12 +32,8 @@ async function handleLogout() {
   await logout()
 }
 
-async function toggleMobile() {
+function toggleMobile() {
   mobileOpen.value = !mobileOpen.value
-  if (mobileOpen.value) {
-    await nextTick()
-    mobileNav.value?.querySelector('a')?.focus()
-  }
 }
 
 function closeMobile() {
@@ -99,7 +94,6 @@ function handleMobileKeydown(e) {
     <!-- Mobile dropdown -->
     <nav
       v-if="mobileOpen"
-      ref="mobileNav"
       class="absolute top-16 left-0 right-0 sm:hidden flex flex-col py-2 shadow-lg"
       :style="{ backgroundColor: 'var(--color-header-bg)', borderBottom: '2px solid var(--color-header-border)' }"
       aria-label="Mobile"
