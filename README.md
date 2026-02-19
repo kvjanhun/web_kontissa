@@ -11,7 +11,7 @@ Personal portfolio website by Konsta Janhunen.
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Deployment**: Docker Compose (multi-stage build), auto-deployed via GitHub webhook
 
-Multi-page Vue app with client-side routing, dark/light mode with warm stone-orange theme, and a terminal animation on the home page. Vue Router handles six routes (`/`, `/about`, `/contact`, `/login`, `/admin`, `404`). Data is fetched from Flask API endpoints (`/api/sections`, `/api/meta`, `/api/cowsay`). Session-based authentication via Flask-Login allows the admin to manage content sections through a protected admin panel. Vite builds the frontend into static assets that Flask serves in production.
+Multi-page Vue app with client-side routing, dark/light mode with warm stone-orange theme, EN/FI language support, and a terminal animation on the home page. Vue Router handles ten routes (`/`, `/about`, `/contact`, `/login`, `/admin`, `/recipes`, `/recipes/new`, `/recipes/:slug`, `/recipes/:slug/edit`, `404`). Data is fetched from Flask API endpoints. Session-based authentication via Flask-Login allows the admin to manage content sections through a protected admin panel, and authenticated users can manage a shared recipe book.
 
 ## History
 
@@ -24,6 +24,12 @@ Later in February 2026, the frontend was migrated again to Vite + Vue Single Fil
 The site was then reworked into a multi-page layout with Vue Router, dark/light mode toggle, and a warm stone-orange color palette. The terminal was simplified from Ubuntu window chrome to a plain dark terminal. New pages were added for About, Contact, and Login.
 
 Session-based authentication was added with Flask-Login, along with an admin panel for managing database sections (add, edit, delete) through the website. The login page was wired to the backend and the header was made auth-aware.
+
+A shared recipe book was added for authenticated users, with full CRUD, search, category filtering, slug-based URLs, and a cooking mode with screen wake lock and step checkboxes.
+
+English/Finnish language support was added via a custom `useI18n` composable with JSON locale files. Language defaults to browser locale and persists in localStorage.
+
+Accessibility improvements were added: skip-to-content link, keyboard focus indicators, ARIA attributes on interactive elements, screen reader announcements for route changes and dynamic content, and `prefers-reduced-motion` support.
 
 ## Project Structure
 
@@ -42,40 +48,47 @@ web_kontissa/
 │   ├── public/
 │   │   └── favicon.ico
 │   └── src/
-│       ├── main.js         # App bootstrap
-│       ├── router.js       # Vue Router: 5 routes with lazy loading
-│       ├── style.css       # Tailwind CSS + warm stone theme + dark mode
-│       ├── App.vue         # Root layout shell (header, router-view, footer)
+│       ├── main.js         # App bootstrap, auth guards, i18n title updates
+│       ├── router.js       # Vue Router: 10 routes with lazy loading
+│       ├── style.css       # Tailwind CSS + warm stone theme + dark mode + a11y
+│       ├── App.vue         # Root layout: header, router-view, footer, skip link, route announcer
 │       ├── composables/
 │       │   ├── useAuth.js       # Auth state, login/logout/checkAuth
-│       │   └── useDarkMode.js   # Shared dark mode state + localStorage
+│       │   ├── useDarkMode.js   # Shared dark mode state + localStorage
+│       │   └── useI18n.js       # EN/FI i18n: locale ref, t() function, localStorage
+│       ├── locales/
+│       │   ├── en.json          # English translations (~90 keys)
+│       │   └── fi.json          # Finnish translations
 │       ├── components/
-│       │   ├── AppHeader.vue       # Sticky nav, route links, theme toggle, mobile menu
-│       │   ├── AppFooter.vue       # Footer with quick links
+│       │   ├── AppHeader.vue       # Sticky nav, auth-aware links, LangToggle, mobile menu
+│       │   ├── AppFooter.vue       # Footer with last-updated date + quick links
 │       │   ├── ThemeToggle.vue     # Sun/moon dark mode toggle button
+│       │   ├── LangToggle.vue      # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Animated terminal with typing + cowsay
 │       │   └── SectionBlock.vue    # Renders one content section
 │       └── views/
-│           ├── HomePage.vue    # Hero: name, terminal, CTA buttons
-│           ├── AboutPage.vue   # Sections fetched from API
-│           ├── ContactPage.vue # Email, GitHub, LinkedIn links
-│           ├── LoginPage.vue   # Auth form, wired to backend
-│           ├── AdminPage.vue   # Protected section CRUD
-│           └── NotFound.vue    # 404 page
+│           ├── HomePage.vue        # Hero: name, terminal, CTA buttons
+│           ├── AboutPage.vue       # Sections fetched from API
+│           ├── ContactPage.vue     # Email, GitHub, LinkedIn links
+│           ├── LoginPage.vue       # Auth form, wired to backend
+│           ├── AdminPage.vue       # Protected section CRUD
+│           ├── RecipeListPage.vue  # Recipe cards with search + category filter
+│           ├── RecipeDetailPage.vue # Single recipe with wake lock + step checkboxes
+│           ├── RecipeFormPage.vue  # Create/edit recipe form
+│           └── NotFound.vue        # 404 page
 └── app/                    # Flask backend
     ├── __init__.py
     ├── routes.py           # Serves dist/ + API routes + section CRUD
     ├── auth.py             # Login/logout/me endpoints
-    ├── models.py           # Section + User models
+    ├── recipes.py          # Recipe CRUD, search, category filter
+    ├── models.py           # User, Section, Recipe, Ingredient, Step models
     ├── create_admin.py     # Utility to create admin user
-    ├── utils.py
+    ├── utils.py            # GitHub API commit date with caching
     ├── api/
-    │   ├── __init__.py
     │   └── cowsay.py
     ├── data/
     │   └── site.db
     └── static/
-        ├── favicon.ico
         └── dist/           # Vite build output (gitignored)
 ```
 
@@ -120,6 +133,7 @@ cd frontend && npm run build
 | Endpoint | Description |
 |---|---|
 | `GET /` | Serves the Vue app (from `app/static/dist/`) |
+| `GET /<path>` | Catch-all: static file from dist/ or index.html for Vue Router |
 | `GET /api/sections` | Returns all content sections as JSON |
 | `POST /api/sections` | Create section (admin) |
 | `PUT /api/sections/<id>` | Update section (admin) |
@@ -128,9 +142,14 @@ cd frontend && npm run build
 | `POST /api/logout` | End session |
 | `GET /api/me` | Current user info (or 401) |
 | `GET /api/meta` | Returns site metadata (update date, author) |
+| `GET /api/recipes?q=&category=` | List recipes with optional search + category filter (auth) |
+| `GET /api/recipes/<slug>` | Single recipe with ingredients + steps (auth) |
+| `POST /api/recipes` | Create recipe (auth) |
+| `PUT /api/recipes/<id>` | Update recipe (auth) |
+| `DELETE /api/recipes/<id>` | Delete recipe (auth) |
+| `GET /api/recipes/categories` | Valid category list (auth) |
 | `GET /api/cowsay` | Returns cowsay ASCII art as JSON |
 | `GET /sitemap.xml` | XML sitemap for SEO |
-| `GET /index.html` | 301 redirect to `/` |
 
 ## Configuration
 
@@ -138,7 +157,7 @@ A `.env` file is required with at least `SECRET_KEY` for session signing. The SQ
 
 To create an admin user:
 ```bash
-docker compose exec web python3 -c "from app.create_admin import create; create('username', 'email', 'password')"
+docker compose exec web python3 -c "from app.create_admin import create; create('username', 'email', 'password', 'admin')"
 ```
 
 ## Production Notes
