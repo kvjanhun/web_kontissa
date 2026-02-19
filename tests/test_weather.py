@@ -159,17 +159,40 @@ class TestWawaToCondition:
         for code in (1, 2, 3):
             assert _wawa_to_condition(code) == ("Partly cloudy", "Puolipilvistä")
 
-    def test_fog_single(self):
-        assert _wawa_to_condition(4) == ("Fog", "Sumua")
+    def test_haze(self):
+        assert _wawa_to_condition(4) == ("Haze", "Utua")
+        assert _wawa_to_condition(5) == ("Haze", "Utua")
+
+    def test_mist(self):
+        assert _wawa_to_condition(10) == ("Mist", "Sumua")
 
     def test_fog_range(self):
-        assert _wawa_to_condition(45) == ("Fog", "Sumua")
+        assert _wawa_to_condition(30) == ("Fog", "Sumua")
+        assert _wawa_to_condition(34) == ("Fog", "Sumua")
+
+    def test_code_21_precipitation_recently(self):
+        assert _wawa_to_condition(21) == ("Precipitation recently", "Sadetta aiemmin")
+
+    def test_code_24_snow_recently(self):
+        assert _wawa_to_condition(24) == ("Snow recently", "Lumisadetta aiemmin")
+
+    def test_code_25_freezing_rain_recently(self):
+        assert _wawa_to_condition(25) == ("Freezing rain recently", "Jäätävää sadetta aiemmin")
 
     def test_drizzle(self):
-        assert _wawa_to_condition(53) == ("Drizzle", "Tihkusadetta")
+        assert _wawa_to_condition(51) == ("Drizzle", "Tihkusadetta")
+
+    def test_freezing_drizzle(self):
+        assert _wawa_to_condition(55) == ("Freezing drizzle", "Jäätävää tihkua")
 
     def test_rain(self):
         assert _wawa_to_condition(61) == ("Rain", "Sadetta")
+
+    def test_freezing_rain(self):
+        assert _wawa_to_condition(64) == ("Freezing rain", "Jäätävää sadetta")
+
+    def test_rain_and_snow(self):
+        assert _wawa_to_condition(67) == ("Rain and snow", "Räntää")
 
     def test_snow(self):
         assert _wawa_to_condition(71) == ("Snow", "Lumisadetta")
@@ -178,22 +201,19 @@ class TestWawaToCondition:
         assert _wawa_to_condition(81) == ("Rain showers", "Sadekuuroja")
 
     def test_snow_showers(self):
-        assert _wawa_to_condition(87) == ("Snow showers", "Lumikuuroja")
+        assert _wawa_to_condition(86) == ("Snow showers", "Lumikuuroja")
 
-    def test_freezing_rain(self):
-        assert _wawa_to_condition(24) == ("Freezing rain", "Jäätävää sadetta")
+    def test_thunderstorm(self):
+        assert _wawa_to_condition(91) == ("Thunderstorm", "Ukkosta")
 
-    def test_wawa_21_rain(self):
-        assert _wawa_to_condition(21) == ("Rain", "Sadetta")
-
-    def test_wawa_22_snow(self):
-        assert _wawa_to_condition(22) == ("Snow", "Lumisadetta")
+    def test_tornado(self):
+        assert _wawa_to_condition(99) == ("Tornado", "Tornado")
 
     def test_none(self):
         assert _wawa_to_condition(None) == ("N/A", "N/A")
 
     def test_unknown_code(self):
-        assert _wawa_to_condition(99) == ("N/A", "N/A")
+        assert _wawa_to_condition(7) == ("N/A", "N/A")
 
     def test_float_code_truncated(self):
         assert _wawa_to_condition(71.0) == ("Snow", "Lumisadetta")
