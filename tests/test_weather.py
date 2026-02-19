@@ -6,23 +6,27 @@ from app.api.weather import (
     _wawa_to_condition,
     _wind_chill,
     _parse_fmi_xml,
+    _extract_param_name,
     _cache,
 )
 
-# Minimal FMI WFS XML matching the real response structure
+# Minimal FMI WFS XML matching the real response structure.
+# Uses omso:PointTimeSeriesObservation and query-string style hrefs,
+# as returned by the actual FMI open data API.
 SAMPLE_FMI_XML = """\
 <?xml version="1.0" encoding="UTF-8"?>
 <wfs:FeatureCollection
     xmlns:wfs="http://www.opengis.net/wfs/2.0"
     xmlns:om="http://www.opengis.net/om/2.0"
+    xmlns:omso="http://inspire.ec.europa.eu/schemas/omso/3.0"
     xmlns:wml2="http://www.opengis.net/waterml/2.0"
     xmlns:xlink="http://www.w3.org/1999/xlink"
     xmlns:gml="http://www.opengis.net/gml/3.2">
   <wfs:member>
-    <om:OM_Observation>
-      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta/param/t2m"/>
+    <omso:PointTimeSeriesObservation gml:id="obs-1">
+      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=t2m&amp;language=eng"/>
       <om:result>
-        <wml2:MeasurementTimeseries>
+        <wml2:MeasurementTimeseries gml:id="obs-obs-1-1-t2m">
           <wml2:point><wml2:MeasurementTVP>
             <wml2:time>2026-02-19T18:50:00Z</wml2:time>
             <wml2:value>-5.3</wml2:value>
@@ -33,33 +37,33 @@ SAMPLE_FMI_XML = """\
           </wml2:MeasurementTVP></wml2:point>
         </wml2:MeasurementTimeseries>
       </om:result>
-    </om:OM_Observation>
+    </omso:PointTimeSeriesObservation>
   </wfs:member>
   <wfs:member>
-    <om:OM_Observation>
-      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta/param/ws_10min"/>
+    <omso:PointTimeSeriesObservation gml:id="obs-2">
+      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=ws_10min&amp;language=eng"/>
       <om:result>
-        <wml2:MeasurementTimeseries>
+        <wml2:MeasurementTimeseries gml:id="obs-obs-1-1-ws_10min">
           <wml2:point><wml2:MeasurementTVP>
             <wml2:time>2026-02-19T19:00:00Z</wml2:time>
             <wml2:value>3.2</wml2:value>
           </wml2:MeasurementTVP></wml2:point>
         </wml2:MeasurementTimeseries>
       </om:result>
-    </om:OM_Observation>
+    </omso:PointTimeSeriesObservation>
   </wfs:member>
   <wfs:member>
-    <om:OM_Observation>
-      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta/param/wawa"/>
+    <omso:PointTimeSeriesObservation gml:id="obs-3">
+      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=wawa&amp;language=eng"/>
       <om:result>
-        <wml2:MeasurementTimeseries>
+        <wml2:MeasurementTimeseries gml:id="obs-obs-1-1-wawa">
           <wml2:point><wml2:MeasurementTVP>
             <wml2:time>2026-02-19T19:00:00Z</wml2:time>
             <wml2:value>71</wml2:value>
           </wml2:MeasurementTVP></wml2:point>
         </wml2:MeasurementTimeseries>
       </om:result>
-    </om:OM_Observation>
+    </omso:PointTimeSeriesObservation>
   </wfs:member>
 </wfs:FeatureCollection>
 """
@@ -70,21 +74,22 @@ NAN_XML = """\
 <wfs:FeatureCollection
     xmlns:wfs="http://www.opengis.net/wfs/2.0"
     xmlns:om="http://www.opengis.net/om/2.0"
+    xmlns:omso="http://inspire.ec.europa.eu/schemas/omso/3.0"
     xmlns:wml2="http://www.opengis.net/waterml/2.0"
     xmlns:xlink="http://www.w3.org/1999/xlink"
     xmlns:gml="http://www.opengis.net/gml/3.2">
   <wfs:member>
-    <om:OM_Observation>
-      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta/param/t2m"/>
+    <omso:PointTimeSeriesObservation gml:id="obs-1">
+      <om:observedProperty xlink:href="https://opendata.fmi.fi/meta?observableProperty=observation&amp;param=t2m&amp;language=eng"/>
       <om:result>
-        <wml2:MeasurementTimeseries>
+        <wml2:MeasurementTimeseries gml:id="obs-obs-1-1-t2m">
           <wml2:point><wml2:MeasurementTVP>
             <wml2:time>2026-02-19T19:00:00Z</wml2:time>
             <wml2:value>NaN</wml2:value>
           </wml2:MeasurementTVP></wml2:point>
         </wml2:MeasurementTimeseries>
       </om:result>
-    </om:OM_Observation>
+    </omso:PointTimeSeriesObservation>
   </wfs:member>
 </wfs:FeatureCollection>
 """
@@ -98,6 +103,22 @@ def reset_cache():
     yield
     _cache["data"] = None
     _cache["ts"] = 0
+
+
+class TestExtractParamName:
+    def test_query_string_href(self):
+        href = "https://opendata.fmi.fi/meta?observableProperty=observation&param=t2m&language=eng"
+        assert _extract_param_name(href) == "t2m"
+
+    def test_query_string_param_last(self):
+        href = "https://opendata.fmi.fi/meta?observableProperty=observation&param=ws_10min"
+        assert _extract_param_name(href) == "ws_10min"
+
+    def test_path_style_href(self):
+        assert _extract_param_name("https://opendata.fmi.fi/meta/param/t2m") == "t2m"
+
+    def test_empty_string(self):
+        assert _extract_param_name("") == ""
 
 
 class TestWawaToCondition:

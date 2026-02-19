@@ -59,26 +59,43 @@ def _wind_chill(temp, wind_ms):
     return temp
 
 
+def _extract_param_name(href):
+    """Extract parameter name from observedProperty href.
+
+    FMI uses query-string style hrefs like:
+      https://opendata.fmi.fi/meta?observableProperty=observation&param=t2m&language=eng
+    """
+    if "param=" in href:
+        after = href.split("param=", 1)[1]
+        return after.split("&", 1)[0]
+    if "/" in href:
+        return href.rsplit("/", 1)[-1]
+    return ""
+
+
 def _parse_fmi_xml(xml_text):
     ns = {
         "wfs": "http://www.opengis.net/wfs/2.0",
         "om": "http://www.opengis.net/om/2.0",
+        "omso": "http://inspire.ec.europa.eu/schemas/omso/3.0",
         "wml2": "http://www.opengis.net/waterml/2.0",
         "gml": "http://www.opengis.net/gml/3.2",
     }
     root = ET.fromstring(xml_text)
 
     results = {}
-    for member in root.findall(".//om:OM_Observation", ns):
-        param_link = member.find(".//om:observedProperty", ns)
+    for obs in root.findall(".//omso:PointTimeSeriesObservation", ns):
+        param_link = obs.find(".//om:observedProperty", ns)
         if param_link is None:
             continue
         href = param_link.get(
             "{http://www.w3.org/1999/xlink}href", ""
         )
-        param_name = href.rsplit("/", 1)[-1] if "/" in href else ""
+        param_name = _extract_param_name(href)
+        if not param_name:
+            continue
 
-        points = member.findall(
+        points = obs.findall(
             ".//wml2:MeasurementTimeseries/wml2:point/wml2:MeasurementTVP", ns
         )
         if not points:
@@ -86,10 +103,10 @@ def _parse_fmi_xml(xml_text):
         last = points[-1]
         time_el = last.find("wml2:time", ns)
         value_el = last.find("wml2:value", ns)
-        if value_el is not None and value_el.text and value_el.text != "NaN":
+        if value_el is not None and value_el.text and value_el.text.strip() != "NaN":
             results[param_name] = {
                 "value": float(value_el.text),
-                "time": time_el.text if time_el is not None else None,
+                "time": time_el.text.strip() if time_el is not None and time_el.text else None,
             }
 
     return results
