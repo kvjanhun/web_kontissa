@@ -18,7 +18,7 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Vue 3 SPA frontend, Flask
 |-------|-----------|
 | Frontend | Vue 3 (Composition API, `<script setup>`), Vue Router 4, Tailwind CSS 4 |
 | Build | Vite 6 |
-| Backend | Flask 3.1, Flask-SQLAlchemy, Flask-Login |
+| Backend | Flask 3.1, Flask-SQLAlchemy, Flask-Login, Flask-Limiter (30 req/min default) |
 | Database | SQLite |
 | Auth | Flask-Login session cookies, werkzeug scrypt password hashing |
 | WSGI | Gunicorn (2 workers) |
@@ -34,7 +34,7 @@ web_kontissa/
 ├── Dockerfile                  # Multi-stage: node:22-alpine builds frontend, python:3.13-alpine runs backend
 ├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80
 ├── run.py                      # Flask dev entry point (port 5001, debug=True)
-├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, gunicorn, cowsay, requests)
+├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, flask-limiter, gunicorn, cowsay, requests)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
@@ -70,22 +70,31 @@ web_kontissa/
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
 │           ├── BeeGamePage.vue      # Sanakenno (Finnish Spelling Bee) game
 │           └── NotFound.vue    # 404
-└── app/
-    ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager setup
-    ├── models.py               # User, Section, Recipe, Ingredient, Step models
-    ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
-    ├── auth.py                 # /api/login, /api/logout, /api/me
-    ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
-    ├── utils.py                # GitHub API commit date with 6-hour cache
-    ├── create_admin.py         # One-time utility: create admin user with db.create_all()
-    ├── api/
-    │   ├── bee.py              # GET /api/bee (Sanakenno daily puzzle)
-    │   ├── cowsay.py           # GET /api/cowsay
-    │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
-    ├── wordlists/
-    │   └── kotus_words.txt     # Filtered Kotus Finnish word list (101k words, ≥4 chars)
-    └── data/
-        └── site.db             # SQLite database (Docker volume mounted)
+├── app/
+│   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
+│   ├── models.py               # User, Section, Recipe, Ingredient, Step models
+│   ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
+│   ├── auth.py                 # /api/login, /api/logout, /api/me
+│   ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
+│   ├── utils.py                # GitHub API commit date with 6-hour cache
+│   ├── create_admin.py         # One-time utility: create admin user with db.create_all()
+│   ├── api/
+│   │   ├── bee.py              # GET /api/bee (Sanakenno daily puzzle — 50 curated puzzles)
+│   │   ├── cowsay.py           # GET /api/cowsay
+│   │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
+│   ├── wordlists/
+│   │   └── kotus_words.txt     # Filtered Kotus Finnish word list (101k words, ≥4 chars)
+│   └── data/
+│       └── site.db             # SQLite database (Docker volume mounted)
+├── scripts/
+│   └── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
+└── tests/
+    ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
+    ├── test_auth.py            # Auth endpoint tests
+    ├── test_bee.py             # Sanakenno endpoint + scoring tests (17 tests)
+    ├── test_recipes.py         # Recipe CRUD tests
+    ├── test_sections.py        # Sections CRUD tests
+    └── test_weather.py         # Weather endpoint tests
 ```
 
 ## API Endpoints
@@ -106,7 +115,7 @@ web_kontissa/
 | PUT | `/api/recipes/<id>` | Login | Update recipe (replaces all ingredients/steps) |
 | DELETE | `/api/recipes/<id>` | Login | Delete recipe (cascades) |
 | GET | `/api/recipes/categories` | Login | Valid category list |
-| GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score) |
+| GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score, puzzle_number) |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
@@ -135,6 +144,14 @@ docker compose logs -f          # Follow logs
 ```
 
 Site accessible at http://localhost:8080.
+
+### Tests
+
+```bash
+pytest tests/
+```
+
+Uses an in-memory SQLite database. No server running required. Rate limiting is disabled in tests via `limiter.enabled = False`.
 
 ### Frontend build only
 
@@ -191,12 +208,12 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 Public word game at `/bee`. NYT Spelling Bee rules with a Finnish word list.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
-- **Puzzles**: Pre-defined letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates daily via `date.today().toordinal() % len(PUZZLES)`. Valid words and max_score are computed at startup and cached.
+- **Puzzles**: 50 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 50-day cycle via `date.today().toordinal() % len(PUZZLES)`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 10 Finnish rank levels from Aloittelija (0%) to Mehiläiskuningatar (100%) based on % of max_score.
 - **Frontend**: `BeeGamePage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
 - **No auth required**: Public endpoint, no database usage.
-- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a center letter and 6 outer letters. The word list computation is automatic.
+- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 50.
 
 ## Security Considerations
 
