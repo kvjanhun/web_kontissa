@@ -33,16 +33,16 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Vue 3 SPA frontend, Flask
 web_kontissa/
 ├── Dockerfile                  # Multi-stage: node:22-alpine builds frontend, python:3.13-alpine runs backend
 ├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80
-├── run.py                      # Flask dev entry point (port 5000, debug=True)
+├── run.py                      # Flask dev entry point (port 5001, debug=True)
 ├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, gunicorn, cowsay, requests)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
-│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5000, output to ../app/static/dist
+│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
 │   └── src/
 │       ├── main.js             # createApp, router, mount
-│       ├── router.js           # 10 routes, lazy loading, admin + auth guards via beforeEach
+│       ├── router.js           # 11 routes, lazy loading, admin + auth guards via beforeEach
 │       ├── style.css           # Tailwind import, CSS custom properties theme, dark mode, DM Sans + Ubuntu Mono
 │       ├── App.vue             # Layout shell: AppHeader, router-view, AppFooter. Calls checkAuth() on mount
 │       ├── composables/
@@ -53,8 +53,8 @@ web_kontissa/
 │       │   ├── en.json         # English translations (~90 keys)
 │       │   └── fi.json         # Finnish translations
 │       ├── components/
-│       │   ├── AppHeader.vue   # Sticky nav, auth-aware links (Recipes/Admin/Login/Logout), mobile hamburger, LangToggle
-│       │   ├── AppFooter.vue   # Last updated date from /api/meta
+│       │   ├── AppHeader.vue   # Sticky nav, always-hamburger menu, auth-aware links, LangToggle
+│       │   ├── AppFooter.vue   # Full auth-aware nav links + last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay + /api/weather fetch
@@ -68,6 +68,7 @@ web_kontissa/
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
 │           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
+│           ├── BeeGamePage.vue      # Sanakenno (Finnish Spelling Bee) game
 │           └── NotFound.vue    # 404
 └── app/
     ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager setup
@@ -78,8 +79,11 @@ web_kontissa/
     ├── utils.py                # GitHub API commit date with 6-hour cache
     ├── create_admin.py         # One-time utility: create admin user with db.create_all()
     ├── api/
+    │   ├── bee.py              # GET /api/bee (Sanakenno daily puzzle)
     │   ├── cowsay.py           # GET /api/cowsay
     │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
+    ├── wordlists/
+    │   └── kotus_words.txt     # Filtered Kotus Finnish word list (101k words, ≥4 chars)
     └── data/
         └── site.db             # SQLite database (Docker volume mounted)
 ```
@@ -102,6 +106,7 @@ web_kontissa/
 | PUT | `/api/recipes/<id>` | Login | Update recipe (replaces all ingredients/steps) |
 | DELETE | `/api/recipes/<id>` | Login | Delete recipe (cascades) |
 | GET | `/api/recipes/categories` | Login | Valid category list |
+| GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score) |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
@@ -118,7 +123,9 @@ DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
 cd frontend && npm run dev
 ```
 
-Vite dev server at http://localhost:5173 proxies `/api/*` to Flask at http://localhost:5000.
+Vite dev server at http://localhost:5173 proxies `/api/*` to Flask at http://localhost:5001.
+
+> **Note:** Port 5001 is used because macOS AirPlay Receiver occupies port 5000.
 
 ### Docker
 
@@ -177,7 +184,19 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Warm stone-grey palette with orange accent (#ff643e)
 - Dark/light mode via `.dark` class on `<html>` with CSS custom property overrides
 - Fonts: DM Sans (body), Ubuntu Mono (terminal)
-- Mobile-first responsive: hamburger menu on small screens
+- Mobile-first responsive: always-hamburger nav (no inline desktop nav)
+
+## Sanakenno (Finnish Spelling Bee)
+
+Public word game at `/bee`. NYT Spelling Bee rules with a Finnish word list.
+
+- **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
+- **Puzzles**: Pre-defined letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates daily via `date.today().toordinal() % len(PUZZLES)`. Valid words and max_score are computed at startup and cached.
+- **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
+- **Ranks**: 10 Finnish rank levels from Aloittelija (0%) to Mehiläiskuningatar (100%) based on % of max_score.
+- **Frontend**: `BeeGamePage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
+- **No auth required**: Public endpoint, no database usage.
+- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a center letter and 6 outer letters. The word list computation is automatic.
 
 ## Security Considerations
 

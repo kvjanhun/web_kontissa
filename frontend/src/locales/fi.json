@@ -1,6 +1,7 @@
 {
   "nav.about": "Tietoa",
   "nav.contact": "Yhteystiedot",
+  "nav.bee": "Peli",
   "nav.recipes": "Reseptit",
   "nav.admin": "Hallinta",
   "nav.login": "Kirjaudu",
@@ -102,5 +103,6 @@
   "title.newRecipe": "Uusi resepti - erez.ac",
   "title.recipe": "Resepti - erez.ac",
   "title.editRecipe": "Muokkaa resepti\u00e4 - erez.ac",
+  "title.bee": "Sanakenno - erez.ac",
   "title.notFound": "404 - erez.ac"
 }

@@ -1,6 +1,7 @@
 {
   "nav.about": "About",
   "nav.contact": "Contact",
+  "nav.bee": "Game",
   "nav.recipes": "Recipes",
   "nav.admin": "Admin",
   "nav.login": "Login",
@@ -102,5 +103,6 @@
   "title.newRecipe": "New Recipe - erez.ac",
   "title.recipe": "Recipe - erez.ac",
   "title.editRecipe": "Edit Recipe - erez.ac",
+  "title.bee": "Sanakenno - erez.ac",
   "title.notFound": "404 - erez.ac"
 }

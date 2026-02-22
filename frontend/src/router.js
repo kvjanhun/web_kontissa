@@ -43,5 +43,10 @@ export const routes = [
     component: () => import('./views/RecipeFormPage.vue'),
     meta: { titleKey: 'title.editRecipe', requiresAuth: true }
   },
+  {
+    path: '/bee',
+    component: () => import('./views/BeeGamePage.vue'),
+    meta: { titleKey: 'title.bee' }
+  },
   { path: '/:pathMatch(.*)*', component: NotFound, meta: { titleKey: 'title.notFound' } }
 ]

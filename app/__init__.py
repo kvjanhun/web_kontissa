@@ -42,3 +42,4 @@ from . import auth
 from . import recipes
 from .api import cowsay
 from .api import weather
+from .api import bee
