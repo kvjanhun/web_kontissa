@@ -44,9 +44,9 @@ export const routes = [
     meta: { titleKey: 'title.editRecipe', requiresAuth: true }
   },
   {
-    path: '/bee',
-    component: () => import('./views/BeeGamePage.vue'),
-    meta: { titleKey: 'title.bee' }
+    path: '/sanakenno',
+    component: () => import('./views/SanakennoPage.vue'),
+    meta: { titleKey: 'title.sanakenno' }
   },
   { path: '/:pathMatch(.*)*', component: NotFound, meta: { titleKey: 'title.notFound' } }
 ]

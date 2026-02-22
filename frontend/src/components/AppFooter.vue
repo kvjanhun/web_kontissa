@@ -14,7 +14,7 @@ const navLinks = computed(() => {
   const links = [
     { to: '/about',   labelKey: 'nav.about' },
     { to: '/contact', labelKey: 'nav.contact' },
-    { to: '/bee',     labelKey: 'nav.bee' },
+    { to: '/sanakenno', labelKey: 'nav.sanakenno' },
   ]
   if (isAuthenticated.value) {
     links.push({ to: '/recipes', labelKey: 'nav.recipes' })
