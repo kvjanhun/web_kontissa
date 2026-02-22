@@ -328,3 +328,57 @@ class TestKnownPuzzle:
     def test_known_puzzle_number_is_zero(self, pinned_client):
         data = pinned_client.get("/api/bee").get_json()
         assert data["puzzle_number"] == self.PUZZLE_IDX
+
+
+# ---------------------------------------------------------------------------
+# total_puzzles field
+# ---------------------------------------------------------------------------
+
+class TestTotalPuzzlesField:
+    """Verify total_puzzles is always returned."""
+
+    def test_total_puzzles_present_and_correct(self, client):
+        data = client.get("/api/bee").get_json()
+        assert "total_puzzles" in data
+        assert data["total_puzzles"] == len(PUZZLES)
+
+
+# ---------------------------------------------------------------------------
+# Admin puzzle override via ?puzzle=N
+# ---------------------------------------------------------------------------
+
+class TestPuzzleOverride:
+    """Admin users can override the daily puzzle via ?puzzle=N query param."""
+
+    def test_admin_can_override_puzzle(self, logged_in_admin):
+        target = 7
+        data = logged_in_admin.get(f"/api/bee?puzzle={target}").get_json()
+        assert data["puzzle_number"] == target
+        assert data["center"] == PUZZLES[target]["center"]
+
+    def test_admin_override_wraps_around(self, logged_in_admin):
+        # Requesting puzzle index beyond range wraps via modulo
+        target = len(PUZZLES) + 3
+        data = logged_in_admin.get(f"/api/bee?puzzle={target}").get_json()
+        assert data["puzzle_number"] == 3
+
+    def test_non_admin_override_ignored(self, logged_in_user):
+        """Regular users cannot override the puzzle — param is silently ignored."""
+        data_with_param = logged_in_user.get("/api/bee?puzzle=7").get_json()
+        data_without = logged_in_user.get("/api/bee").get_json()
+        assert data_with_param["puzzle_number"] == data_without["puzzle_number"]
+
+    def test_unauthenticated_override_ignored(self, client):
+        """Anonymous users cannot override the puzzle."""
+        data_with_param = client.get("/api/bee?puzzle=7").get_json()
+        data_without = client.get("/api/bee").get_json()
+        assert data_with_param["puzzle_number"] == data_without["puzzle_number"]
+
+    def test_admin_override_returns_correct_words(self, logged_in_admin):
+        """Overridden puzzle returns the right word set."""
+        target = 2
+        data = logged_in_admin.get(f"/api/bee?puzzle={target}").get_json()
+        p = PUZZLES[target]
+        all_letters = frozenset([p["center"]] + p["outer"])
+        expected_score = sum(_score_word(w, all_letters) for w in data["words"])
+        assert data["max_score"] == expected_score

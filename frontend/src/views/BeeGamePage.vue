@@ -1,5 +1,8 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { useAuth } from '../composables/useAuth'
+
+const { isAdmin } = useAuth()
 
 // --- State ---
 const puzzle = ref(null)
@@ -11,6 +14,9 @@ const message = ref('')
 const messageType = ref('ok')
 const loading = ref(true)
 const fetchError = ref('')
+const puzzleNumber = ref(null)
+const totalPuzzles = ref(null)
+const showRanks = ref(false)
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
@@ -39,7 +45,46 @@ const rank = computed(() => {
   return 'Aloittelija'
 })
 
+const rankThresholds = computed(() => {
+  const max = puzzle.value?.max_score ?? 0
+  return [...RANKS].reverse().map(r => ({
+    name: r.name,
+    points: Math.ceil(r.pct / 100 * max),
+    isCurrent: rank.value === r.name,
+  }))
+})
+
 const sortedFoundWords = computed(() => [...foundWords.value].sort())
+
+async function fetchPuzzle(overrideIndex) {
+  loading.value = true
+  fetchError.value = ''
+  try {
+    const url = overrideIndex != null ? `/api/bee?puzzle=${overrideIndex}` : '/api/bee'
+    const res = await fetch(url)
+    if (!res.ok) throw new Error('Verkkovirhe')
+    const data = await res.json()
+    puzzle.value = data
+    outerLetters.value = [...data.letters]
+    puzzleNumber.value = data.puzzle_number
+    totalPuzzles.value = data.total_puzzles
+  } catch {
+    fetchError.value = 'Pelin lataaminen epäonnistui.'
+  } finally {
+    loading.value = false
+  }
+}
+
+function switchPuzzle(delta) {
+  if (!confirm('Vaihda peli? Edistyminen nollataan.')) return
+  const next = ((puzzleNumber.value + delta) % totalPuzzles.value + totalPuzzles.value) % totalPuzzles.value
+  currentWord.value = ''
+  foundWords.value = new Set()
+  score.value = 0
+  message.value = ''
+  showRanks.value = false
+  fetchPuzzle(next)
+}
 
 // --- Honeycomb geometry ---
 // Pointy-top hexagons, circumradius 50, centers on a 300×300 viewBox
@@ -152,19 +197,9 @@ function handleKeydown(e) {
   }
 }
 
-onMounted(async () => {
+onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
-  try {
-    const res = await fetch('/api/bee')
-    if (!res.ok) throw new Error('Verkkovirhe')
-    const data = await res.json()
-    puzzle.value = data
-    outerLetters.value = [...data.letters]
-  } catch {
-    fetchError.value = 'Pelin lataaminen epäonnistui.'
-  } finally {
-    loading.value = false
-  }
+  fetchPuzzle()
 })
 
 onUnmounted(() => {
@@ -185,17 +220,52 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Score & rank -->
-      <div class="flex items-center gap-3 mb-5">
+      <div class="flex items-center gap-3 mb-1">
         <span class="text-base font-medium" style="color: var(--color-text-primary)">
           Pisteet: {{ score }}
         </span>
-        <span
+        <button
           class="px-3 py-0.5 rounded-full text-sm font-medium"
-          style="background: var(--color-accent); color: white;"
+          style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+          @click="showRanks = !showRanks"
+          :aria-expanded="showRanks"
+          aria-label="Näytä tasorajat"
         >
           {{ rank }}
-        </span>
+        </button>
       </div>
+
+      <!-- Admin puzzle switcher -->
+      <div v-if="isAdmin && totalPuzzles" class="flex items-center gap-2 mb-1 text-xs" style="color: var(--color-text-tertiary);">
+        Peli {{ puzzleNumber + 1 }}/{{ totalPuzzles }}
+        <button
+          class="px-1.5 py-0.5 rounded"
+          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+          @click="switchPuzzle(-1)"
+          aria-label="Edellinen peli"
+        >◀</button>
+        <button
+          class="px-1.5 py-0.5 rounded"
+          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+          @click="switchPuzzle(1)"
+          aria-label="Seuraava peli"
+        >▶</button>
+      </div>
+
+      <!-- Rank thresholds -->
+      <div v-if="showRanks" class="mb-3 p-3 rounded-lg text-sm" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+        <div
+          v-for="r in rankThresholds"
+          :key="r.name"
+          class="flex justify-between py-0.5"
+          :style="{ color: r.isCurrent ? 'var(--color-accent)' : 'var(--color-text-secondary)', fontWeight: r.isCurrent ? '600' : '400' }"
+        >
+          <span>{{ r.name }}</span>
+          <span>{{ r.points }}</span>
+        </div>
+      </div>
+
+      <div v-else class="mb-4"></div>
 
       <!-- Current word display -->
       <div

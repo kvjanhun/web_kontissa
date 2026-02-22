@@ -1,5 +1,6 @@
 from datetime import date
-from flask import jsonify
+from flask import jsonify, request
+from flask_login import current_user
 import os
 
 from app import app
@@ -104,6 +105,15 @@ def _get_puzzle_data(idx):
 @app.route("/api/bee")
 def bee():
     puzzle_number = date.today().toordinal() % len(PUZZLES)
+
+    override = request.args.get("puzzle", type=int)
+    if (
+        override is not None
+        and current_user.is_authenticated
+        and getattr(current_user, "role", None) == "admin"
+    ):
+        puzzle_number = override % len(PUZZLES)
+
     puzzle = PUZZLES[puzzle_number]
     words, max_score = _get_puzzle_data(puzzle_number)
 
@@ -114,5 +124,6 @@ def bee():
             "words": words,
             "max_score": max_score,
             "puzzle_number": puzzle_number,
+            "total_puzzles": len(PUZZLES),
         }
     )
