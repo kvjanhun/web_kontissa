@@ -8,7 +8,9 @@ from app import app
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
     with open(_WORDLIST_PATH, encoding='utf-8') as _f:
-        _ALL_WORDS = frozenset(line.strip() for line in _f if line.strip())
+        # Normalise hyphenated compounds (e.g. lähi-itä → lähiitä) so they are
+        # valid puzzle words; the frozenset also deduplicates any collisions.
+        _ALL_WORDS = frozenset(line.strip().replace('-', '') for line in _f if line.strip())
 except FileNotFoundError:
     _ALL_WORDS = frozenset()
 

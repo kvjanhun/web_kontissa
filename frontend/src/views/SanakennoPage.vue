@@ -64,6 +64,20 @@ const rankThresholds = computed(() => {
   }))
 })
 
+// Colour each character of the word being typed:
+//   center letter  → accent (orange)
+//   other puzzle letter → text-primary
+//   dash           → text-tertiary (structural, not a letter)
+//   anything else  → text-tertiary (invalid, will fail validation)
+const currentWordChars = computed(() =>
+  [...currentWord.value].map(char => {
+    if (char === '-')              return { char, color: 'var(--color-text-tertiary)' }
+    if (char === center.value)     return { char, color: 'var(--color-accent)' }
+    if (allLetters.value.has(char)) return { char, color: 'var(--color-text-primary)' }
+    return { char, color: 'var(--color-text-tertiary)' }
+  })
+)
+
 // Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
 const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
@@ -258,7 +272,8 @@ function shuffleLetters() {
 }
 
 function submitWord() {
-  const word = currentWord.value.toLowerCase()
+  // Normalise: strip dashes so lähi-itä and lähiitä both work
+  const word = currentWord.value.toLowerCase().replace(/-/g, '')
   currentWord.value = ''
 
   if (word.length < 4) {
@@ -319,7 +334,7 @@ function handleKeydown(e) {
   } else if (key === 'backspace') {
     e.preventDefault()
     deleteLetter()
-  } else if (/^[a-zäö]$/.test(key)) {
+  } else if (/^[a-zäö\-]$/.test(key)) {
     addLetter(key)
   }
 }
@@ -416,10 +431,14 @@ onUnmounted(() => {
 
       <!-- Current word display -->
       <div
-        class="text-center text-2xl tracking-widest mb-2 min-h-[2.5rem] font-light"
-        style="color: var(--color-text-primary); font-family: var(--font-mono);"
+        class="text-center text-2xl mb-2 min-h-[2.5rem] font-light"
+        style="font-family: var(--font-mono); letter-spacing: 0.15em;"
       >
-        <span v-if="currentWord">{{ currentWord.toUpperCase().split('').join(' ') }}</span>
+        <template v-if="currentWord">
+          <template v-for="(c, i) in currentWordChars" :key="i">
+            <span :style="{ color: c.color }">{{ c.char.toUpperCase() }}</span>
+          </template>
+        </template>
         <span v-else style="color: var(--color-text-tertiary);">—</span>
       </div>
 
