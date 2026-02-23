@@ -24,8 +24,11 @@ const totalPuzzles = ref(null)
 const showRanks = ref(false)
 const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
 const showHints = ref(false)
+const showRules = ref(false)
 const hintsUnlocked = ref(new Set())  // 'count' | 'letters' | 'lengths'
 const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
+const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
+let hiddenAt = null                   // non-reactive: when the tab was last hidden
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
@@ -120,6 +123,23 @@ const unfoundLengths = computed(() => {
   return { shortest, longest }
 })
 
+// --- Timer helpers ---
+function getElapsedMs() {
+  if (!startedAt.value) return 0
+  return Date.now() - startedAt.value - totalPausedMs.value
+}
+
+function handleVisibilityChange() {
+  if (document.hidden) {
+    hiddenAt = Date.now()
+  } else {
+    if (hiddenAt !== null) {
+      totalPausedMs.value += Date.now() - hiddenAt
+      hiddenAt = null
+    }
+  }
+}
+
 // --- State persistence ---
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify({
@@ -128,6 +148,7 @@ function saveState() {
     score: score.value,
     hintsUnlocked: [...hintsUnlocked.value],
     startedAt: startedAt.value,
+    totalPausedMs: totalPausedMs.value,
   }))
 }
 
@@ -141,6 +162,7 @@ function loadState() {
     score.value = saved.score
     hintsUnlocked.value = new Set(saved.hintsUnlocked ?? [])
     startedAt.value = saved.startedAt ?? null
+    totalPausedMs.value = saved.totalPausedMs ?? 0
   } catch { /* ignore corrupt data */ }
 }
 
@@ -176,6 +198,8 @@ function resetGameState() {
   showRanks.value = false
   hintsUnlocked.value = new Set()
   startedAt.value = null
+  totalPausedMs.value = 0
+  hiddenAt = null
 }
 
 function choosePuzzle(idx) {
@@ -207,7 +231,7 @@ function formatElapsed(ms) {
 }
 
 async function copyStatus() {
-  const elapsed = startedAt.value ? formatElapsed(Date.now() - startedAt.value) : '?'
+  const elapsed = startedAt.value ? formatElapsed(getElapsedMs()) : '?'
   const hintEmojis = '💡'.repeat(hintsUnlocked.value.size) || '–'
 
   const lines = [
@@ -323,8 +347,10 @@ function showMessage(msg, type) {
 }
 
 function handleKeydown(e) {
+  if (e.key === 'Escape') { showRules.value = false; return }
   if (e.ctrlKey || e.altKey || e.metaKey) return
   if (e.target.tagName === 'INPUT') return
+  if (showRules.value) return
   if (!puzzle.value) return
 
   const key = e.key.toLowerCase()
@@ -341,6 +367,7 @@ function handleKeydown(e) {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('visibilitychange', handleVisibilityChange)
   if (isAdmin.value) {
     const saved = localStorage.getItem(ADMIN_PUZZLE_KEY)
     const idx = saved !== null ? parseInt(saved, 10) : null
@@ -352,6 +379,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (msgTimer) clearTimeout(msgTimer)
 })
 </script>
@@ -360,8 +388,82 @@ onUnmounted(() => {
   <!-- Minimal standalone top bar -->
   <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
     <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
-    <ThemeToggle style="color: var(--color-text-tertiary);" />
+    <div class="flex items-center gap-1">
+      <button
+        @click="showRules = true"
+        class="p-2 rounded-lg transition-colors duration-200 hover:bg-white/10 text-sm font-semibold"
+        style="color: var(--color-text-tertiary);"
+        aria-label="Säännöt"
+      >?</button>
+      <ThemeToggle style="color: var(--color-text-tertiary);" />
+    </div>
   </div>
+
+  <!-- Rules modal -->
+  <Teleport to="body">
+    <div
+      v-if="showRules"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background: rgba(0,0,0,0.6);"
+      @click.self="showRules = false"
+    >
+      <div
+        class="w-full max-w-sm rounded-xl p-6 overflow-y-auto max-h-[90vh]"
+        style="background: var(--color-bg-primary); border: 1px solid var(--color-border);"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Säännöt"
+      >
+        <div class="flex justify-between items-center mb-4">
+          <h2 class="text-lg font-semibold" style="color: var(--color-text-primary);">Kuinka pelata</h2>
+          <button
+            @click="showRules = false"
+            class="p-1 rounded hover:bg-white/10 text-xl leading-none"
+            style="color: var(--color-text-tertiary);"
+            aria-label="Sulje"
+          >✕</button>
+        </div>
+
+        <div class="text-sm space-y-4" style="color: var(--color-text-secondary);">
+          <p>Löydä mahdollisimman monta sanaa käyttäen annettuja seitsemää kirjainta.</p>
+
+          <div>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Jokaisen sanan täytyy:</p>
+            <ul class="space-y-1 list-none pl-0">
+              <li>✦ Sisältää <span style="color: var(--color-accent);">oranssi keskikirjain</span></li>
+              <li>✦ Olla vähintään 4 kirjainta pitkä</li>
+              <li>✦ Koostua vain annetuista kirjaimista</li>
+              <li>✦ Löytyä suomen kielen sanakirjasta</li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Pisteytys:</p>
+            <ul class="space-y-1 list-none pl-0">
+              <li>✦ 4-kirjaiminen sana = 1 piste</li>
+              <li>✦ Pidempi sana = pisteitä yhtä monta kuin kirjaimia</li>
+              <li>✦ Pangrammi (kaikki 7 kirjainta mukana) = +7 bonuspistettä</li>
+            </ul>
+          </div>
+
+          <div>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Yhdyssanat:</p>
+            <p>Yhdysviivallisia sanoja (esim. <span style="font-family: var(--font-mono);">lähi-itä</span>) voi kirjoittaa joko viivalla tai ilman.</p>
+          </div>
+
+          <div>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Tasot:</p>
+            <p>Pistesaldosi määrittää tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno 🍯</span></p>
+          </div>
+
+          <div>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Avut:</p>
+            <p>Voit avata kolme vihjetyyppiä — ne aktivoituvat pysyvästi pelin ajaksi.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
   <div class="max-w-sm mx-auto mb-5">
     <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno</h1>
   </div>
