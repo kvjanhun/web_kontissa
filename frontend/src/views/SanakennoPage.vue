@@ -29,6 +29,7 @@ const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
 
 // --- Animation state ---
 const wordShake = ref(false)
+const wordRejected = ref(false)   // keeps the typed word visible after a failed submit
 const pressedHexIndex = ref(null)
 const lastResubmittedWord = ref(null)
 let resubTimer = null
@@ -316,10 +317,15 @@ function hexPoints(cx, cy, r) {
 
 // --- Actions ---
 function addLetter(letter) {
+  if (wordRejected.value) {
+    currentWord.value = ''
+    wordRejected.value = false
+  }
   currentWord.value += letter
 }
 
 function deleteLetter() {
+  wordRejected.value = false
   currentWord.value = currentWord.value.slice(0, -1)
 }
 
@@ -340,31 +346,39 @@ function triggerShake() {
   })
 }
 
+function rejectWord(msg) {
+  wordRejected.value = true
+  showMessage(msg, 'error')
+  triggerShake()
+}
+
 function submitWord() {
   // Normalise: strip dashes so lähi-itä and lähiitä both work
   const word = currentWord.value.toLowerCase().replace(/-/g, '')
-  currentWord.value = ''
 
   if (word.length < 4) {
-    showMessage('Liian lyhyt!', 'error'); triggerShake(); return
+    rejectWord('Liian lyhyt!'); return
   }
   if (!word.includes(center.value)) {
-    showMessage(`Kirjain '${center.value.toUpperCase()}' puuttuu!`, 'error'); triggerShake(); return
+    rejectWord(`Kirjain '${center.value.toUpperCase()}' puuttuu!`); return
   }
   if ([...word].some(c => !allLetters.value.has(c))) {
-    showMessage('Käytä vain annettuja kirjaimia!', 'error'); triggerShake(); return
+    rejectWord('Käytä vain annettuja kirjaimia!'); return
   }
   if (foundWords.value.has(word)) {
-    showMessage('Löysit jo tämän!', 'error')
-    triggerShake()
+    rejectWord('Löysit jo tämän!')
     lastResubmittedWord.value = word
     if (resubTimer) clearTimeout(resubTimer)
     resubTimer = setTimeout(() => { lastResubmittedWord.value = null }, 1500)
     return
   }
   if (!wordsSet.value.has(word)) {
-    showMessage('Ei sanakirjassa', 'error'); triggerShake(); return
+    rejectWord('Ei sanakirjassa'); return
   }
+
+  // Valid — clear the input
+  currentWord.value = ''
+  wordRejected.value = false
 
   // Valid word — calculate score
   const rankBefore = rank.value
