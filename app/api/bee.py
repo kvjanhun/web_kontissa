@@ -96,7 +96,7 @@ def _compute_puzzle(puzzle):
     return sorted(words), max_score
 
 
-_PUZZLE_CACHE: dict = {}
+_PUZZLE_CACHE: dict = {}  # Cleared on container restart or when words are blocked
 
 
 def _get_puzzle_data(idx):
