@@ -64,6 +64,16 @@ const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
 )
 
+const WORDS_PER_COLUMN = 10
+const wordColumns = computed(() => {
+  const words = sortedFoundWords.value
+  const cols = []
+  for (let i = 0; i < words.length; i += WORDS_PER_COLUMN) {
+    cols.push(words.slice(i, i + WORDS_PER_COLUMN))
+  }
+  return cols
+})
+
 // --- State persistence ---
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify({
@@ -422,16 +432,18 @@ onUnmounted(() => {
         <p class="text-sm mb-1" style="color: var(--color-text-secondary);">
           Löydetyt sanat ({{ foundWords.size }}):
         </p>
-        <ul style="columns: 9rem; column-gap: 1.5rem;">
-          <li
-            v-for="word in sortedFoundWords"
-            :key="word"
-            class="text-sm py-0.5"
-            style="color: var(--color-text-primary); font-family: var(--font-mono); break-inside: avoid;"
-          >
-            {{ word }}
-          </li>
-        </ul>
+        <div class="flex flex-wrap gap-x-6">
+          <ul v-for="(col, ci) in wordColumns" :key="ci">
+            <li
+              v-for="word in col"
+              :key="word"
+              class="text-sm py-0.5"
+              style="color: var(--color-text-primary); font-family: var(--font-mono);"
+            >
+              {{ word }}
+            </li>
+          </ul>
+        </div>
       </div>
     </template>
   </div>
