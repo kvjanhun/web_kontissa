@@ -22,11 +22,15 @@ const puzzleNumber = ref(null)
 const totalPuzzles = ref(null)
 const showRanks = ref(false)
 const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
+const showHints = ref(false)
+const hintsUnlocked = ref(new Set())  // 'count' | 'letters' | 'lengths'
+const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
 const wordsSet = computed(() => new Set(puzzle.value?.words ?? []))
 const allLetters = computed(() => new Set([center.value, ...outerLetters.value]))
+const allWords = computed(() => puzzle.value?.words ?? [])
 
 const RANKS = [
   { pct: 100, name: 'Täysi kenno' },
@@ -42,12 +46,12 @@ const RANKS = [
 ]
 
 const rank = computed(() => {
-  if (!puzzle.value || puzzle.value.max_score === 0) return 'Aloittelija'
+  if (!puzzle.value || puzzle.value.max_score === 0) return RANKS[RANKS.length - 1].name
   const pct = (score.value / puzzle.value.max_score) * 100
   for (const r of RANKS) {
     if (pct >= r.pct) return r.name
   }
-  return 'Aloittelija'
+  return RANKS[RANKS.length - 1].name
 })
 
 const rankThresholds = computed(() => {
@@ -74,12 +78,41 @@ const wordColumns = computed(() => {
   return cols
 })
 
+// --- Hint computeds ---
+// Hint 2: remaining words per starting letter, sorted alphabetically
+const letterMap = computed(() => {
+  const map = {}
+  for (const word of allWords.value) {
+    const l = word[0]
+    if (!map[l]) map[l] = { total: 0, found: 0 }
+    map[l].total++
+    if (foundWords.value.has(word)) map[l].found++
+  }
+  return Object.entries(map)
+    .map(([letter, { total, found }]) => ({ letter, remaining: total - found }))
+    .sort((a, b) => a.letter.localeCompare(b.letter))
+})
+
+// Hint 3: length range of unfound words
+const unfoundLengths = computed(() => {
+  const unfound = allWords.value.filter(w => !foundWords.value.has(w))
+  if (unfound.length === 0) return null
+  let shortest = Infinity, longest = 0
+  for (const w of unfound) {
+    if (w.length < shortest) shortest = w.length
+    if (w.length > longest) longest = w.length
+  }
+  return { shortest, longest }
+})
+
 // --- State persistence ---
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify({
     puzzleNumber: puzzleNumber.value,
     foundWords: [...foundWords.value],
     score: score.value,
+    hintsUnlocked: [...hintsUnlocked.value],
+    startedAt: startedAt.value,
   }))
 }
 
@@ -91,6 +124,8 @@ function loadState() {
     if (saved.puzzleNumber !== puzzleNumber.value) return
     foundWords.value = new Set(saved.foundWords)
     score.value = saved.score
+    hintsUnlocked.value = new Set(saved.hintsUnlocked ?? [])
+    startedAt.value = saved.startedAt ?? null
   } catch { /* ignore corrupt data */ }
 }
 
@@ -109,6 +144,7 @@ async function fetchPuzzle(overrideIndex) {
     totalPuzzles.value = data.total_puzzles
     puzzleInputDisplay.value = data.puzzle_number + 1
     loadState()
+    if (startedAt.value === null) startedAt.value = Date.now()
   } catch {
     fetchError.value = 'Pelin lataaminen epäonnistui.'
   } finally {
@@ -123,6 +159,8 @@ function resetGameState() {
   score.value = 0
   message.value = ''
   showRanks.value = false
+  hintsUnlocked.value = new Set()
+  startedAt.value = null
 }
 
 function choosePuzzle(idx) {
@@ -138,6 +176,39 @@ function choosePuzzle(idx) {
 
 function randomPuzzle() {
   choosePuzzle(Math.floor(Math.random() * totalPuzzles.value))
+}
+
+// --- Hints ---
+function unlockHint(id) {
+  hintsUnlocked.value = new Set([...hintsUnlocked.value, id])
+  saveState()
+}
+
+// --- Share / copy status ---
+function formatElapsed(ms) {
+  const mins = Math.floor(ms / 60000)
+  if (mins < 60) return `${mins} min`
+  return `${Math.floor(mins / 60)} h ${mins % 60} min`
+}
+
+async function copyStatus() {
+  const elapsed = startedAt.value ? formatElapsed(Date.now() - startedAt.value) : '?'
+  const hintLabels = { count: 'sanojen määrä', letters: 'kirjaimet', lengths: 'pituudet' }
+  const hintList = [...hintsUnlocked.value].map(h => hintLabels[h]).join(', ')
+
+  const lines = [
+    `Sanakenno — Peli ${(puzzleNumber.value ?? 0) + 1}`,
+    `⏱ ${elapsed} | ${rank.value}`,
+    `${score.value}/${puzzle.value?.max_score ?? '?'} pistettä | ${foundWords.value.size}/${allWords.value.length} sanaa`,
+  ]
+  if (hintList) lines.push(`💡 Vihjeet: ${hintList}`)
+
+  try {
+    await navigator.clipboard.writeText(lines.join('\n'))
+    showMessage('Tila kopioitu!', 'ok')
+  } catch {
+    showMessage('Kopiointi epäonnistui', 'error')
+  }
 }
 
 // --- Honeycomb geometry ---
@@ -403,7 +474,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Controls -->
-      <div class="flex justify-center gap-3 mb-8">
+      <div class="flex justify-center gap-3 mb-5">
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
@@ -426,6 +497,85 @@ onUnmounted(() => {
           OK
         </button>
       </div>
+
+      <!-- Avut (hints) + copy status row -->
+      <div class="flex items-center justify-between mb-2">
+        <button
+          class="text-sm font-medium"
+          style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
+          @click="showHints = !showHints"
+          :aria-expanded="showHints"
+        >
+          Avut {{ showHints ? '▲' : '▼' }}
+        </button>
+        <button
+          class="text-xs px-2 py-1 rounded"
+          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+          @click="copyStatus"
+        >
+          📋 Kopioi tila
+        </button>
+      </div>
+
+      <!-- Hints panel -->
+      <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+
+        <!-- Hint 1: total word count -->
+        <div class="flex items-center justify-between">
+          <span style="color: var(--color-text-secondary);">Sanojen määrä</span>
+          <span v-if="hintsUnlocked.has('count')" style="color: var(--color-text-primary); font-family: var(--font-mono);">
+            {{ allWords.length }} sanaa
+          </span>
+          <button
+            v-else
+            class="text-xs px-2 py-0.5 rounded"
+            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+            @click="unlockHint('count')"
+          >Aktivoi</button>
+        </div>
+
+        <!-- Hint 2: words left per first letter -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span style="color: var(--color-text-secondary);">Kirjainvihjeet</span>
+            <button
+              v-if="!hintsUnlocked.has('letters')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click="unlockHint('letters')"
+            >Aktivoi</button>
+          </div>
+          <div v-if="hintsUnlocked.has('letters')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in letterMap"
+              :key="item.letter"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >
+              {{ item.letter.toUpperCase() }}&nbsp;{{ item.remaining }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Hint 3: shortest and longest unfound word lengths -->
+        <div class="flex items-center justify-between">
+          <span style="color: var(--color-text-secondary);">Pituudet</span>
+          <template v-if="hintsUnlocked.has('lengths')">
+            <span v-if="unfoundLengths" style="color: var(--color-text-primary); font-family: var(--font-mono);">
+              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
+            </span>
+            <span v-else style="color: var(--color-accent);">Kaikki löydetty! 🎉</span>
+          </template>
+          <button
+            v-else
+            class="text-xs px-2 py-0.5 rounded"
+            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+            @click="unlockHint('lengths')"
+          >Aktivoi</button>
+        </div>
+
+      </div>
+      <div v-else class="mb-4"></div>
 
       <!-- Found words -->
       <div v-if="foundWords.size > 0">
