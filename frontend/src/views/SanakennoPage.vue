@@ -25,6 +25,7 @@ const showRanks = ref(false)
 const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
 const showHints = ref(false)
 const showRules = ref(false)
+const showRemainingWords = ref(false)
 const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
 
 // --- Animation state ---
@@ -106,20 +107,26 @@ const currentWordChars = computed(() =>
   })
 )
 
+// Admin: all words not yet found, same sort as found words
+const remainingWords = computed(() =>
+  allWords.value.filter(w => !foundWords.value.has(w)).sort((a, b) => a.localeCompare(b) || a.length - b.length)
+)
+
 // Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
 const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
 )
 
 const WORDS_PER_COLUMN = 10
-const wordColumns = computed(() => {
-  const words = sortedFoundWords.value
+function toColumns(words) {
   const cols = []
   for (let i = 0; i < words.length; i += WORDS_PER_COLUMN) {
     cols.push(words.slice(i, i + WORDS_PER_COLUMN))
   }
   return cols
-})
+}
+const wordColumns = computed(() => toColumns(sortedFoundWords.value))
+const remainingWordColumns = computed(() => toColumns(remainingWords.value))
 
 // --- Hint computeds ---
 // Hint 2: remaining words per starting letter, sorted alphabetically
@@ -235,6 +242,7 @@ function resetGameState() {
   score.value = 0
   message.value = ''
   showRanks.value = false
+  showRemainingWords.value = false
   hintsUnlocked.value = new Set()
   startedAt.value = null
   totalPausedMs.value = 0
@@ -728,7 +736,7 @@ onUnmounted(() => {
           @click="showHints = !showHints"
           :aria-expanded="showHints"
         >
-          Avut {{ showHints ? '▲' : '▼' }}
+          💡 Avut {{ showHints ? '▲' : '▼' }}
         </button>
         <button
           class="text-xs px-2 py-1 rounded"
@@ -837,6 +845,30 @@ onUnmounted(() => {
           </ul>
         </div>
       </div>
+      <!-- Admin: remaining words -->
+      <div v-if="isAdmin" class="mt-6">
+        <button
+          class="text-sm font-medium mb-2"
+          style="color: var(--color-text-tertiary); background: none; border: none; cursor: pointer; padding: 0;"
+          @click="showRemainingWords = !showRemainingWords"
+          :aria-expanded="showRemainingWords"
+        >
+          Remaining words ({{ remainingWords.length }}) {{ showRemainingWords ? '▲' : '▼' }}
+        </button>
+        <div v-if="showRemainingWords" class="flex flex-wrap gap-x-6">
+          <ul v-for="(col, ci) in remainingWordColumns" :key="ci">
+            <li
+              v-for="word in col"
+              :key="word"
+              class="text-sm py-0.5"
+              style="color: var(--color-text-tertiary); font-family: var(--font-mono);"
+            >
+              {{ word }}
+            </li>
+          </ul>
+        </div>
+      </div>
+
     </template>
   </div>
 </template>
