@@ -432,7 +432,7 @@ onUnmounted(() => {
             <ul class="space-y-1 list-none pl-0">
               <li>✦ Sisältää <span style="color: var(--color-accent);">oranssi keskikirjain</span></li>
               <li>✦ Olla vähintään 4 kirjainta pitkä</li>
-              <li>✦ Koostua vain annetuista kirjaimista</li>
+              <li>✦ Koostua vain annetuista kirjaimista — samaa kirjainta voi käyttää useasti</li>
               <li>✦ Löytyä suomen kielen sanakirjasta</li>
             </ul>
           </div>
@@ -448,16 +448,16 @@ onUnmounted(() => {
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Yhdyssanat:</p>
-            <p>Yhdysviivallisia sanoja (esim. <span style="font-family: var(--font-mono);">lähi-itä</span>) voi kirjoittaa joko viivalla tai ilman.</p>
+            <p>Yhdysviivallisia sanoja (esim. <span style="font-family: var(--font-mono);">palo-ovi</span>) voi kirjoittaa joko viivalla tai ilman.</p>
           </div>
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Tasot:</p>
-            <p>Pistesaldosi määrittää tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno 🍯</span></p>
+            <p>Pistesaldosi määrittää tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno</span></p>
           </div>
 
           <div>
-            <p class="font-medium mb-1" style="color: var(--color-text-primary);">Avut:</p>
+            <p class="font-medium mb-1" style="color: var(--color-text-primary);">💡 Avut:</p>
             <p>Voit avata kolme vihjetyyppiä — ne aktivoituvat pysyvästi pelin ajaksi.</p>
           </div>
         </div>
