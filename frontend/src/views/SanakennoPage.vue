@@ -33,6 +33,7 @@ const wordRejected = ref(false)   // keeps the typed word visible after a failed
 const pressedHexIndex = ref(null)
 const lastResubmittedWord = ref(null)
 let resubTimer = null
+let rejectTimer = null
 const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
 const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
 let hiddenAt = null                   // non-reactive: when the tab was last hidden
@@ -320,12 +321,18 @@ function addLetter(letter) {
   if (wordRejected.value) {
     currentWord.value = ''
     wordRejected.value = false
+    if (rejectTimer) { clearTimeout(rejectTimer); rejectTimer = null }
   }
   currentWord.value += letter
 }
 
 function deleteLetter() {
-  wordRejected.value = false
+  if (wordRejected.value) {
+    currentWord.value = ''
+    wordRejected.value = false
+    if (rejectTimer) { clearTimeout(rejectTimer); rejectTimer = null }
+    return
+  }
   currentWord.value = currentWord.value.slice(0, -1)
 }
 
@@ -350,6 +357,11 @@ function rejectWord(msg) {
   wordRejected.value = true
   showMessage(msg, 'error')
   triggerShake()
+  if (rejectTimer) clearTimeout(rejectTimer)
+  rejectTimer = setTimeout(() => {
+    currentWord.value = ''
+    wordRejected.value = false
+  }, 2000)
 }
 
 function submitWord() {
@@ -445,6 +457,7 @@ onUnmounted(() => {
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
+  if (rejectTimer) clearTimeout(rejectTimer)
 })
 </script>
 
