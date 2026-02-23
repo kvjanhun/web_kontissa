@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
 import ThemeToggle from '../components/ThemeToggle.vue'
 
@@ -25,7 +25,13 @@ const showRanks = ref(false)
 const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
 const showHints = ref(false)
 const showRules = ref(false)
-const hintsUnlocked = ref(new Set())  // 'count' | 'letters' | 'lengths'
+const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
+
+// --- Animation state ---
+const wordShake = ref(false)
+const pressedHexIndex = ref(null)
+const lastResubmittedWord = ref(null)
+let resubTimer = null
 const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
 const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
 let hiddenAt = null                   // non-reactive: when the tab was last hidden
@@ -66,6 +72,23 @@ const rankThresholds = computed(() => {
     isCurrent: rank.value === r.name,
   }))
 })
+
+const progressToNextRank = computed(() => {
+  if (!puzzle.value || puzzle.value.max_score === 0) return 0
+  const max = puzzle.value.max_score
+  const scorePct = (score.value / max) * 100
+  const currentIdx = RANKS.findIndex(r => scorePct >= r.pct)
+  if (currentIdx === -1) return 0
+  if (currentIdx === 0) return 100
+  const currentRankPts = Math.ceil(RANKS[currentIdx].pct / 100 * max)
+  const nextRankPts = Math.ceil(RANKS[currentIdx - 1].pct / 100 * max)
+  if (nextRankPts <= currentRankPts) return 100
+  return Math.min(100, ((score.value - currentRankPts) / (nextRankPts - currentRankPts)) * 100)
+})
+
+const allFound = computed(() =>
+  puzzle.value !== null && allWords.value.length > 0 && foundWords.value.size === allWords.value.length
+)
 
 // Colour each character of the word being typed:
 //   center letter  → accent (orange)
@@ -111,7 +134,7 @@ const letterMap = computed(() => {
     .sort((a, b) => a.letter.localeCompare(b.letter))
 })
 
-// Hint 3: length range of unfound words
+// Hint 1 (summary): length range of unfound words (combined with count)
 const unfoundLengths = computed(() => {
   const unfound = allWords.value.filter(w => !foundWords.value.has(w))
   if (unfound.length === 0) return null
@@ -121,6 +144,20 @@ const unfoundLengths = computed(() => {
     if (w.length > longest) longest = w.length
   }
   return { shortest, longest }
+})
+
+// Hint 3: word count per length (remaining)
+const lengthDistribution = computed(() => {
+  const dist = {}
+  for (const word of allWords.value) {
+    const len = word.length
+    if (!dist[len]) dist[len] = { total: 0, found: 0 }
+    dist[len].total++
+    if (foundWords.value.has(word)) dist[len].found++
+  }
+  return Object.entries(dist)
+    .map(([len, { total, found }]) => ({ len: parseInt(len), total, remaining: total - found }))
+    .sort((a, b) => a.len - b.len)
 })
 
 // --- Timer helpers ---
@@ -295,33 +332,42 @@ function shuffleLetters() {
   outerLetters.value = arr
 }
 
+function triggerShake() {
+  wordShake.value = false
+  nextTick(() => {
+    wordShake.value = true
+    setTimeout(() => { wordShake.value = false }, 400)
+  })
+}
+
 function submitWord() {
   // Normalise: strip dashes so lähi-itä and lähiitä both work
   const word = currentWord.value.toLowerCase().replace(/-/g, '')
   currentWord.value = ''
 
   if (word.length < 4) {
-    showMessage('Liian lyhyt!', 'error')
-    return
+    showMessage('Liian lyhyt!', 'error'); triggerShake(); return
   }
   if (!word.includes(center.value)) {
-    showMessage(`Kirjain '${center.value.toUpperCase()}' puuttuu!`, 'error')
-    return
+    showMessage(`Kirjain '${center.value.toUpperCase()}' puuttuu!`, 'error'); triggerShake(); return
   }
   if ([...word].some(c => !allLetters.value.has(c))) {
-    showMessage('Käytä vain annettuja kirjaimia!', 'error')
-    return
+    showMessage('Käytä vain annettuja kirjaimia!', 'error'); triggerShake(); return
   }
   if (foundWords.value.has(word)) {
     showMessage('Löysit jo tämän!', 'error')
+    triggerShake()
+    lastResubmittedWord.value = word
+    if (resubTimer) clearTimeout(resubTimer)
+    resubTimer = setTimeout(() => { lastResubmittedWord.value = null }, 1500)
     return
   }
   if (!wordsSet.value.has(word)) {
-    showMessage('Ei sanakirjassa', 'error')
-    return
+    showMessage('Ei sanakirjassa', 'error'); triggerShake(); return
   }
 
   // Valid word — calculate score
+  const rankBefore = rank.value
   const letterSet = new Set([center.value, ...outerLetters.value])
   const isPangram = [...letterSet].every(c => word.includes(c))
   const pts = word.length === 4 ? 1 : word.length
@@ -331,7 +377,10 @@ function submitWord() {
   score.value += pts + bonus
   saveState()
 
-  if (isPangram) {
+  const rankAfter = rank.value
+  if (rankAfter !== rankBefore) {
+    showMessage('Uusi taso: ' + rankAfter + '!', 'special', 3000)
+  } else if (isPangram) {
     showMessage('Pangrammi! \uD83D\uDC1D', 'special')
   } else {
     showMessage(`+${pts + bonus}`, 'ok')
@@ -339,11 +388,11 @@ function submitWord() {
 }
 
 let msgTimer = null
-function showMessage(msg, type) {
+function showMessage(msg, type, duration = 2000) {
   message.value = msg
   messageType.value = type
   if (msgTimer) clearTimeout(msgTimer)
-  msgTimer = setTimeout(() => { message.value = '' }, 2000)
+  msgTimer = setTimeout(() => { message.value = '' }, duration)
 }
 
 function handleKeydown(e) {
@@ -381,6 +430,7 @@ onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   if (msgTimer) clearTimeout(msgTimer)
+  if (resubTimer) clearTimeout(resubTimer)
 })
 </script>
 
@@ -480,7 +530,7 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Score & rank -->
-      <div class="flex items-center gap-3 mb-1">
+      <div class="flex items-center gap-3 mb-2">
         <span class="text-base font-medium" style="color: var(--color-text-primary)">
           Pisteet: {{ score }}
         </span>
@@ -493,6 +543,14 @@ onUnmounted(() => {
         >
           {{ rank }}
         </button>
+      </div>
+
+      <!-- Progress bar toward next rank -->
+      <div class="w-full h-1 rounded-full mb-2" :style="{ background: 'var(--color-bg-secondary)' }">
+        <div
+          class="h-full rounded-full"
+          :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
+        ></div>
       </div>
 
       <!-- Admin puzzle switcher -->
@@ -534,6 +592,7 @@ onUnmounted(() => {
       <!-- Current word display -->
       <div
         class="text-center text-2xl mb-2 min-h-[2.5rem] font-light"
+        :class="{ 'word-shake': wordShake }"
         style="font-family: var(--font-mono); letter-spacing: 0.15em;"
       >
         <template v-if="currentWord">
@@ -574,13 +633,19 @@ onUnmounted(() => {
             :key="i"
             style="cursor: pointer;"
             @click="addLetter(hex.letter)"
+            @pointerdown="pressedHexIndex = i"
+            @pointerup="pressedHexIndex = null"
+            @pointerleave="pressedHexIndex = null"
           >
             <polygon
               :points="hexPoints(hex.x, hex.y, 47)"
               :style="{
-                fill:        hex.isCenter ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
-                stroke:      hex.isCenter ? 'var(--color-accent)' : 'var(--color-border)',
-                strokeWidth: '1.5',
+                fill:            hex.isCenter ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
+                stroke:          hex.isCenter ? 'var(--color-accent)' : 'var(--color-border)',
+                strokeWidth:     '1.5',
+                transform:       pressedHexIndex === i ? 'scale(0.92)' : 'scale(1)',
+                transformOrigin: `${hex.x}px ${hex.y}px`,
+                transition:      'transform 0.08s ease',
               }"
             />
             <text
@@ -650,17 +715,21 @@ onUnmounted(() => {
       <!-- Hints panel -->
       <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
-        <!-- Hint 1: total word count -->
-        <div class="flex items-center justify-between">
+        <!-- Hint 1: word count + min/max unfound lengths -->
+        <div class="flex items-start justify-between">
           <span style="color: var(--color-text-secondary);">Sanojen määrä</span>
-          <span v-if="hintsUnlocked.has('count')" style="color: var(--color-text-primary); font-family: var(--font-mono);">
-            {{ allWords.length }} sanaa
-          </span>
+          <div v-if="hintsUnlocked.has('summary')" class="text-right" style="font-family: var(--font-mono);">
+            <div style="color: var(--color-text-primary);">{{ allWords.length }} sanaa</div>
+            <div v-if="unfoundLengths" class="text-xs mt-0.5" style="color: var(--color-text-secondary);">
+              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
+            </div>
+            <div v-else class="text-xs mt-0.5" style="color: var(--color-accent);">kaikki löydetty</div>
+          </div>
           <button
             v-else
             class="text-xs px-2 py-0.5 rounded"
             style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-            @click="unlockHint('count')"
+            @click="unlockHint('summary')"
           >Aktivoi</button>
         </div>
 
@@ -687,25 +756,35 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <!-- Hint 3: shortest and longest unfound word lengths -->
-        <div class="flex items-center justify-between">
-          <span style="color: var(--color-text-secondary);">Pituudet</span>
-          <template v-if="hintsUnlocked.has('lengths')">
-            <span v-if="unfoundLengths" style="color: var(--color-text-primary); font-family: var(--font-mono);">
-              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
-            </span>
-            <span v-else style="color: var(--color-accent);">Kaikki löydetty! 🎉</span>
-          </template>
-          <button
-            v-else
-            class="text-xs px-2 py-0.5 rounded"
-            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-            @click="unlockHint('lengths')"
-          >Aktivoi</button>
+        <!-- Hint 3: word count per length -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span style="color: var(--color-text-secondary);">Pituusjakauma</span>
+            <button
+              v-if="!hintsUnlocked.has('distribution')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click="unlockHint('distribution')"
+            >Aktivoi</button>
+          </div>
+          <div v-if="hintsUnlocked.has('distribution')" class="flex flex-wrap gap-x-4 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in lengthDistribution"
+              :key="item.len"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >{{ item.len }}: {{ item.remaining }}</span>
+          </div>
         </div>
 
       </div>
       <div v-else class="mb-4"></div>
+
+      <!-- All found celebration -->
+      <div v-if="allFound" class="text-center py-4 rounded-lg mb-4" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+        <p class="text-2xl mb-1">🎉</p>
+        <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ allWords.length }} sanaa löydetty!</p>
+      </div>
 
       <!-- Found words -->
       <div v-if="foundWords.size > 0">
@@ -718,7 +797,11 @@ onUnmounted(() => {
               v-for="word in col"
               :key="word"
               class="text-sm py-0.5"
-              style="color: var(--color-text-primary); font-family: var(--font-mono);"
+              :style="{
+                color: lastResubmittedWord === word ? 'var(--color-accent)' : 'var(--color-text-primary)',
+                fontFamily: 'var(--font-mono)',
+                transition: 'color 0.3s',
+              }"
             >
               {{ word }}
             </li>
@@ -728,3 +811,16 @@ onUnmounted(() => {
     </template>
   </div>
 </template>
+
+<style scoped>
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-8px); }
+  40%       { transform: translateX(8px); }
+  60%       { transform: translateX(-5px); }
+  80%       { transform: translateX(5px); }
+}
+.word-shake {
+  animation: shake 0.4s ease-in-out;
+}
+</style>
