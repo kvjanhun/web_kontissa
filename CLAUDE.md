@@ -213,15 +213,19 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Ranks**: 10 Finnish rank levels from Aloittelija (0%) to Mehiläiskuningatar (100%) based on % of max_score.
 - **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
 - **Touch zoom prevention**: `touch-action: manipulation` on the root game div prevents double-tap zoom on iOS Safari.
-- **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
+- **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
 - **Admin puzzle switcher**: Admins see a number input (1-indexed) and a "Satunnainen" (random) button instead of the daily puzzle. Selected puzzle persists in `localStorage` under key `sanakenno_admin_puzzle`. Confirmation is only requested if there is existing progress to lose. Regular users always see the daily rotation — the admin override is a private test mode only.
 - **Found words sort**: Words are sorted alphabetically, with word length (shortest first) as a tiebreaker.
-- **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints — once unlocked they persist in `sanakenno_state` localStorage across sessions:
-  1. **Sanojen määrä** — total word count for today's puzzle.
-  2. **Kirjainvihjeet** — remaining unfound words grouped by starting letter (all puzzle letters shown; letters fully found are displayed muted at 0).
-  3. **Pituudet** — shortest and longest unfound word lengths; shows a celebration message when all words are found.
-  - `hintsUnlocked` (Set) and `startedAt` (epoch ms) are now additional fields in the `sanakenno_state` localStorage entry. Admin puzzle switches reset hint state together with game progress.
-- **Kopioi tila (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, found word count/total, and the Finnish names of any activated hints.
+- **Animations**: Invalid submission triggers a shake animation (`word-shake`, 0.4s) on the input row. Honeycomb hexagons scale down on `pointerdown` for press feedback. A rank-up notification ("Uusi taso: …!") is shown for 3 seconds when score crosses a rank threshold.
+- **Progress bar**: A thin bar below the score/rank row shows progress toward the next rank (`progressToNextRank` computed, animates via CSS transition).
+- **Re-submit highlight**: When a player submits an already-found word, that word flashes orange in the found words list for 1.5 s (`lastResubmittedWord` ref), alongside the "Löysit jo tämän!" message.
+- **All-found banner**: When `allFound` computed is true (all words discovered), a "Kaikki N sanaa löydetty!" banner appears above the found words list.
+- **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints, identified by string IDs — once unlocked they persist in `hintsUnlocked` (Set) in `sanakenno_state` localStorage across sessions:
+  1. **`summary`** — total unfound word count combined with shortest/longest unfound word lengths.
+  2. **`letters`** — remaining unfound words grouped by starting letter (all puzzle letters shown; fully-found letters displayed muted at 0).
+  3. **`distribution`** — word count per length (e.g. "4: 12  5: 8  6: 3"), showing remaining per length; fully-found lengths are muted.
+  - Admin puzzle switches reset hint state together with game progress.
+- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, found word count/total, and the Finnish names of any activated hints.
 - **No auth required**: Public endpoint, no database usage.
 - **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 50.
 
