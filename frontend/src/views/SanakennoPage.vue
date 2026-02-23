@@ -183,7 +183,7 @@ async function fetchPuzzle(overrideIndex) {
     loadState()
     if (startedAt.value === null) startedAt.value = Date.now()
   } catch {
-    fetchError.value = 'Pelin lataaminen epäonnistui.'
+    fetchError.value = 'Lataus epäonnistui.'
   } finally {
     loading.value = false
   }
@@ -204,7 +204,7 @@ function resetGameState() {
 
 function choosePuzzle(idx) {
   const target = ((idx % totalPuzzles.value) + totalPuzzles.value) % totalPuzzles.value
-  if (foundWords.value.size > 0 && !confirm('Vaihda peli? Edistyminen nollataan.')) {
+  if (foundWords.value.size > 0 && !confirm('Vaihda peliä? Pelitilanne nollautuu.')) {
     puzzleInputDisplay.value = puzzleNumber.value + 1  // revert input
     return
   }
@@ -243,9 +243,9 @@ async function copyStatus() {
 
   try {
     await navigator.clipboard.writeText(lines.join('\n'))
-    showMessage('Tila kopioitu!', 'ok')
+    showMessage('Kopioitu!', 'ok')
   } catch {
-    showMessage('Kopiointi epäonnistui', 'error')
+    showMessage('Kopiointi ei onnistunut', 'error')
   }
 }
 
@@ -415,7 +415,7 @@ onUnmounted(() => {
         aria-label="Säännöt"
       >
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-semibold" style="color: var(--color-text-primary);">Kuinka pelata</h2>
+          <h2 class="text-lg font-semibold" style="color: var(--color-text-primary);">Ohjeet</h2>
           <button
             @click="showRules = false"
             class="p-1 rounded hover:bg-white/10 text-xl leading-none"
@@ -425,12 +425,12 @@ onUnmounted(() => {
         </div>
 
         <div class="text-sm space-y-4" style="color: var(--color-text-secondary);">
-          <p>Löydä mahdollisimman monta sanaa käyttäen annettuja seitsemää kirjainta.</p>
+          <p>Löydä mahdollisimman monta sanaa seitsemästä annetusta kirjaimesta.</p>
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Jokaisen sanan täytyy:</p>
             <ul class="space-y-1 list-none pl-0">
-              <li>✦ Sisältää <span style="color: var(--color-accent);">oranssi keskikirjain</span></li>
+              <li>✦ Sisältää <span style="color: var(--color-accent);">oranssin keskikirjaimen</span></li>
               <li>✦ Olla vähintään 4 kirjainta pitkä</li>
               <li>✦ Koostua vain annetuista kirjaimista — samaa kirjainta voi käyttää useasti</li>
               <li>✦ Löytyä suomen kielen sanakirjasta</li>
@@ -441,24 +441,24 @@ onUnmounted(() => {
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Pisteytys:</p>
             <ul class="space-y-1 list-none pl-0">
               <li>✦ 4-kirjaiminen sana = 1 piste</li>
-              <li>✦ Pidempi sana = pisteitä yhtä monta kuin kirjaimia</li>
-              <li>✦ Pangrammi (kaikki 7 kirjainta mukana) = +7 bonuspistettä</li>
+              <li>✦ Pidempi sana = pisteitä sanan pituuden verran</li>
+              <li>✦ Pangrammi (kaikki 7 kirjainta käytetty) = +7 lisäpistettä</li>
             </ul>
           </div>
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Yhdyssanat:</p>
-            <p>Yhdysviivallisia sanoja (esim. <span style="font-family: var(--font-mono);">palo-ovi</span>) voi kirjoittaa joko viivalla tai ilman.</p>
+            <p>Yhdysviivallisen sanan voi kirjoittaa myös ilman viivaa — esim. <span style="font-family: var(--font-mono);">palo-ovi</span> tai <span style="font-family: var(--font-mono);">paloovi</span>.</p>
           </div>
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Tasot:</p>
-            <p>Pistesaldosi määrittää tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno</span></p>
+            <p>Pisteesi määrittävät tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno</span>.</p>
           </div>
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">💡 Avut:</p>
-            <p>Voit avata kolme vihjetyyppiä — ne aktivoituvat pysyvästi pelin ajaksi.</p>
+            <p>Kolme vihjettä, jotka jäävät auki koko pelin ajaksi.</p>
           </div>
         </div>
       </div>
@@ -643,7 +643,7 @@ onUnmounted(() => {
           style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
           @click="copyStatus"
         >
-          📋 Kopioi tila
+          📋 Jaa tulos
         </button>
       </div>
 
