@@ -343,9 +343,12 @@ onUnmounted(() => {
 
 <template>
   <!-- Minimal standalone top bar -->
-  <div class="max-w-sm mx-auto flex justify-between items-center mb-6">
+  <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
     <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
     <ThemeToggle style="color: var(--color-text-tertiary);" />
+  </div>
+  <div class="max-w-sm mx-auto mb-5">
+    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno</h1>
   </div>
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
