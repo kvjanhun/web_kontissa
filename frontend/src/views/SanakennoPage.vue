@@ -1,6 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
+import ThemeToggle from '../components/ThemeToggle.vue'
 
 const { isAdmin } = useAuth()
 
@@ -341,6 +342,12 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <!-- Minimal standalone top bar -->
+  <div class="max-w-sm mx-auto flex justify-between items-center mb-6">
+    <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
+    <ThemeToggle style="color: var(--color-text-tertiary);" />
+  </div>
+
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
   <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
     <!-- Loading / error -->

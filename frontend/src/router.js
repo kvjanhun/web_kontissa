@@ -46,7 +46,7 @@ export const routes = [
   {
     path: '/sanakenno',
     component: () => import('./views/SanakennoPage.vue'),
-    meta: { titleKey: 'title.sanakenno' }
+    meta: { titleKey: 'title.sanakenno', standalone: true }
   },
   { path: '/:pathMatch(.*)*', component: NotFound, meta: { titleKey: 'title.notFound' } }
 ]
