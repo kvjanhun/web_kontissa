@@ -193,15 +193,14 @@ function formatElapsed(ms) {
 
 async function copyStatus() {
   const elapsed = startedAt.value ? formatElapsed(Date.now() - startedAt.value) : '?'
-  const hintLabels = { count: 'sanojen määrä', letters: 'kirjaimet', lengths: 'pituudet' }
-  const hintList = [...hintsUnlocked.value].map(h => hintLabels[h]).join(', ')
+  const hintEmojis = '💡'.repeat(hintsUnlocked.value.size) || '–'
 
   const lines = [
     `Sanakenno — Peli ${(puzzleNumber.value ?? 0) + 1}`,
     `⏱ ${elapsed} | ${rank.value}`,
-    `${score.value}/${puzzle.value?.max_score ?? '?'} pistettä | ${foundWords.value.size}/${allWords.value.length} sanaa`,
+    `${score.value}/${puzzle.value?.max_score ?? '?'} pistettä`,
+    `Avut: ${hintEmojis}`,
   ]
-  if (hintList) lines.push(`💡 Vihjeet: ${hintList}`)
 
   try {
     await navigator.clipboard.writeText(lines.join('\n'))
