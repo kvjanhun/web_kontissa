@@ -1,10 +1,12 @@
+import json
+import random
 from datetime import date
 from flask import jsonify, request
 from flask_login import current_user, login_required
 import os
 
 from app import app
-from app.models import db, BlockedWord
+from app.models import db, BlockedWord, BeeConfig
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -28,7 +30,6 @@ PUZZLES = [
     {"center": "v", "outer": ["e", "i", "l", "m", "n", "r"]},       # 50 words
     {"center": "s", "outer": ["e", "h", "k", "r", "t", "u"]},       # 65 words
     {"center": "h", "outer": ["d", "e", "k", "l", "t", "ä"]},       # 49 words
-    {"center": "e", "outer": ["a", "h", "j", "n", "p", "u"]},       # 27 words
     {"center": "p", "outer": ["a", "r", "u", "y", "ä", "ö"]},       # 37 words
     {"center": "d", "outer": ["a", "i", "n", "o", "t", "u"]},       # 34 words
     {"center": "j", "outer": ["k", "n", "s", "t", "ä", "ö"]},       # 20 words
@@ -36,36 +37,28 @@ PUZZLES = [
     {"center": "u", "outer": ["a", "e", "h", "i", "r", "v"]},       # 46 words
     {"center": "d", "outer": ["e", "i", "l", "n", "s", "v"]},       # 27 words
     {"center": "n", "outer": ["e", "h", "i", "t", "y", "ö"]},       # 63 words
-    {"center": "i", "outer": ["f", "h", "l", "m", "t", "ä"]},       # 56 words
-    {"center": "ö", "outer": ["i", "p", "r", "s", "t", "y"]},       # 57 words
     {"center": "o", "outer": ["a", "d", "h", "i", "m", "u"]},       # 30 words
     {"center": "d", "outer": ["a", "e", "i", "l", "n", "u"]},       # 36 words
     {"center": "y", "outer": ["d", "h", "j", "r", "s", "ä"]},       # 41 words
     {"center": "h", "outer": ["a", "e", "l", "s", "t", "v"]},       # 59 words
     {"center": "y", "outer": ["e", "i", "k", "l", "t", "v"]},       # 53 words
-    {"center": "ö", "outer": ["h", "i", "k", "s", "y", "ä"]},       # 39 words
     {"center": "e", "outer": ["h", "m", "n", "o", "p", "r"]},       # 29 words
     {"center": "e", "outer": ["a", "j", "o", "t", "u", "ä"]},       # 24 words
     {"center": "u", "outer": ["a", "e", "j", "l", "n", "o"]},       # 53 words
     {"center": "s", "outer": ["e", "k", "l", "n", "ä", "ö"]},       # 53 words
     {"center": "u", "outer": ["e", "i", "l", "m", "p", "ä"]},       # 57 words
     {"center": "p", "outer": ["i", "l", "s", "v", "y", "ä"]},       # 77 words
-    {"center": "m", "outer": ["a", "c", "g", "i", "n", "p"]},       # 34 words
     {"center": "v", "outer": ["h", "i", "r", "s", "t", "ä"]},       # 72 words
     {"center": "i", "outer": ["k", "t", "v", "y", "ä", "ö"]},       # 49 words
     {"center": "m", "outer": ["i", "n", "t", "y", "ä", "ö"]},       # 64 words
     {"center": "t", "outer": ["a", "d", "h", "m", "n", "o"]},       # 73 words
-    {"center": "ö", "outer": ["a", "l", "o", "p", "t", "y"]},       # 21 words
     {"center": "i", "outer": ["a", "h", "n", "r", "u", "ä"]},       # 65 words
     {"center": "s", "outer": ["m", "n", "o", "t", "u", "ä"]},       # 65 words
     {"center": "o", "outer": ["a", "b", "d", "i", "k", "r"]},       # 65 words
     {"center": "i", "outer": ["h", "k", "m", "s", "v", "y"]},       # 39 words
-    {"center": "s", "outer": ["d", "e", "f", "i", "m", "y"]},       # 32 words
     {"center": "t", "outer": ["a", "e", "g", "h", "r", "y"]},       # 42 words
     {"center": "o", "outer": ["a", "d", "h", "i", "j", "p"]},       # 40 words
-    {"center": "a", "outer": ["b", "g", "i", "l", "r", "u"]},       # 49 words
     {"center": "n", "outer": ["e", "i", "l", "v", "y", "ö"]},       # 41 words
-    {"center": "e", "outer": ["j", "n", "s", "v", "ä", "ö"]},       # 25 words
 ]
 
 
@@ -112,9 +105,51 @@ def _get_puzzle_data(idx):
     return _PUZZLE_CACHE[idx]
 
 
+def _get_puzzle_for_date(date_str):
+    """Return the puzzle index assigned to date_str (YYYY-MM-DD).
+
+    Each date is assigned exactly once, drawing from a shuffled queue that
+    ensures every puzzle is used once before any repeats.  State persists in
+    the BeeConfig table.  Falls back to a deterministic rotation if the DB
+    is unavailable.
+    """
+    try:
+        assignments_row = db.session.get(BeeConfig, 'puzzle_assignments')
+        assignments = json.loads(assignments_row.value) if assignments_row else {}
+
+        if date_str in assignments:
+            return assignments[date_str]
+
+        queue_row = db.session.get(BeeConfig, 'puzzle_queue')
+        queue = json.loads(queue_row.value) if queue_row else []
+
+        if not queue:
+            queue = list(range(len(PUZZLES)))
+            random.shuffle(queue)
+
+        puzzle_idx = queue.pop(0)
+        assignments[date_str] = puzzle_idx
+
+        if queue_row:
+            queue_row.value = json.dumps(queue)
+        else:
+            db.session.add(BeeConfig(key='puzzle_queue', value=json.dumps(queue)))
+
+        if assignments_row:
+            assignments_row.value = json.dumps(assignments)
+        else:
+            db.session.add(BeeConfig(key='puzzle_assignments', value=json.dumps(assignments)))
+
+        db.session.commit()
+        return puzzle_idx
+    except Exception:
+        return date.today().toordinal() % len(PUZZLES)
+
+
 @app.route("/api/bee")
 def bee():
-    puzzle_number = date.today().toordinal() % len(PUZZLES)
+    today_str = date.today().isoformat()
+    puzzle_number = _get_puzzle_for_date(today_str)
 
     override = request.args.get("puzzle", type=int)
     if (

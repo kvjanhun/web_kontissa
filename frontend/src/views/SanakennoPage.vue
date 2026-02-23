@@ -310,6 +310,7 @@ async function copyStatus() {
     `⏱ ${elapsed} | ${rank.value}`,
     `${score.value}/${puzzle.value?.max_score ?? '?'} pistettä`,
     `Avut: ${hintEmojis}`,
+    `https://erez.ac/sanakenno`,
   ]
 
   try {
@@ -439,7 +440,7 @@ function submitWord() {
   if (rankAfter !== rankBefore) {
     showMessage('Uusi taso: ' + rankAfter + '!', 'special', 3000)
   } else if (isPangram) {
-    showMessage('Pangrammi! \uD83D\uDC1D', 'special')
+    showMessage('Pangrammi!', 'special')
   } else {
     showMessage(`+${pts + bonus}`, 'ok')
   }

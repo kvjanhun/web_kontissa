@@ -22,8 +22,8 @@ class TestPuzzleCatalogue:
     """Validate the PUZZLES list itself — catches misconfigured entries before
     they ever reach a player."""
 
-    def test_has_fifty_puzzles(self):
-        assert len(PUZZLES) == 50
+    def test_has_41_puzzles(self):
+        assert len(PUZZLES) == 41
 
     def test_every_puzzle_has_center(self):
         for i, p in enumerate(PUZZLES):
@@ -220,113 +220,56 @@ class TestBeeEndpoint:
 
 
 # ---------------------------------------------------------------------------
-# Puzzle rotation — deterministic via date mock
+# Puzzle schedule — randomized per-date assignment
 # ---------------------------------------------------------------------------
 
-class TestPuzzleRotation:
-    """Verify that the puzzle rotates daily using toordinal() % len(PUZZLES)."""
+class TestPuzzleSchedule:
+    """Verify that each date gets a consistent, valid puzzle from the schedule."""
 
-    def test_puzzle_number_is_ordinal_mod_puzzle_count(self, client):
-        """Mocking date.today() lets us assert the exact puzzle_number returned."""
-        from datetime import date
+    def test_same_day_returns_same_puzzle(self, client):
+        """Two requests on the same day always return the same puzzle."""
+        data1 = client.get("/api/bee").get_json()
+        data2 = client.get("/api/bee").get_json()
+        assert data1["puzzle_number"] == data2["puzzle_number"]
 
-        # Pick an ordinal that gives a known remainder
-        target_idx = 17
-        # Find an ordinal whose remainder equals target_idx
-        # date.min.toordinal() == 1
-        ordinal = target_idx  # 17 % 50 == 17, assuming len(PUZZLES)==50
-        fake_date = date.fromordinal(ordinal)
-
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = fake_date
-            data = client.get("/api/bee").get_json()
-
-        assert data["puzzle_number"] == target_idx
-
-    def test_puzzle_wraps_around_after_50_days(self, client):
-        """After 50 days the same puzzle repeats (cycle length == number of puzzles)."""
-        from datetime import date, timedelta
-
-        base = date(2025, 1, 1)
-        cycle = len(PUZZLES)  # 50
-
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = base
-            data_day0 = client.get("/api/bee").get_json()
-
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = base + timedelta(days=cycle)
-            data_day50 = client.get("/api/bee").get_json()
-
-        assert data_day0["puzzle_number"] == data_day50["puzzle_number"]
-        assert data_day0["center"] == data_day50["center"]
-        assert data_day0["letters"] == data_day50["letters"]
-
-    def test_adjacent_days_give_different_puzzles(self, client):
-        """Consecutive days should (almost always) serve a different puzzle.
-        We check at a point where the boundary is known."""
-        from datetime import date, timedelta
-
-        # Use day 0 of a cycle and day 1; they are guaranteed to differ
-        # because puzzle 0 and puzzle 1 have different center letters.
-        cycle_start_ordinal = len(PUZZLES)  # ordinal % 50 == 0
-        day0 = date.fromordinal(cycle_start_ordinal)
-        day1 = date.fromordinal(cycle_start_ordinal + 1)
-
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = day0
-            data0 = client.get("/api/bee").get_json()
-
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = day1
-            data1 = client.get("/api/bee").get_json()
-
-        assert data0["puzzle_number"] != data1["puzzle_number"]
+    def test_puzzle_number_in_valid_range(self, client):
+        data = client.get("/api/bee").get_json()
+        assert 0 <= data["puzzle_number"] < len(PUZZLES)
 
 
 # ---------------------------------------------------------------------------
-# Known-puzzle integration test (deterministic)
+# Known-puzzle integration test — uses admin override
 # ---------------------------------------------------------------------------
 
 class TestKnownPuzzle:
-    """Run the API against a specific pinned puzzle so that assertions are
-    independent of which puzzle today happens to rotate to."""
+    """Run the API against a specific pinned puzzle via admin override so that
+    assertions are independent of which puzzle today happens to be assigned."""
 
-    # Puzzle index 0: center='r', outer=['e','n','p','s','y','ä']
     PUZZLE_IDX = 0
     PUZZLE = PUZZLES[0]
 
-    @pytest.fixture
-    def pinned_client(self, client):
-        """Client that always serves puzzle index 0."""
-        from datetime import date
-        # ordinal 0 % 50 == 0 — but ordinal 0 is invalid; use 50 instead (50 % 50 == 0)
-        with patch("app.api.bee.date") as mock_date:
-            mock_date.today.return_value = date.fromordinal(len(PUZZLES))
-            yield client
-
-    def test_known_puzzle_center(self, pinned_client):
-        data = pinned_client.get("/api/bee").get_json()
+    def test_known_puzzle_center(self, logged_in_admin):
+        data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
         assert data["center"] == self.PUZZLE["center"]
 
-    def test_known_puzzle_letters(self, pinned_client):
-        data = pinned_client.get("/api/bee").get_json()
+    def test_known_puzzle_letters(self, logged_in_admin):
+        data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
         assert set(data["letters"]) == set(self.PUZZLE["outer"])
 
-    def test_known_puzzle_words_contain_center(self, pinned_client):
-        data = pinned_client.get("/api/bee").get_json()
+    def test_known_puzzle_words_contain_center(self, logged_in_admin):
+        data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
         center = data["center"]
         for word in data["words"]:
             assert center in word
 
-    def test_known_puzzle_max_score_correct(self, pinned_client):
-        data = pinned_client.get("/api/bee").get_json()
+    def test_known_puzzle_max_score_correct(self, logged_in_admin):
+        data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
         all_letters = frozenset(data["letters"] + [data["center"]])
         expected = sum(_score_word(w, all_letters) for w in data["words"])
         assert data["max_score"] == expected
 
-    def test_known_puzzle_number_is_zero(self, pinned_client):
-        data = pinned_client.get("/api/bee").get_json()
+    def test_known_puzzle_number_is_zero(self, logged_in_admin):
+        data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
         assert data["puzzle_number"] == self.PUZZLE_IDX
 
 

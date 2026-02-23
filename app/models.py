@@ -113,3 +113,10 @@ class BlockedWord(db.Model):
     __tablename__ = 'blocked_words'
     id = db.Column(db.Integer, primary_key=True)
     word = db.Column(db.String(100), unique=True, nullable=False)
+
+
+class BeeConfig(db.Model):
+    """Key-value store for Sanakenno puzzle scheduling state."""
+    __tablename__ = 'bee_config'
+    key = db.Column(db.String(50), primary_key=True)
+    value = db.Column(db.Text, nullable=False)
