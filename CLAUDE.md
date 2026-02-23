@@ -216,6 +216,12 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
 - **Admin puzzle switcher**: Admins see a number input (1-indexed) and a "Satunnainen" (random) button instead of the daily puzzle. Selected puzzle persists in `localStorage` under key `sanakenno_admin_puzzle`. Confirmation is only requested if there is existing progress to lose. Regular users always see the daily rotation — the admin override is a private test mode only.
 - **Found words sort**: Words are sorted alphabetically, with word length (shortest first) as a tiebreaker.
+- **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints — once unlocked they persist in `sanakenno_state` localStorage across sessions:
+  1. **Sanojen määrä** — total word count for today's puzzle.
+  2. **Kirjainvihjeet** — remaining unfound words grouped by starting letter (all puzzle letters shown; letters fully found are displayed muted at 0).
+  3. **Pituudet** — shortest and longest unfound word lengths; shows a celebration message when all words are found.
+  - `hintsUnlocked` (Set) and `startedAt` (epoch ms) are now additional fields in the `sanakenno_state` localStorage entry. Admin puzzle switches reset hint state together with game progress.
+- **Kopioi tila (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, found word count/total, and the Finnish names of any activated hints.
 - **No auth required**: Public endpoint, no database usage.
 - **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 50.
 
