@@ -4,6 +4,10 @@ import { useAuth } from '../composables/useAuth'
 
 const { isAdmin } = useAuth()
 
+// --- Persistence keys ---
+const STATE_KEY = 'sanakenno_state'
+const ADMIN_PUZZLE_KEY = 'sanakenno_admin_puzzle'
+
 // --- State ---
 const puzzle = ref(null)
 const outerLetters = ref([])
@@ -17,6 +21,7 @@ const fetchError = ref('')
 const puzzleNumber = ref(null)
 const totalPuzzles = ref(null)
 const showRanks = ref(false)
+const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
@@ -54,8 +59,32 @@ const rankThresholds = computed(() => {
   }))
 })
 
-const sortedFoundWords = computed(() => [...foundWords.value].sort())
+// Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
+const sortedFoundWords = computed(() =>
+  [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
+)
 
+// --- State persistence ---
+function saveState() {
+  localStorage.setItem(STATE_KEY, JSON.stringify({
+    puzzleNumber: puzzleNumber.value,
+    foundWords: [...foundWords.value],
+    score: score.value,
+  }))
+}
+
+function loadState() {
+  try {
+    const raw = localStorage.getItem(STATE_KEY)
+    if (!raw) return
+    const saved = JSON.parse(raw)
+    if (saved.puzzleNumber !== puzzleNumber.value) return
+    foundWords.value = new Set(saved.foundWords)
+    score.value = saved.score
+  } catch { /* ignore corrupt data */ }
+}
+
+// --- Puzzle fetching ---
 async function fetchPuzzle(overrideIndex) {
   loading.value = true
   fetchError.value = ''
@@ -68,6 +97,8 @@ async function fetchPuzzle(overrideIndex) {
     outerLetters.value = [...data.letters]
     puzzleNumber.value = data.puzzle_number
     totalPuzzles.value = data.total_puzzles
+    puzzleInputDisplay.value = data.puzzle_number + 1
+    loadState()
   } catch {
     fetchError.value = 'Pelin lataaminen epäonnistui.'
   } finally {
@@ -75,15 +106,28 @@ async function fetchPuzzle(overrideIndex) {
   }
 }
 
-function switchPuzzle(delta) {
-  if (!confirm('Vaihda peli? Edistyminen nollataan.')) return
-  const next = ((puzzleNumber.value + delta) % totalPuzzles.value + totalPuzzles.value) % totalPuzzles.value
+// --- Admin puzzle switcher ---
+function resetGameState() {
   currentWord.value = ''
   foundWords.value = new Set()
   score.value = 0
   message.value = ''
   showRanks.value = false
-  fetchPuzzle(next)
+}
+
+function choosePuzzle(idx) {
+  const target = ((idx % totalPuzzles.value) + totalPuzzles.value) % totalPuzzles.value
+  if (foundWords.value.size > 0 && !confirm('Vaihda peli? Edistyminen nollataan.')) {
+    puzzleInputDisplay.value = puzzleNumber.value + 1  // revert input
+    return
+  }
+  resetGameState()
+  localStorage.setItem(ADMIN_PUZZLE_KEY, String(target))
+  fetchPuzzle(target)
+}
+
+function randomPuzzle() {
+  choosePuzzle(Math.floor(Math.random() * totalPuzzles.value))
 }
 
 // --- Honeycomb geometry ---
@@ -165,6 +209,7 @@ function submitWord() {
 
   foundWords.value = new Set([...foundWords.value, word])
   score.value += pts + bonus
+  saveState()
 
   if (isPangram) {
     showMessage('Pangrammi! \uD83D\uDC1D', 'special')
@@ -199,7 +244,13 @@ function handleKeydown(e) {
 
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
-  fetchPuzzle()
+  if (isAdmin.value) {
+    const saved = localStorage.getItem(ADMIN_PUZZLE_KEY)
+    const idx = saved !== null ? parseInt(saved, 10) : null
+    fetchPuzzle(!isNaN(idx) ? idx : null)
+  } else {
+    fetchPuzzle()
+  }
 })
 
 onUnmounted(() => {
@@ -209,7 +260,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-sm mx-auto">
+  <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
+  <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
     <!-- Loading / error -->
     <div v-if="loading" class="text-center py-16" style="color: var(--color-text-secondary)">
       Ladataan...
@@ -237,19 +289,23 @@ onUnmounted(() => {
 
       <!-- Admin puzzle switcher -->
       <div v-if="isAdmin && totalPuzzles" class="flex items-center gap-2 mb-1 text-xs" style="color: var(--color-text-tertiary);">
-        Peli {{ puzzleNumber + 1 }}/{{ totalPuzzles }}
+        <span>Peli</span>
+        <input
+          type="number"
+          min="1"
+          :max="totalPuzzles"
+          v-model.number="puzzleInputDisplay"
+          @change="choosePuzzle(puzzleInputDisplay - 1)"
+          class="rounded text-center"
+          style="width: 3.5rem; background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border); padding: 1px 4px;"
+          aria-label="Pelin numero"
+        />
+        <span>/{{ totalPuzzles }}</span>
         <button
-          class="px-1.5 py-0.5 rounded"
+          class="px-2 py-0.5 rounded"
           style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-          @click="switchPuzzle(-1)"
-          aria-label="Edellinen peli"
-        >◀</button>
-        <button
-          class="px-1.5 py-0.5 rounded"
-          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-          @click="switchPuzzle(1)"
-          aria-label="Seuraava peli"
-        >▶</button>
+          @click="randomPuzzle"
+        >Satunnainen</button>
       </div>
 
       <!-- Rank thresholds -->

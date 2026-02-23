@@ -68,7 +68,7 @@ web_kontissa/
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
 │           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
-│           ├── BeeGamePage.vue      # Sanakenno (Finnish Spelling Bee) game
+│           ├── SanakennoPage.vue    # Sanakenno (Finnish Spelling Bee) game
 │           └── NotFound.vue    # 404
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
@@ -205,13 +205,17 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 ## Sanakenno (Finnish Spelling Bee)
 
-Public word game at `/bee`. NYT Spelling Bee rules with a Finnish word list.
+Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling Bee rules with a Finnish word list. Nav shows "Sanakenno" in both languages. Backend API remains `GET /api/bee`.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
 - **Puzzles**: 50 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 50-day cycle via `date.today().toordinal() % len(PUZZLES)`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 10 Finnish rank levels from Aloittelija (0%) to Mehiläiskuningatar (100%) based on % of max_score.
-- **Frontend**: `BeeGamePage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
+- **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
+- **Touch zoom prevention**: `touch-action: manipulation` on the root game div prevents double-tap zoom on iOS Safari.
+- **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
+- **Admin puzzle switcher**: Admins see a number input (1-indexed) and a "Satunnainen" (random) button instead of the daily puzzle. Selected puzzle persists in `localStorage` under key `sanakenno_admin_puzzle`. Confirmation is only requested if there is existing progress to lose. Regular users always see the daily rotation — the admin override is a private test mode only.
+- **Found words sort**: Words are sorted alphabetically, with word length (shortest first) as a tiebreaker.
 - **No auth required**: Public endpoint, no database usage.
 - **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 50.
 
