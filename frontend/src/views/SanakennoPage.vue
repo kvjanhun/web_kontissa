@@ -228,6 +228,7 @@ function showMessage(msg, type) {
 
 function handleKeydown(e) {
   if (e.ctrlKey || e.altKey || e.metaKey) return
+  if (e.target.tagName === 'INPUT') return
   if (!puzzle.value) return
 
   const key = e.key.toLowerCase()
