@@ -382,3 +382,62 @@ class TestPuzzleOverride:
         all_letters = frozenset([p["center"]] + p["outer"])
         expected_score = sum(_score_word(w, all_letters) for w in data["words"])
         assert data["max_score"] == expected_score
+
+
+# ---------------------------------------------------------------------------
+# Admin word blocking
+# ---------------------------------------------------------------------------
+
+class TestBlockWord:
+    """Admin can permanently remove a word from the puzzle pool."""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        """Ensure a clean puzzle cache for each test."""
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        yield
+        _PUZZLE_CACHE.clear()
+
+    def test_admin_can_block_word(self, logged_in_admin):
+        words_before = logged_in_admin.get("/api/bee").get_json()["words"]
+        assert len(words_before) > 0
+        word = words_before[0]
+
+        res = logged_in_admin.post("/api/bee/block", json={"word": word})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["blocked"] is True
+        assert data["word"] == word
+
+        words_after = logged_in_admin.get("/api/bee").get_json()["words"]
+        assert word not in words_after
+        assert len(words_after) == len(words_before) - 1
+
+    def test_blocking_reduces_max_score(self, logged_in_admin):
+        puzzle_data = logged_in_admin.get("/api/bee").get_json()
+        word = puzzle_data["words"][0]
+        score_before = puzzle_data["max_score"]
+
+        logged_in_admin.post("/api/bee/block", json={"word": word})
+
+        score_after = logged_in_admin.get("/api/bee").get_json()["max_score"]
+        assert score_after < score_before
+
+    def test_blocking_same_word_twice_is_idempotent(self, logged_in_admin):
+        word = logged_in_admin.get("/api/bee").get_json()["words"][0]
+        logged_in_admin.post("/api/bee/block", json={"word": word})
+        res = logged_in_admin.post("/api/bee/block", json={"word": word})
+        assert res.status_code == 200
+
+    def test_non_admin_cannot_block(self, logged_in_user):
+        res = logged_in_user.post("/api/bee/block", json={"word": "test"})
+        assert res.status_code == 403
+
+    def test_unauthenticated_cannot_block(self, client):
+        res = client.post("/api/bee/block", json={"word": "test"})
+        assert res.status_code == 401
+
+    def test_missing_word_field_returns_400(self, logged_in_admin):
+        res = logged_in_admin.post("/api/bee/block", json={})
+        assert res.status_code == 400

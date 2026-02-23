@@ -112,6 +112,30 @@ const remainingWords = computed(() =>
   allWords.value.filter(w => !foundWords.value.has(w)).sort((a, b) => a.localeCompare(b) || a.length - b.length)
 )
 
+async function blockWord(word) {
+  if (!confirm(`Remove "${word}" from the word list permanently?`)) return
+  try {
+    const res = await fetch('/api/bee/block', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ word }),
+    })
+    if (!res.ok) throw new Error()
+    // Update local state immediately without a full refetch
+    const letterSet = new Set([center.value, ...outerLetters.value])
+    const isPangram = [...letterSet].every(c => word.includes(c))
+    const pts = word.length === 4 ? 1 : word.length
+    const bonus = isPangram ? 7 : 0
+    puzzle.value = {
+      ...puzzle.value,
+      words: puzzle.value.words.filter(w => w !== word),
+      max_score: puzzle.value.max_score - pts - bonus,
+    }
+  } catch {
+    showMessage('Could not remove word', 'error')
+  }
+}
+
 // Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
 const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
@@ -860,10 +884,15 @@ onUnmounted(() => {
             <li
               v-for="word in col"
               :key="word"
-              class="text-sm py-0.5"
-              style="color: var(--color-text-tertiary); font-family: var(--font-mono);"
+              class="flex items-center gap-1 py-0.5"
             >
-              {{ word }}
+              <span class="text-sm" style="color: var(--color-text-tertiary); font-family: var(--font-mono);">{{ word }}</span>
+              <button
+                @click="blockWord(word)"
+                class="text-xs leading-none opacity-40 hover:opacity-100"
+                style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px;"
+                aria-label="Remove word"
+              >×</button>
             </li>
           </ul>
         </div>

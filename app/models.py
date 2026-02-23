@@ -106,3 +106,10 @@ class Step(db.Model):
             "position": self.position,
             "content": self.content,
         }
+
+
+class BlockedWord(db.Model):
+    """Admin-curated list of words excluded from all Sanakenno puzzles."""
+    __tablename__ = 'blocked_words'
+    id = db.Column(db.Integer, primary_key=True)
+    word = db.Column(db.String(100), unique=True, nullable=False)

@@ -1,9 +1,10 @@
 from datetime import date
 from flask import jsonify, request
-from flask_login import current_user
+from flask_login import current_user, login_required
 import os
 
 from app import app
+from app.models import db, BlockedWord
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -81,9 +82,16 @@ def _compute_puzzle(puzzle):
     all_letters = set([center] + outer)
     letter_frozenset = frozenset(all_letters)
 
+    try:
+        blocked = frozenset(bw.word for bw in BlockedWord.query.all())
+    except Exception:
+        blocked = frozenset()
+
     words = []
     max_score = 0
     for word in _ALL_WORDS:
+        if word in blocked:
+            continue
         if (
             len(word) >= 4
             and center in word
@@ -129,3 +137,22 @@ def bee():
             "total_puzzles": len(PUZZLES),
         }
     )
+
+
+@app.route("/api/bee/block", methods=["POST"])
+@login_required
+def bee_block_word():
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json() or {}
+    word = data.get("word", "").strip().lower()
+    if not word:
+        return jsonify({"error": "word required"}), 400
+
+    if not BlockedWord.query.filter_by(word=word).first():
+        db.session.add(BlockedWord(word=word))
+        db.session.commit()
+        _PUZZLE_CACHE.clear()
+
+    return jsonify({"word": word, "blocked": True})
