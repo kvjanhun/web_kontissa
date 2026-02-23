@@ -743,27 +743,29 @@ onUnmounted(() => {
       <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
         <!-- Hint 1: word count + min/max unfound lengths -->
-        <div class="flex items-start justify-between">
-          <span style="color: var(--color-text-secondary);">Sanojen määrä</span>
-          <div v-if="hintsUnlocked.has('summary')" class="text-right" style="font-family: var(--font-mono);">
-            <div style="color: var(--color-text-primary);">{{ allWords.length }} sanaa</div>
-            <div v-if="unfoundLengths" class="text-xs mt-0.5" style="color: var(--color-text-secondary);">
-              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
-            </div>
-            <div v-else class="text-xs mt-0.5" style="color: var(--color-accent);">kaikki löydetty</div>
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span style="color: var(--color-text-secondary);">Sanojen määrä</span>
+            <button
+              v-if="!hintsUnlocked.has('summary')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click="unlockHint('summary')"
+            >Aktivoi</button>
           </div>
-          <button
-            v-else
-            class="text-xs px-2 py-0.5 rounded"
-            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-            @click="unlockHint('summary')"
-          >Aktivoi</button>
+          <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
+            <span style="color: var(--color-text-primary);">{{ allWords.length }} sanaa</span>
+            <span v-if="unfoundLengths" class="ml-3" style="color: var(--color-text-secondary);">
+              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
+            </span>
+            <span v-else class="ml-3" style="color: var(--color-accent);">kaikki löydetty</span>
+          </div>
         </div>
 
         <!-- Hint 2: words left per first letter -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Kirjainvihjeet</span>
+            <span style="color: var(--color-text-secondary);">Alkukirjaimet</span>
             <button
               v-if="!hintsUnlocked.has('letters')"
               class="text-xs px-2 py-0.5 rounded"
