@@ -1,4 +1,5 @@
 import os
+import re
 from functools import wraps
 from flask import jsonify, redirect, request, url_for, Response, send_from_directory
 from flask_login import login_required, current_user
@@ -121,6 +122,25 @@ def api_delete_section(section_id):
     db.session.delete(section)
     db.session.commit()
     return jsonify({"message": "Section deleted"})
+
+
+@app.route("/sanakenno")
+def sanakenno_page():
+    """Serve the Sanakenno game with game-specific OG meta tags for link previews."""
+    index_path = os.path.join(DIST_DIR, "index.html")
+    try:
+        with open(index_path, encoding="utf-8") as f:
+            html = f.read()
+    except FileNotFoundError:
+        return send_from_directory(DIST_DIR, "index.html")
+
+    DESC = "Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli."
+    html = re.sub(r"<title>[^<]*</title>", "<title>Sanakenno \u2014 erez.ac</title>", html)
+    html = re.sub(r'<meta name="description"[^>]*>', f'<meta name="description" content="{DESC}">', html)
+    html = re.sub(r'<meta property="og:title"[^>]*>', '<meta property="og:title" content="Sanakenno \u2014 sanapeli">', html)
+    html = re.sub(r'<meta property="og:description"[^>]*>', f'<meta property="og:description" content="{DESC}">', html)
+    html = re.sub(r'<meta property="og:url"[^>]*>', '<meta property="og:url" content="https://erez.ac/sanakenno">', html)
+    return Response(html, mimetype="text/html")
 
 
 @app.route("/<path:path>")
