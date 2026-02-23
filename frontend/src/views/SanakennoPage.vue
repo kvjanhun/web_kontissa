@@ -29,16 +29,16 @@ const wordsSet = computed(() => new Set(puzzle.value?.words ?? []))
 const allLetters = computed(() => new Set([center.value, ...outerLetters.value]))
 
 const RANKS = [
-  { pct: 100, name: 'Mehiläiskuningatar \uD83C\uDF6F' },
-  { pct: 70,  name: 'Nero' },
-  { pct: 50,  name: 'Hämmästyttävä' },
-  { pct: 40,  name: 'Loistava' },
-  { pct: 25,  name: 'Kiva' },
-  { pct: 15,  name: 'Vakaa' },
-  { pct: 8,   name: 'Hyvä' },
-  { pct: 5,   name: 'Nouseva' },
+  { pct: 100, name: 'Täysi kenno' },
+  { pct: 70,  name: 'Ällistyttävä' },
+  { pct: 50,  name: 'Uskomaton' },
+  { pct: 40,  name: 'Taituri' },
+  { pct: 25,  name: 'Sanavalmis' },
+  { pct: 15,  name: 'Onnistuja' },
+  { pct: 8,   name: 'Nyt mennään!' },
+  { pct: 5,   name: 'No niin!' },
   { pct: 2,   name: 'Hyvä alku' },
-  { pct: 0,   name: 'Aloittelija' },
+  { pct: 0,   name: 'Etsi sanoja!' },
 ]
 
 const rank = computed(() => {
@@ -419,19 +419,19 @@ onUnmounted(() => {
 
       <!-- Found words -->
       <div v-if="foundWords.size > 0">
-        <p class="text-sm mb-2" style="color: var(--color-text-secondary);">
+        <p class="text-sm mb-1" style="color: var(--color-text-secondary);">
           Löydetyt sanat ({{ foundWords.size }}):
         </p>
-        <div class="flex flex-wrap gap-2">
-          <span
+        <ul>
+          <li
             v-for="word in sortedFoundWords"
             :key="word"
-            class="px-3 py-0.5 rounded-full text-sm"
-            style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
+            class="text-sm py-0.5"
+            style="color: var(--color-text-primary); font-family: var(--font-mono);"
           >
             {{ word }}
-          </span>
-        </div>
+          </li>
+        </ul>
       </div>
     </template>
   </div>
