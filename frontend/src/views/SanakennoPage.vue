@@ -422,12 +422,12 @@ onUnmounted(() => {
         <p class="text-sm mb-1" style="color: var(--color-text-secondary);">
           Löydetyt sanat ({{ foundWords.size }}):
         </p>
-        <ul>
+        <ul style="columns: 9rem; column-gap: 1.5rem;">
           <li
             v-for="word in sortedFoundWords"
             :key="word"
             class="text-sm py-0.5"
-            style="color: var(--color-text-primary); font-family: var(--font-mono);"
+            style="color: var(--color-text-primary); font-family: var(--font-mono); break-inside: avoid;"
           >
             {{ word }}
           </li>
