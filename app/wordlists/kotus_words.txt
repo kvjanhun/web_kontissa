@@ -13187,8 +13187,6 @@ hintelä
 hinteläkasvuinen
 hintsusti
 hinttari
-hintti
-hinttiys
 hioa
 hioke
 hiomahihna
@@ -13900,7 +13898,6 @@ hormonituotanto
 hormonivalmiste
 horna
 hornankattila
-horo
 horoskooppi
 horoskooppimerkki
 horre
@@ -14566,16 +14563,12 @@ huopaus
 huopauttaa
 huopikas
 huopua
-huora
-huorahtava
-huorata
 huorin
 huorintekijä
 huorinteko
 huoripukki
 huoritella
 huorittelu
-huoruus
 huostaan
 huostaanotto
 huostassa
@@ -17301,7 +17294,6 @@ input
 insatsi
 inseminaatio
 insertti
-insesti
 insidenssi
 insinööri
 insinööriajo
@@ -19794,7 +19786,6 @@ justiinsa
 jutaa
 jute
 jutella
-jutku
 jutskata
 jutsku
 juttelu
@@ -32356,7 +32347,6 @@ kullanvärinen
 kullastaa
 kullata
 kullero
-kulli
 kulloinenkin
 kulloinkin
 kulma
@@ -33632,7 +33622,6 @@ kusiluistin
 kusinen
 kusiputka
 kusipäinen
-kusipää
 kuskailla
 kuskata
 kuskaus
@@ -34833,7 +34822,6 @@ kyrmyniskainen
 kyrmyssä
 kyrmyyn
 kyrpiintyä
-kyrpä
 kyrsiä
 kyrsä
 kyrvähtää
@@ -41836,7 +41824,6 @@ luterilainen
 luterilaisuus
 luti
 lutikka
-lutka
 lutkuttaa
 lutkutus
 lutukka
@@ -44656,7 +44643,6 @@ mannaryynipuuro
 mannaryynivelli
 mannasuurimo
 mannavelli
-manne
 mannekiini
 mannekiinikoulu
 mannekiinikurssi
@@ -48127,7 +48113,6 @@ muljautella
 muljauttaa
 mulkaista
 mulkero
-mulkku
 mulkoilla
 mulkosilmä
 mulkosilmäinen
@@ -50243,7 +50228,6 @@ narskutella
 narskuttaa
 narskuttelu
 narskutus
-narttu
 narttukissa
 narttukoira
 naru
@@ -50308,9 +50292,7 @@ natronlipeä
 natsa
 natsata
 natsi
-natsilainen
 natsismi
-natsitervehdys
 naturalismi
 naturalisti
 naturalistinen
@@ -50439,9 +50421,6 @@ navigointi
 navigointilaite
 neandertalilainen
 neandertalinihminen
-neekeri
-neekeriorja
-neekeriorjuus
 nefriitti
 nega
 negaatio
@@ -57001,15 +56980,10 @@ pedanttinen
 pedanttisesti
 pedanttisuus
 pedata
-pederasti
-pederastia
-pederastinen
 pediatri
 pediatria
 pedikyristi
 pedikyyri
-pedofiili
-pedofiilinen
 pedofilia
 peeaa
 peesata
@@ -57879,7 +57853,6 @@ perperi
 persaukinen
 persaukset
 perse
-perseennuolija
 perseillä
 perseily
 persia
@@ -65823,10 +65796,7 @@ raipparangaistus
 raippavero
 rairuoho
 raiska
-raiskaaja
 raiskaantua
-raiskata
-raiskaus
 raiskautua
 raiskio
 raisu
@@ -69439,7 +69409,6 @@ rundi
 runebergiläinen
 runebergintorttu
 runkata
-runkkari
 runkkaus
 runko
 runkohinta
@@ -70358,8 +70327,6 @@ ryskää
 ryssitellä
 ryssittely
 ryssiä
-ryssä
-ryssäviha
 rysty
 rystylaukaus
 rystylyönti
