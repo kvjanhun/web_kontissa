@@ -48,15 +48,14 @@ const allWords = computed(() => puzzle.value?.words ?? [])
 const RANKS = [
   { pct: 100, name: 'Täysi kenno' },
   { pct: 70,  name: 'Ällistyttävä' },
-  { pct: 50,  name: 'Uskomaton' },
-  { pct: 40,  name: 'Taituri' },
-  { pct: 25,  name: 'Sanavalmis' },
-  { pct: 15,  name: 'Onnistuja' },
-  { pct: 8,   name: 'Nyt mennään!' },
-  { pct: 5,   name: 'No niin!' },
+  { pct: 40,  name: 'Sanavalmis' },
+  { pct: 20,  name: 'Onnistuja' },
+  { pct: 10,  name: 'Nyt mennään!' },
   { pct: 2,   name: 'Hyvä alku' },
   { pct: 0,   name: 'Etsi sanoja!' },
 ]
+
+const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏' }
 
 const rank = computed(() => {
   if (!puzzle.value || puzzle.value.max_score === 0) return RANKS[RANKS.length - 1].name
@@ -177,6 +176,12 @@ const unfoundLengths = computed(() => {
     if (w.length > longest) longest = w.length
   }
   return { shortest, longest }
+})
+
+const pangramCount = computed(() => {
+  if (!puzzle.value) return 0
+  const letterSet = new Set([center.value, ...outerLetters.value])
+  return allWords.value.filter(w => [...letterSet].every(c => w.includes(c))).length
 })
 
 // Hint 3: word count per length (remaining)
@@ -324,7 +329,7 @@ function formatElapsed(ms) {
 
 async function copyStatus() {
   const elapsed = startedAt.value ? formatElapsed(getElapsedMs()) : '?'
-  const hintEmojis = '💡'.repeat(hintsUnlocked.value.size) || '–'
+  const hintEmojis = [...hintsUnlocked.value].map(id => HINT_ICONS[id] || '').join('') || '–'
 
   const lines = [
     `Sanakenno — Peli ${(puzzleNumber.value ?? 0) + 1}`,
@@ -802,10 +807,10 @@ onUnmounted(() => {
       <!-- Hints panel -->
       <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
-        <!-- Hint 1: word count + min/max unfound lengths -->
+        <!-- Hint 1: overview — remaining words, pangrams, length range -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Sanojen määrä</span>
+            <span style="color: var(--color-text-secondary);">Yleiskuva 📊</span>
             <button
               v-if="!hintsUnlocked.has('summary')"
               class="text-xs px-2 py-0.5 rounded"
@@ -814,18 +819,21 @@ onUnmounted(() => {
             >Aktivoi</button>
           </div>
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
-            <span style="color: var(--color-text-primary);">{{ allWords.length }} sanaa</span>
-            <span v-if="unfoundLengths" class="ml-3" style="color: var(--color-text-secondary);">
+            <div>
+              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä</span>
+              <span class="ml-3" style="color: var(--color-text-secondary);">{{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+            </div>
+            <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
               lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
-            </span>
-            <span v-else class="ml-3" style="color: var(--color-accent);">kaikki löydetty</span>
+            </div>
+            <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
           </div>
         </div>
 
         <!-- Hint 2: words left per first letter -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Alkukirjaimet</span>
+            <span style="color: var(--color-text-secondary);">Alkukirjaimet 🔤</span>
             <button
               v-if="!hintsUnlocked.has('letters')"
               class="text-xs px-2 py-0.5 rounded"
@@ -848,7 +856,7 @@ onUnmounted(() => {
         <!-- Hint 3: word count per length -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Pituusjakauma</span>
+            <span style="color: var(--color-text-secondary);">Pituusjakauma 📏</span>
             <button
               v-if="!hintsUnlocked.has('distribution')"
               class="text-xs px-2 py-0.5 rounded"
