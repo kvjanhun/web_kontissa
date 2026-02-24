@@ -820,13 +820,11 @@ onUnmounted(() => {
             >Aktivoi</button>
           </div>
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
-            <div>
-              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä</span>
-              <span v-if="unfoundLengths" class="ml-3" style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'pituutta' : 'pituutta' }}</span>
-              <span v-else class="ml-3" style="color: var(--color-accent);">(100%)</span>
+            <div v-if="unfoundLengths">
+              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä</span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
-              {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }} · pisin&nbsp;{{ unfoundLengths.longest }}
+              {{ unfoundLengths.uniqueLengths }} eri sanapituutta · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
             </div>
             <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
           </div>
