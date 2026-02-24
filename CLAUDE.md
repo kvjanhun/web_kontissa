@@ -72,14 +72,14 @@ web_kontissa/
 │           └── NotFound.vue    # 404
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
-│   ├── models.py               # User, Section, Recipe, Ingredient, Step models
+│   ├── models.py               # User, Section, Recipe, Ingredient, Step, BlockedWord, BeeConfig models
 │   ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
 │   ├── auth.py                 # /api/login, /api/logout, /api/me
 │   ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
 │   ├── utils.py                # GitHub API commit date with 6-hour cache
 │   ├── create_admin.py         # One-time utility: create admin user with db.create_all()
 │   ├── api/
-│   │   ├── bee.py              # GET /api/bee (Sanakenno daily puzzle — 50 curated puzzles)
+│   │   ├── bee.py              # GET /api/bee + POST /api/bee/block (Sanakenno — 41 curated puzzles, word blocking)
 │   │   ├── cowsay.py           # GET /api/cowsay
 │   │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
 │   ├── wordlists/
@@ -91,7 +91,7 @@ web_kontissa/
 └── tests/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
     ├── test_auth.py            # Auth endpoint tests
-    ├── test_bee.py             # Sanakenno endpoint + scoring tests (17 tests)
+    ├── test_bee.py             # Sanakenno endpoint + scoring tests (50 tests)
     ├── test_recipes.py         # Recipe CRUD tests
     ├── test_sections.py        # Sections CRUD tests
     └── test_weather.py         # Weather endpoint tests
@@ -115,7 +115,8 @@ web_kontissa/
 | PUT | `/api/recipes/<id>` | Login | Update recipe (replaces all ingredients/steps) |
 | DELETE | `/api/recipes/<id>` | Login | Delete recipe (cascades) |
 | GET | `/api/recipes/categories` | Login | Valid category list |
-| GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score, puzzle_number) |
+| GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score, puzzle_number, total_puzzles) |
+| POST | `/api/bee/block` | Admin | Permanently remove a word from all puzzles (stored in blocked_words table) |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
@@ -208,9 +209,9 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling Bee rules with a Finnish word list. Nav shows "Sanakenno" in both languages. Backend API remains `GET /api/bee`.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
-- **Puzzles**: 50 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 50-day cycle via `date.today().toordinal() % len(PUZZLES)`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
+- **Puzzles**: 41 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 41-day cycle via a deterministic sequential formula: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
-- **Ranks**: 10 Finnish rank levels from Aloittelija (0%) to Mehiläiskuningatar (100%) based on % of max_score.
+- **Ranks**: 7 Finnish rank levels based on % of max_score: Etsi sanoja! (0%), Hyvä alku (2%), Nyt mennään! (10%), Onnistuja (20%), Sanavalmis (40%), Ällistyttävä (70%), Täysi kenno (100%).
 - **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
 - **Touch zoom prevention**: `touch-action: manipulation` on the root game div prevents double-tap zoom on iOS Safari.
 - **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
@@ -220,14 +221,18 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Progress bar**: A thin bar below the score/rank row shows progress toward the next rank (`progressToNextRank` computed, animates via CSS transition).
 - **Re-submit highlight**: When a player submits an already-found word, that word flashes orange in the found words list for 1.5 s (`lastResubmittedWord` ref), alongside the "Löysit jo tämän!" message.
 - **All-found banner**: When `allFound` computed is true (all words discovered), a "Kaikki N sanaa löydetty!" banner appears above the found words list.
-- **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints, identified by string IDs — once unlocked they persist in `hintsUnlocked` (Set) in `sanakenno_state` localStorage across sessions:
-  1. **`summary`** — total unfound word count combined with shortest/longest unfound word lengths.
-  2. **`letters`** — remaining unfound words grouped by starting letter (all puzzle letters shown; fully-found letters displayed muted at 0).
-  3. **`distribution`** — word count per length (e.g. "4: 12  5: 8  6: 3"), showing remaining per length; fully-found lengths are muted.
+- **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints, identified by string IDs — once unlocked they persist in `hintsUnlocked` (Set) in `sanakenno_state` localStorage across sessions. Each hint has a unique icon used in the title and share text:
+  1. **`summary`** 📊 — "Yleiskuva": remaining/total word count, pangram count, and shortest/longest unfound word lengths.
+  2. **`letters`** 🔤 — "Alkukirjaimet": remaining unfound words grouped by starting letter (all puzzle letters shown; fully-found letters displayed muted at 0).
+  3. **`distribution`** 📏 — "Pituusjakauma": word count per length (e.g. "4: 12  5: 8  6: 3"), showing remaining per length; fully-found lengths are muted.
   - Admin puzzle switches reset hint state together with game progress.
-- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, found word count/total, and the Finnish names of any activated hints.
-- **No auth required**: Public endpoint, no database usage.
-- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 50.
+- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, and hint icons (📊🔤📏) for any activated hints.
+- **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, and `og:url` for link preview cards (Finnish game description).
+- **Favicon swap**: `SanakennoPage.vue` swaps the favicon to an orange pointy-top hexagon SVG on `onMounted` and restores the original on `onUnmounted`.
+- **Word blocking**: Admins can permanently remove a word via `POST /api/bee/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. `BeeConfig` model also exists in `models.py` as a key-value store for future scheduling state.
+- **Timer**: Elapsed play time is tracked from `startedAt` (epoch ms). Tab visibility is monitored via `visibilitychange`, `blur`, and `pagehide` events to accumulate paused time in `totalPausedMs`.
+- **No auth required**: Public endpoint, no database usage for normal play.
+- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 41.
 
 ## Security Considerations
 
