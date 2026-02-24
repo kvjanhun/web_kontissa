@@ -1,12 +1,10 @@
-import json
-import random
 from datetime import date
 from flask import jsonify, request
 from flask_login import current_user, login_required
 import os
 
 from app import app
-from app.models import db, BlockedWord, BeeConfig
+from app.models import db, BlockedWord
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -105,51 +103,21 @@ def _get_puzzle_data(idx):
     return _PUZZLE_CACHE[idx]
 
 
-def _get_puzzle_for_date(date_str):
-    """Return the puzzle index assigned to date_str (YYYY-MM-DD).
+def _get_puzzle_for_date(date_obj):
+    """Return the puzzle index for a given date.
 
-    Each date is assigned exactly once, drawing from a shuffled queue that
-    ensures every puzzle is used once before any repeats.  State persists in
-    the BeeConfig table.  Falls back to a deterministic rotation if the DB
-    is unavailable.
+    Puzzles rotate sequentially: today (2026-02-24) is puzzle 2, tomorrow is 3,
+    day after is 4, etc., cycling through all 41 puzzles.
     """
-    try:
-        assignments_row = db.session.get(BeeConfig, 'puzzle_assignments')
-        assignments = json.loads(assignments_row.value) if assignments_row else {}
-
-        if date_str in assignments:
-            return assignments[date_str]
-
-        queue_row = db.session.get(BeeConfig, 'puzzle_queue')
-        queue = json.loads(queue_row.value) if queue_row else []
-
-        if not queue:
-            queue = list(range(len(PUZZLES)))
-            random.shuffle(queue)
-
-        puzzle_idx = queue.pop(0)
-        assignments[date_str] = puzzle_idx
-
-        if queue_row:
-            queue_row.value = json.dumps(queue)
-        else:
-            db.session.add(BeeConfig(key='puzzle_queue', value=json.dumps(queue)))
-
-        if assignments_row:
-            assignments_row.value = json.dumps(assignments)
-        else:
-            db.session.add(BeeConfig(key='puzzle_assignments', value=json.dumps(assignments)))
-
-        db.session.commit()
-        return puzzle_idx
-    except Exception:
-        return date.today().toordinal() % len(PUZZLES)
+    ROTATION_START = date(2026, 2, 24)
+    START_INDEX = 2
+    days_since_start = (date_obj - ROTATION_START).days
+    return (START_INDEX + days_since_start) % len(PUZZLES)
 
 
 @app.route("/api/bee")
 def bee():
-    today_str = date.today().isoformat()
-    puzzle_number = _get_puzzle_for_date(today_str)
+    puzzle_number = _get_puzzle_for_date(date.today())
 
     override = request.args.get("puzzle", type=int)
     if (

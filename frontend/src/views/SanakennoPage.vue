@@ -224,6 +224,13 @@ function handleVisibilityChange() {
   }
 }
 
+function handlePageHide() {
+  // Fired when page may be unloaded/backgrounded (more reliable on mobile)
+  if (hiddenAt === null) {
+    hiddenAt = Date.now()
+  }
+}
+
 // --- State persistence ---
 function saveState() {
   localStorage.setItem(STATE_KEY, JSON.stringify({
@@ -491,6 +498,8 @@ onMounted(() => {
   _swapFavicon(BEE_FAVICON)
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
+  window.addEventListener('blur', handleVisibilityChange)
+  window.addEventListener('pagehide', handlePageHide)
   if (isAdmin.value) {
     const saved = localStorage.getItem(ADMIN_PUZZLE_KEY)
     const idx = saved !== null ? parseInt(saved, 10) : null
@@ -504,6 +513,8 @@ onUnmounted(() => {
   _restoreFavicon()
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
+  window.removeEventListener('blur', handleVisibilityChange)
+  window.removeEventListener('pagehide', handlePageHide)
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
