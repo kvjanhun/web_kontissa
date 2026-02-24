@@ -625,7 +625,7 @@ onUnmounted(() => {
     </div>
   </Teleport>
   <div class="max-w-sm mx-auto mb-5">
-    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
+    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno</h1>
   </div>
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
