@@ -29,6 +29,47 @@ const showRules = ref(false)
 const showRemainingWords = ref(false)
 const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
 
+// --- Center variation selector (admin) ---
+const variations = ref([])
+const variationsLoading = ref(false)
+const centerSaving = ref(false)
+
+async function fetchVariations() {
+  if (!isAdmin.value || puzzleNumber.value == null) return
+  variationsLoading.value = true
+  try {
+    const res = await fetch(`/api/bee/variations?puzzle=${puzzleNumber.value}`)
+    if (!res.ok) throw new Error()
+    const data = await res.json()
+    variations.value = data.variations
+  } catch {
+    variations.value = []
+  } finally {
+    variationsLoading.value = false
+  }
+}
+
+async function setCenter(letter) {
+  if (centerSaving.value) return
+  centerSaving.value = true
+  try {
+    const res = await fetch('/api/bee/center', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ puzzle: puzzleNumber.value, center: letter }),
+    })
+    if (!res.ok) throw new Error()
+    // Reload the puzzle with the new center + refresh variations
+    resetGameState()
+    await fetchPuzzle(puzzleNumber.value)
+    await fetchVariations()
+  } catch {
+    showMessage('Could not change center letter', 'error')
+  } finally {
+    centerSaving.value = false
+  }
+}
+
 // --- Animation state ---
 const wordShake = ref(false)
 const wordRejected = ref(false)   // keeps the typed word visible after a failed submit
@@ -307,6 +348,7 @@ async function fetchPuzzle(overrideIndex) {
     puzzleInputDisplay.value = data.puzzle_number + 1
     loadState()
     if (startedAt.value === null) startedAt.value = Date.now()
+    if (isAdmin.value) fetchVariations()
   } catch {
     fetchError.value = 'Lataus epäonnistui.'
   } finally {
@@ -693,6 +735,29 @@ onUnmounted(() => {
           style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
           @click="randomPuzzle"
         >Satunnainen</button>
+      </div>
+
+      <!-- Center letter variation selector (admin) -->
+      <div v-if="isAdmin && variations.length > 0" class="grid grid-cols-7 gap-1 mb-2">
+        <button
+          v-for="v in variations"
+          :key="v.center"
+          class="flex flex-col items-center py-1 px-0.5 rounded text-xs leading-tight"
+          :style="{
+            background: v.is_active ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
+            color: v.is_active ? 'white' : 'var(--color-text-secondary)',
+            border: '1px solid ' + (v.is_active ? 'var(--color-accent)' : 'var(--color-border)'),
+            cursor: centerSaving ? 'wait' : 'pointer',
+            opacity: centerSaving ? '0.6' : '1',
+          }"
+          :disabled="centerSaving"
+          @click="!v.is_active && setCenter(v.center)"
+        >
+          <span class="font-semibold text-sm">{{ v.center.toUpperCase() }}</span>
+          <span>{{ v.word_count }} w</span>
+          <span>{{ v.max_score }} p</span>
+          <span>{{ v.pangram_count }} pg</span>
+        </button>
       </div>
 
       <!-- Rank thresholds -->

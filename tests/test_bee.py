@@ -2,16 +2,16 @@
 
 import pytest
 from unittest.mock import patch
-from app.api.bee import PUZZLES, _score_word, _compute_puzzle
+from app.api.bee import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzle, _get_puzzle_dict
 
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _all_letters_for(puzzle):
-    """Return the full frozenset of 7 letters for a puzzle dict."""
-    return frozenset([puzzle["center"]] + puzzle["outer"])
+def _all_letters_for(puzzle_idx):
+    """Return the full frozenset of 7 letters for a puzzle index."""
+    return frozenset(PUZZLES[puzzle_idx]["letters"])
 
 
 # ---------------------------------------------------------------------------
@@ -25,39 +25,27 @@ class TestPuzzleCatalogue:
     def test_has_41_puzzles(self):
         assert len(PUZZLES) == 41
 
-    def test_every_puzzle_has_center(self):
-        for i, p in enumerate(PUZZLES):
-            assert "center" in p, f"Puzzle {i} missing 'center'"
-            assert isinstance(p["center"], str) and len(p["center"]) == 1, (
-                f"Puzzle {i} center must be a single character, got {p['center']!r}"
-            )
+    def test_default_centers_matches_puzzles_count(self):
+        assert len(_DEFAULT_CENTERS) == len(PUZZLES)
 
-    def test_every_puzzle_has_six_outer_letters(self):
+    def test_every_puzzle_has_seven_letters(self):
         for i, p in enumerate(PUZZLES):
-            assert "outer" in p, f"Puzzle {i} missing 'outer'"
-            assert len(p["outer"]) == 6, (
-                f"Puzzle {i} outer must have exactly 6 letters, got {len(p['outer'])}"
+            assert "letters" in p, f"Puzzle {i} missing 'letters'"
+            assert len(p["letters"]) == 7, (
+                f"Puzzle {i} must have exactly 7 letters, got {len(p['letters'])}"
             )
 
     def test_no_puzzle_has_duplicate_letters(self):
-        """Center + all outer letters must all be distinct — duplicates would
-        confuse the pangram check and break the honeycomb display."""
+        """All 7 letters must be distinct — duplicates would confuse the
+        pangram check and break the honeycomb display."""
         for i, p in enumerate(PUZZLES):
-            all_letters = [p["center"]] + p["outer"]
-            assert len(set(all_letters)) == 7, (
-                f"Puzzle {i} has duplicate letters: {all_letters}"
-            )
-
-    def test_center_not_in_outer(self):
-        """Center letter must not appear in the outer ring."""
-        for i, p in enumerate(PUZZLES):
-            assert p["center"] not in p["outer"], (
-                f"Puzzle {i} center '{p['center']}' appears in outer letters"
+            assert len(set(p["letters"])) == 7, (
+                f"Puzzle {i} has duplicate letters: {p['letters']}"
             )
 
     def test_all_letters_are_lowercase_strings(self):
         for i, p in enumerate(PUZZLES):
-            for letter in [p["center"]] + p["outer"]:
+            for letter in p["letters"]:
                 assert letter == letter.lower(), (
                     f"Puzzle {i} letter {letter!r} is not lowercase"
                 )
@@ -65,12 +53,19 @@ class TestPuzzleCatalogue:
                     f"Puzzle {i} letter {letter!r} is not a single character"
                 )
 
-    def test_every_puzzle_has_at_least_one_word(self):
+    def test_default_center_is_one_of_the_letters(self):
+        for i, center in enumerate(_DEFAULT_CENTERS):
+            assert center in PUZZLES[i]["letters"], (
+                f"Puzzle {i} default center '{center}' not in letters {PUZZLES[i]['letters']}"
+            )
+
+    def test_every_puzzle_has_at_least_one_word(self, app):
         """A puzzle with zero valid words in the word list is unplayable."""
-        for i, p in enumerate(PUZZLES):
-            words, _ = _compute_puzzle(p)
+        for i in range(len(PUZZLES)):
+            puzzle_dict = _get_puzzle_dict(i)
+            words, _ = _compute_puzzle(puzzle_dict)
             assert len(words) > 0, (
-                f"Puzzle {i} (center={p['center']!r}, outer={p['outer']}) "
+                f"Puzzle {i} (letters={PUZZLES[i]['letters']}) "
                 f"yielded no valid words — word list may be missing or puzzle "
                 f"letters may be wrong"
             )
@@ -246,15 +241,16 @@ class TestKnownPuzzle:
     assertions are independent of which puzzle today happens to be assigned."""
 
     PUZZLE_IDX = 0
-    PUZZLE = PUZZLES[0]
 
     def test_known_puzzle_center(self, logged_in_admin):
         data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
-        assert data["center"] == self.PUZZLE["center"]
+        assert data["center"] == _DEFAULT_CENTERS[self.PUZZLE_IDX]
 
     def test_known_puzzle_letters(self, logged_in_admin):
         data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
-        assert set(data["letters"]) == set(self.PUZZLE["outer"])
+        expected_outer = [l for l in PUZZLES[self.PUZZLE_IDX]["letters"]
+                          if l != _DEFAULT_CENTERS[self.PUZZLE_IDX]]
+        assert set(data["letters"]) == set(expected_outer)
 
     def test_known_puzzle_words_contain_center(self, logged_in_admin):
         data = logged_in_admin.get(f"/api/bee?puzzle={self.PUZZLE_IDX}").get_json()
@@ -297,7 +293,7 @@ class TestPuzzleOverride:
         target = 7
         data = logged_in_admin.get(f"/api/bee?puzzle={target}").get_json()
         assert data["puzzle_number"] == target
-        assert data["center"] == PUZZLES[target]["center"]
+        assert data["center"] == _DEFAULT_CENTERS[target]
 
     def test_admin_override_wraps_around(self, logged_in_admin):
         # Requesting puzzle index beyond range wraps via modulo
@@ -321,8 +317,7 @@ class TestPuzzleOverride:
         """Overridden puzzle returns the right word set."""
         target = 2
         data = logged_in_admin.get(f"/api/bee?puzzle={target}").get_json()
-        p = PUZZLES[target]
-        all_letters = frozenset([p["center"]] + p["outer"])
+        all_letters = frozenset(data["letters"] + [data["center"]])
         expected_score = sum(_score_word(w, all_letters) for w in data["words"])
         assert data["max_score"] == expected_score
 
@@ -384,3 +379,118 @@ class TestBlockWord:
     def test_missing_word_field_returns_400(self, logged_in_admin):
         res = logged_in_admin.post("/api/bee/block", json={})
         assert res.status_code == 400
+
+
+# ---------------------------------------------------------------------------
+# Center-letter variations endpoint
+# ---------------------------------------------------------------------------
+
+class TestVariationsEndpoint:
+    """GET /api/bee/variations returns all 7 center-letter options for a puzzle."""
+
+    def test_returns_seven_variations(self, logged_in_admin):
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        assert len(data["variations"]) == 7
+
+    def test_variation_has_required_fields(self, logged_in_admin):
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        for v in data["variations"]:
+            assert "center" in v
+            assert "word_count" in v
+            assert "max_score" in v
+            assert "pangram_count" in v
+            assert "is_active" in v
+
+    def test_exactly_one_is_active(self, logged_in_admin):
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        active = [v for v in data["variations"] if v["is_active"]]
+        assert len(active) == 1
+
+    def test_active_matches_default_center(self, logged_in_admin):
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        active = [v for v in data["variations"] if v["is_active"]][0]
+        assert active["center"] == _DEFAULT_CENTERS[0]
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.get("/api/bee/variations?puzzle=0")
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.get("/api/bee/variations?puzzle=0")
+        assert res.status_code == 401
+
+    def test_requires_puzzle_param(self, logged_in_admin):
+        res = logged_in_admin.get("/api/bee/variations")
+        assert res.status_code == 400
+
+    def test_word_counts_are_positive(self, logged_in_admin):
+        """At least the active center should have words."""
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        active = [v for v in data["variations"] if v["is_active"]][0]
+        assert active["word_count"] > 0
+        assert active["max_score"] > 0
+
+
+# ---------------------------------------------------------------------------
+# Set center letter endpoint
+# ---------------------------------------------------------------------------
+
+class TestSetCenter:
+    """POST /api/bee/center changes the center letter for a puzzle."""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        yield
+        _PUZZLE_CACHE.clear()
+
+    def test_changes_center(self, logged_in_admin):
+        # Pick a letter that is NOT the default center for puzzle 0
+        letters = PUZZLES[0]["letters"]
+        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+
+        res = logged_in_admin.post("/api/bee/center", json={"puzzle": 0, "center": new_center})
+        assert res.status_code == 200
+        assert res.get_json()["center"] == new_center
+
+        # Verify the puzzle now uses the new center
+        data = logged_in_admin.get("/api/bee?puzzle=0").get_json()
+        assert data["center"] == new_center
+
+    def test_invalid_letter_rejected(self, logged_in_admin):
+        res = logged_in_admin.post("/api/bee/center", json={"puzzle": 0, "center": "z"})
+        assert res.status_code == 400
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.post("/api/bee/center", json={"puzzle": 0, "center": "r"})
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.post("/api/bee/center", json={"puzzle": 0, "center": "r"})
+        assert res.status_code == 401
+
+    def test_requires_puzzle_param(self, logged_in_admin):
+        res = logged_in_admin.post("/api/bee/center", json={"center": "r"})
+        assert res.status_code == 400
+
+    def test_persists_across_cache_clear(self, logged_in_admin):
+        from app.api.bee import _PUZZLE_CACHE
+        letters = PUZZLES[0]["letters"]
+        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+
+        logged_in_admin.post("/api/bee/center", json={"puzzle": 0, "center": new_center})
+        _PUZZLE_CACHE.clear()
+
+        data = logged_in_admin.get("/api/bee?puzzle=0").get_json()
+        assert data["center"] == new_center
+
+    def test_variations_reflect_new_active(self, logged_in_admin):
+        letters = PUZZLES[0]["letters"]
+        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+
+        logged_in_admin.post("/api/bee/center", json={"puzzle": 0, "center": new_center})
+
+        data = logged_in_admin.get("/api/bee/variations?puzzle=0").get_json()
+        active = [v for v in data["variations"] if v["is_active"]][0]
+        assert active["center"] == new_center

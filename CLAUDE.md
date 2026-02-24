@@ -88,11 +88,12 @@ web_kontissa/
 │   └── data/
 │       └── site.db             # SQLite database (Docker volume mounted)
 ├── scripts/
-│   └── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
+│   ├── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
+│   └── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
 └── tests/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
     ├── test_auth.py            # Auth endpoint tests
-    ├── test_bee.py             # Sanakenno endpoint + scoring tests (50 tests)
+    ├── test_bee.py             # Sanakenno endpoint + scoring + variations tests (65 tests)
     ├── test_recipes.py         # Recipe CRUD tests
     ├── test_sections.py        # Sections CRUD tests
     └── test_weather.py         # Weather endpoint tests
@@ -118,6 +119,8 @@ web_kontissa/
 | GET | `/api/recipes/categories` | Login | Valid category list |
 | GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score, puzzle_number, total_puzzles) |
 | POST | `/api/bee/block` | Admin | Permanently remove a word from all puzzles (stored in blocked_words table) |
+| GET | `/api/bee/variations?puzzle=N` | Admin | All 7 center-letter variations with stats (word_count, max_score, pangram_count, is_active) |
+| POST | `/api/bee/center` | Admin | Set center letter for a puzzle (`{puzzle: int, center: str}`) |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
@@ -212,7 +215,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling Bee rules with a Finnish word list. Nav shows "Sanakenno" in both languages. Backend API remains `GET /api/bee`.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
-- **Puzzles**: 41 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 41-day cycle via a deterministic sequential formula: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
+- **Puzzles**: 41 curated letter sets in `app/api/bee.py` (`PUZZLES` list, each entry is `{"letters": [7 sorted letters]}`). The center letter for each puzzle is stored in the `BeeConfig` table (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup. Admins can view all 7 center-letter variations via `GET /api/bee/variations` and switch the active center via `POST /api/bee/center`. Rotates on a 41-day cycle via a deterministic sequential formula: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 7 Finnish rank levels based on % of max_score: Etsi sanoja! (0%), Hyvä alku (2%), Nyt mennään! (10%), Onnistuja (20%), Sanavalmis (40%), Ällistyttävä (70%), Täysi kenno (100%).
 - **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting. The browser tab title shows `"Sanakenno — #N"` where N is the current puzzle number.
@@ -235,7 +238,8 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Word blocking**: Admins can permanently remove a word via `POST /api/bee/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. `BeeConfig` model also exists in `models.py` as a key-value store for future scheduling state.
 - **Timer**: Elapsed play time is tracked from `startedAt` (epoch ms). Tab visibility is monitored via `visibilitychange`, `blur`, and `pagehide` events to accumulate paused time in `totalPausedMs`.
 - **No auth required**: Public endpoint, no database usage for normal play.
-- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py`. Each puzzle needs a `center` letter and 6 `outer` letters. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 41.
+- **Center variation selector**: Admin UI shows a 7-column grid below the puzzle switcher with each center-letter option's word count, max score, and pangram count. The active center is highlighted with the accent color. Clicking a different letter switches the center via the API.
+- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py` with `{"letters": [7 sorted letters]}` and append the desired default center to `_DEFAULT_CENTERS`. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 41.
 
 ## Security Considerations
 

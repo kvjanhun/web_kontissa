@@ -4,7 +4,7 @@ from flask_login import current_user, login_required
 import os
 
 from app import app
-from app.models import db, BlockedWord
+from app.models import db, BlockedWord, BeeConfig
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -15,49 +15,86 @@ try:
 except FileNotFoundError:
     _ALL_WORDS = frozenset()
 
+# Each puzzle is a flat set of 7 letters (sorted).  The center letter for each
+# puzzle is stored in the BeeConfig table (key = "center_{idx}").
 PUZZLES = [
-    {"center": "r", "outer": ["e", "n", "p", "s", "y", "ä"]},       # 54 words
-    {"center": "ä", "outer": ["d", "e", "h", "l", "r", "s"]},       # 34 words
-    {"center": "n", "outer": ["j", "k", "o", "p", "r", "u"]},       # 26 words
-    {"center": "n", "outer": ["e", "h", "i", "m", "y", "ä"]},       # 62 words
-    {"center": "l", "outer": ["e", "m", "n", "o", "s", "u"]},       # 53 words
-    {"center": "y", "outer": ["k", "l", "o", "s", "u", "ä"]},       # 47 words
-    {"center": "h", "outer": ["d", "e", "p", "s", "u", "ä"]},       # 20 words
-    {"center": "h", "outer": ["a", "k", "l", "m", "n", "s"]},       # 32 words
-    {"center": "p", "outer": ["a", "d", "e", "g", "i", "o"]},       # 27 words
-    {"center": "v", "outer": ["e", "i", "l", "m", "n", "r"]},       # 50 words
-    {"center": "s", "outer": ["e", "h", "k", "r", "t", "u"]},       # 65 words
-    {"center": "h", "outer": ["d", "e", "k", "l", "t", "ä"]},       # 49 words
-    {"center": "p", "outer": ["a", "r", "u", "y", "ä", "ö"]},       # 37 words
-    {"center": "d", "outer": ["a", "i", "n", "o", "t", "u"]},       # 34 words
-    {"center": "j", "outer": ["k", "n", "s", "t", "ä", "ö"]},       # 20 words
-    {"center": "y", "outer": ["e", "h", "i", "l", "m", "s"]},       # 48 words
-    {"center": "u", "outer": ["a", "e", "h", "i", "r", "v"]},       # 46 words
-    {"center": "d", "outer": ["e", "i", "l", "n", "s", "v"]},       # 27 words
-    {"center": "n", "outer": ["e", "h", "i", "t", "y", "ö"]},       # 63 words
-    {"center": "o", "outer": ["a", "d", "h", "i", "m", "u"]},       # 30 words
-    {"center": "d", "outer": ["a", "e", "i", "l", "n", "u"]},       # 36 words
-    {"center": "y", "outer": ["d", "h", "j", "r", "s", "ä"]},       # 41 words
-    {"center": "h", "outer": ["a", "e", "l", "s", "t", "v"]},       # 59 words
-    {"center": "y", "outer": ["e", "i", "k", "l", "t", "v"]},       # 53 words
-    {"center": "e", "outer": ["h", "m", "n", "o", "p", "r"]},       # 29 words
-    {"center": "e", "outer": ["a", "j", "o", "t", "u", "ä"]},       # 24 words
-    {"center": "u", "outer": ["a", "e", "j", "l", "n", "o"]},       # 53 words
-    {"center": "s", "outer": ["e", "k", "l", "n", "ä", "ö"]},       # 53 words
-    {"center": "u", "outer": ["e", "i", "l", "m", "p", "ä"]},       # 57 words
-    {"center": "p", "outer": ["i", "l", "s", "v", "y", "ä"]},       # 77 words
-    {"center": "v", "outer": ["h", "i", "r", "s", "t", "ä"]},       # 72 words
-    {"center": "i", "outer": ["k", "t", "v", "y", "ä", "ö"]},       # 49 words
-    {"center": "m", "outer": ["i", "n", "t", "y", "ä", "ö"]},       # 64 words
-    {"center": "t", "outer": ["a", "d", "h", "m", "n", "o"]},       # 73 words
-    {"center": "i", "outer": ["a", "h", "n", "r", "u", "ä"]},       # 65 words
-    {"center": "s", "outer": ["m", "n", "o", "t", "u", "ä"]},       # 65 words
-    {"center": "o", "outer": ["a", "b", "d", "i", "k", "r"]},       # 65 words
-    {"center": "i", "outer": ["h", "k", "m", "s", "v", "y"]},       # 39 words
-    {"center": "t", "outer": ["a", "e", "g", "h", "r", "y"]},       # 42 words
-    {"center": "o", "outer": ["a", "d", "h", "i", "j", "p"]},       # 40 words
-    {"center": "n", "outer": ["e", "i", "l", "v", "y", "ö"]},       # 41 words
+    {"letters": ["e", "n", "p", "r", "s", "y", "ä"]},       # 1
+    {"letters": ["d", "e", "h", "l", "r", "s", "ä"]},       # 2
+    {"letters": ["j", "k", "n", "o", "p", "r", "u"]},       # 3
+    {"letters": ["e", "h", "i", "m", "n", "y", "ä"]},       # 4
+    {"letters": ["e", "l", "m", "n", "o", "s", "u"]},       # 5
+    {"letters": ["k", "l", "o", "s", "u", "y", "ä"]},       # 6
+    {"letters": ["d", "e", "h", "p", "s", "u", "ä"]},       # 7
+    {"letters": ["a", "h", "k", "l", "m", "n", "s"]},       # 8
+    {"letters": ["a", "d", "e", "g", "i", "o", "p"]},       # 9
+    {"letters": ["e", "i", "l", "m", "n", "r", "v"]},       # 10
+    {"letters": ["e", "h", "k", "r", "s", "t", "u"]},       # 11
+    {"letters": ["d", "e", "h", "k", "l", "t", "ä"]},       # 12
+    {"letters": ["a", "p", "r", "u", "y", "ä", "ö"]},       # 13
+    {"letters": ["a", "d", "i", "n", "o", "t", "u"]},       # 14
+    {"letters": ["j", "k", "n", "s", "t", "ä", "ö"]},       # 15
+    {"letters": ["e", "h", "i", "l", "m", "s", "y"]},       # 16
+    {"letters": ["a", "e", "h", "i", "r", "u", "v"]},       # 17
+    {"letters": ["d", "e", "i", "l", "n", "s", "v"]},       # 18
+    {"letters": ["e", "h", "i", "n", "t", "y", "ö"]},       # 19
+    {"letters": ["a", "d", "h", "i", "m", "o", "u"]},       # 20
+    {"letters": ["a", "d", "e", "i", "l", "n", "u"]},       # 21
+    {"letters": ["d", "h", "j", "r", "s", "y", "ä"]},       # 22
+    {"letters": ["a", "e", "h", "l", "s", "t", "v"]},       # 23
+    {"letters": ["e", "i", "k", "l", "t", "v", "y"]},       # 24
+    {"letters": ["e", "h", "m", "n", "o", "p", "r"]},       # 25
+    {"letters": ["a", "e", "j", "o", "t", "u", "ä"]},       # 26
+    {"letters": ["a", "e", "j", "l", "n", "o", "u"]},       # 27
+    {"letters": ["e", "k", "l", "n", "s", "ä", "ö"]},       # 28
+    {"letters": ["e", "i", "l", "m", "p", "u", "ä"]},       # 29
+    {"letters": ["i", "l", "p", "s", "v", "y", "ä"]},       # 30
+    {"letters": ["h", "i", "r", "s", "t", "v", "ä"]},       # 31
+    {"letters": ["i", "k", "t", "v", "y", "ä", "ö"]},       # 32
+    {"letters": ["i", "m", "n", "t", "y", "ä", "ö"]},       # 33
+    {"letters": ["a", "d", "h", "m", "n", "o", "t"]},       # 34
+    {"letters": ["a", "h", "i", "n", "r", "u", "ä"]},       # 35
+    {"letters": ["m", "n", "o", "s", "t", "u", "ä"]},       # 36
+    {"letters": ["a", "b", "d", "i", "k", "o", "r"]},       # 37
+    {"letters": ["h", "i", "k", "m", "s", "v", "y"]},       # 38
+    {"letters": ["a", "e", "g", "h", "r", "t", "y"]},       # 39
+    {"letters": ["a", "d", "h", "i", "j", "o", "p"]},       # 40
+    {"letters": ["e", "i", "l", "n", "v", "y", "ö"]},       # 41
 ]
+
+# Original center letters from the old format — used to seed BeeConfig on first run.
+_DEFAULT_CENTERS = [
+    "r", "ä", "n", "n", "l", "y", "h", "h", "p", "v",
+    "s", "h", "p", "d", "j", "y", "u", "d", "n", "o",
+    "d", "y", "h", "y", "e", "e", "u", "s", "u", "p",
+    "v", "i", "m", "t", "i", "s", "o", "i", "t", "o",
+    "n",
+]
+
+
+def _seed_centers():
+    """Seed BeeConfig with default center letters if not yet migrated."""
+    if BeeConfig.query.filter_by(key="center_0").first():
+        return  # already seeded
+    for idx, center in enumerate(_DEFAULT_CENTERS):
+        db.session.add(BeeConfig(key=f"center_{idx}", value=center))
+    db.session.commit()
+
+
+def _get_center(idx):
+    """Read the chosen center letter for puzzle *idx* from BeeConfig."""
+    row = BeeConfig.query.filter_by(key=f"center_{idx}").first()
+    if row:
+        return row.value
+    # Fallback: first letter alphabetically
+    return sorted(PUZZLES[idx]["letters"])[0]
+
+
+def _get_puzzle_dict(idx):
+    """Build a classic {center, outer} dict for puzzle *idx*."""
+    letters = PUZZLES[idx]["letters"]
+    center = _get_center(idx)
+    outer = [l for l in letters if l != center]
+    return {"center": center, "outer": outer}
 
 
 def _score_word(word, all_letters_frozenset):
@@ -99,7 +136,7 @@ _PUZZLE_CACHE: dict = {}  # Cleared on container restart or when words are block
 
 def _get_puzzle_data(idx):
     if idx not in _PUZZLE_CACHE:
-        _PUZZLE_CACHE[idx] = _compute_puzzle(PUZZLES[idx])
+        _PUZZLE_CACHE[idx] = _compute_puzzle(_get_puzzle_dict(idx))
     return _PUZZLE_CACHE[idx]
 
 
@@ -115,6 +152,41 @@ def _get_puzzle_for_date(date_obj):
     return (START_INDEX + days_since_start) % len(PUZZLES)
 
 
+def _compute_variation(letters, center_letter):
+    """Compute stats for a single center-letter variation (no DB access for blocked words)."""
+    all_letters = set(letters)
+    letter_frozenset = frozenset(all_letters)
+
+    try:
+        blocked = frozenset(bw.word for bw in BlockedWord.query.all())
+    except Exception:
+        blocked = frozenset()
+
+    words = []
+    max_score = 0
+    pangram_count = 0
+    for word in _ALL_WORDS:
+        if word in blocked:
+            continue
+        if (
+            len(word) >= 4
+            and center_letter in word
+            and all(c in all_letters for c in word)
+        ):
+            words.append(word)
+            word_score = _score_word(word, letter_frozenset)
+            max_score += word_score
+            if letter_frozenset.issubset(set(word)):
+                pangram_count += 1
+
+    return {
+        "center": center_letter,
+        "word_count": len(words),
+        "max_score": max_score,
+        "pangram_count": pangram_count,
+    }
+
+
 @app.route("/api/bee")
 def bee():
     puzzle_number = _get_puzzle_for_date(date.today())
@@ -127,7 +199,7 @@ def bee():
     ):
         puzzle_number = override % len(PUZZLES)
 
-    puzzle = PUZZLES[puzzle_number]
+    puzzle = _get_puzzle_dict(puzzle_number)
     words, max_score = _get_puzzle_data(puzzle_number)
 
     return jsonify(
@@ -159,3 +231,63 @@ def bee_block_word():
         _PUZZLE_CACHE.clear()
 
     return jsonify({"word": word, "blocked": True})
+
+
+@app.route("/api/bee/variations")
+@login_required
+def bee_variations():
+    """Return all 7 center-letter variations for a puzzle (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    puzzle_idx = request.args.get("puzzle", type=int)
+    if puzzle_idx is None:
+        return jsonify({"error": "puzzle parameter required"}), 400
+    puzzle_idx = puzzle_idx % len(PUZZLES)
+
+    letters = PUZZLES[puzzle_idx]["letters"]
+    active_center = _get_center(puzzle_idx)
+
+    variations = []
+    for letter in sorted(letters):
+        stats = _compute_variation(letters, letter)
+        stats["is_active"] = (letter == active_center)
+        variations.append(stats)
+
+    return jsonify({
+        "puzzle": puzzle_idx,
+        "variations": variations,
+    })
+
+
+@app.route("/api/bee/center", methods=["POST"])
+@login_required
+def bee_set_center():
+    """Set the center letter for a puzzle (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json() or {}
+    puzzle_idx = data.get("puzzle")
+    center = data.get("center", "").strip().lower()
+
+    if puzzle_idx is None or not isinstance(puzzle_idx, int):
+        return jsonify({"error": "puzzle (int) required"}), 400
+    puzzle_idx = puzzle_idx % len(PUZZLES)
+
+    letters = PUZZLES[puzzle_idx]["letters"]
+    if center not in letters:
+        return jsonify({"error": f"'{center}' is not one of the 7 letters"}), 400
+
+    key = f"center_{puzzle_idx}"
+    row = BeeConfig.query.filter_by(key=key).first()
+    if row:
+        row.value = center
+    else:
+        db.session.add(BeeConfig(key=key, value=center))
+    db.session.commit()
+
+    # Clear cached data for this puzzle so the next request uses the new center
+    _PUZZLE_CACHE.pop(puzzle_idx, None)
+
+    return jsonify({"puzzle": puzzle_idx, "center": center})
