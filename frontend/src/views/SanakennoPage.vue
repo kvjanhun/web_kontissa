@@ -6,7 +6,8 @@ import ThemeToggle from '../components/ThemeToggle.vue'
 const { isAdmin } = useAuth()
 
 // --- Persistence keys ---
-const STATE_KEY = 'sanakenno_state'
+function stateKey(n) { return `sanakenno_state_${n}` }
+const LEGACY_STATE_KEY = 'sanakenno_state'  // migration from single-key format
 const ADMIN_PUZZLE_KEY = 'sanakenno_admin_puzzle'
 
 // --- State ---
@@ -239,10 +240,10 @@ function handlePageHide() {
   }
 }
 
-// --- State persistence ---
+// --- State persistence (per-puzzle localStorage) ---
 function saveState() {
-  localStorage.setItem(STATE_KEY, JSON.stringify({
-    puzzleNumber: puzzleNumber.value,
+  if (puzzleNumber.value == null) return
+  localStorage.setItem(stateKey(puzzleNumber.value), JSON.stringify({
     foundWords: [...foundWords.value],
     score: score.value,
     hintsUnlocked: [...hintsUnlocked.value],
@@ -264,10 +265,23 @@ function recalcScore(words) {
 
 function loadState() {
   try {
-    const raw = localStorage.getItem(STATE_KEY)
+    // Try per-puzzle key first
+    let raw = localStorage.getItem(stateKey(puzzleNumber.value))
+
+    // Migrate from legacy single-key format
+    if (!raw) {
+      const legacy = localStorage.getItem(LEGACY_STATE_KEY)
+      if (legacy) {
+        const legacyData = JSON.parse(legacy)
+        if (legacyData.puzzleNumber === puzzleNumber.value) {
+          raw = legacy
+        }
+        localStorage.removeItem(LEGACY_STATE_KEY)
+      }
+    }
+
     if (!raw) return
     const saved = JSON.parse(raw)
-    if (saved.puzzleNumber !== puzzleNumber.value) return
     const validWords = (saved.foundWords || []).filter(w => wordsSet.value.has(w))
     foundWords.value = new Set(validWords)
     score.value = validWords.length === (saved.foundWords || []).length ? saved.score : recalcScore(validWords)
@@ -316,10 +330,7 @@ function resetGameState() {
 
 function choosePuzzle(idx) {
   const target = ((idx % totalPuzzles.value) + totalPuzzles.value) % totalPuzzles.value
-  if (foundWords.value.size > 0 && !confirm('Vaihda peliä? Pelitilanne nollautuu.')) {
-    puzzleInputDisplay.value = puzzleNumber.value + 1  // revert input
-    return
-  }
+  saveState()  // persist current puzzle progress before switching
   resetGameState()
   localStorage.setItem(ADMIN_PUZZLE_KEY, String(target))
   fetchPuzzle(target)
@@ -625,7 +636,7 @@ onUnmounted(() => {
     </div>
   </Teleport>
   <div class="max-w-sm mx-auto mb-5">
-    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno</h1>
+    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
   </div>
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
