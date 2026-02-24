@@ -110,7 +110,7 @@ def _get_puzzle_for_date(date_obj):
     day after is 4, etc., cycling through all 41 puzzles.
     """
     ROTATION_START = date(2026, 2, 24)
-    START_INDEX = 2
+    START_INDEX = 0  # Admin display is 1-indexed (shows START_INDEX + 1 = 1)
     days_since_start = (date_obj - ROTATION_START).days
     return (START_INDEX + days_since_start) % len(PUZZLES)
 
