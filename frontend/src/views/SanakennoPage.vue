@@ -35,8 +35,8 @@ const pressedHexIndex = ref(null)
 const lastResubmittedWord = ref(null)
 let resubTimer = null
 let rejectTimer = null
-const sharePreview = ref(null)
-let sharePreviewTimer = null
+const shareCopied = ref(false)
+let shareCopiedTimer = null
 const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
 const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
 let hiddenAt = null                   // non-reactive: when the tab was last hidden
@@ -356,10 +356,9 @@ async function copyStatus() {
 
   try {
     await navigator.clipboard.writeText(lines.join('\n'))
-    showMessage('Kopioitu leikepöydälle!', 'ok', 3000)
-    sharePreview.value = lines.join('\n')
-    if (sharePreviewTimer) clearTimeout(sharePreviewTimer)
-    sharePreviewTimer = setTimeout(() => { sharePreview.value = null }, 4000)
+    shareCopied.value = true
+    if (shareCopiedTimer) clearTimeout(shareCopiedTimer)
+    shareCopiedTimer = setTimeout(() => { shareCopied.value = false }, 3000)
   } catch {
     showMessage('Kopiointi ei onnistunut', 'error')
   }
@@ -541,7 +540,7 @@ onUnmounted(() => {
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
-  if (sharePreviewTimer) clearTimeout(sharePreviewTimer)
+  if (shareCopiedTimer) clearTimeout(shareCopiedTimer)
 })
 </script>
 
@@ -818,21 +817,21 @@ onUnmounted(() => {
         >
           💡 Avut {{ showHints ? '▲' : '▼' }}
         </button>
-        <button
-          class="text-xs px-2 py-1 rounded"
-          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-          @click="copyStatus"
-        >
-          📋 Jaa tulos
-        </button>
+        <div class="flex items-center gap-2">
+          <span
+            v-if="shareCopied"
+            class="text-xs"
+            style="color: var(--color-text-secondary);"
+          >Kopioitu leikepöydälle!</span>
+          <button
+            class="text-xs px-2 py-1 rounded"
+            style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+            @click="copyStatus"
+          >
+            📋 Jaa tulos
+          </button>
+        </div>
       </div>
-
-      <!-- Share preview toast -->
-      <div
-        v-if="sharePreview"
-        class="mb-2 p-2 rounded-lg text-xs whitespace-pre-line"
-        style="background: var(--color-bg-secondary); border: 1px solid var(--color-border); color: var(--color-text-secondary); font-family: var(--font-mono);"
-      >{{ sharePreview }}</div>
 
       <!-- Hints panel -->
       <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
