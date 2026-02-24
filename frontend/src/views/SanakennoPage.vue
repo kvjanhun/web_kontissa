@@ -166,16 +166,17 @@ const letterMap = computed(() => {
     .sort((a, b) => a.letter.localeCompare(b.letter))
 })
 
-// Hint 1 (summary): length range of unfound words (combined with count)
+// Hint 1 (summary): longest unfound word + unique unfound lengths
 const unfoundLengths = computed(() => {
   const unfound = allWords.value.filter(w => !foundWords.value.has(w))
   if (unfound.length === 0) return null
-  let shortest = Infinity, longest = 0
+  const lengths = new Set()
+  let longest = 0
   for (const w of unfound) {
-    if (w.length < shortest) shortest = w.length
+    lengths.add(w.length)
     if (w.length > longest) longest = w.length
   }
-  return { shortest, longest }
+  return { longest, uniqueLengths: lengths.size }
 })
 
 const pangramCount = computed(() => {
@@ -821,10 +822,11 @@ onUnmounted(() => {
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
             <div>
               <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä</span>
-              <span class="ml-3" style="color: var(--color-text-secondary);">{{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+              <span v-if="unfoundLengths" class="ml-3" style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'pituutta' : 'pituutta' }}</span>
+              <span v-else class="ml-3" style="color: var(--color-accent);">(100%)</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
-              lyhin&nbsp;{{ unfoundLengths.shortest }}, pisin&nbsp;{{ unfoundLengths.longest }}
+              {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }} · pisin&nbsp;{{ unfoundLengths.longest }}
             </div>
             <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
           </div>

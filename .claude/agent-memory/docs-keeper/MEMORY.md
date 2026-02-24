@@ -14,9 +14,20 @@
 ## Confirmed Patterns
 - Port 5001 everywhere (run.py, vite.config.js proxy) — macOS AirPlay blocks 5000
 - Puzzle cache in bee.py is lazy (on first access), not eager at startup
-- `/api/bee` returns: center, letters, words, max_score, puzzle_number
+- `/api/bee` returns: center, letters, words, max_score, puzzle_number, total_puzzles
+- `POST /api/bee/block` (admin) — blocks a word; stored in `blocked_words` table (BlockedWord model); clears _PUZZLE_CACHE
 - `scripts/process_kotus.py` is a one-time data generation script, not part of app runtime
 - Tech stack includes Flask-Limiter — must appear in requirements.txt comment and tech table
+- Sanakenno route is `/sanakenno` (component `SanakennoPage.vue`); old name `BeeGamePage.vue` / `/bee` is retired
+- Sanakenno localStorage: `sanakenno_state` = {puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt (epoch ms)}; `sanakenno_admin_puzzle` = admin's selected puzzle index
+- Sanakenno hint IDs + icons: `summary` 📊 "Yleiskuva" (remaining/total + pangrams + length range), `letters` 🔤 "Alkukirjaimet" (remaining per starting letter), `distribution` 📏 "Pituusjakauma" (count per word length)
+- Sanakenno ranks (7 levels): Etsi sanoja!(0%), Hyvä alku(2%), Nyt mennään!(10%), Onnistuja(20%), Sanavalmis(40%), Ällistyttävä(70%), Täysi kenno(100%)
+- Sanakenno puzzle count: 41 (was 50); rotation: `(START_INDEX + days_since ROTATION_START(2026-02-24)) % 41`, START_INDEX=1
+- Sanakenno: /sanakenno Flask route patches OG meta tags in routes.py; SanakennoPage swaps favicon to orange hex SVG on mount
+- Sanakenno timer: tracks startedAt + totalPausedMs via visibilitychange + blur + pagehide
+- models.py now has BlockedWord + BeeConfig (key-value store for future use)
+- Sanakenno UI features: progress bar (`progressToNextRank`), shake on invalid (`word-shake` 0.4s), rank-up toast 3s ("Uusi taso: …!"), orange re-submit flash (`lastResubmittedWord` ref, 1.5s), all-found banner (`allFound` computed)
+- Share button label: "Jaa tulos" (was "Kopioi tila")
 
 ## Structure Notes
 - `scripts/` and `tests/` are top-level siblings of `app/` and `frontend/`
