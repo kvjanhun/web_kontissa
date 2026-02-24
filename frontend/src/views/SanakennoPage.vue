@@ -821,7 +821,7 @@ onUnmounted(() => {
           </div>
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
             <div v-if="unfoundLengths">
-              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä</span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
               {{ unfoundLengths.uniqueLengths }} eri sanapituutta · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
@@ -888,7 +888,7 @@ onUnmounted(() => {
         <p class="text-sm mb-1" style="color: var(--color-text-secondary);">
           Löydetyt sanat ({{ foundWords.size }}):
         </p>
-        <div class="flex flex-wrap gap-x-6">
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
           <ul v-for="(col, ci) in wordColumns" :key="ci">
             <li
               v-for="word in col"
