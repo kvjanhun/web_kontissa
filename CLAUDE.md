@@ -48,7 +48,8 @@ web_kontissa/
 │       ├── composables/
 │       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
 │       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
-│       │   └── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
+│       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
+│       │   └── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
 │       ├── locales/
 │       │   ├── en.json         # English translations (~90 keys)
 │       │   └── fi.json         # Finnish translations
@@ -181,6 +182,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Routes use `@app.route()` directly on the app (no blueprints)
 - Admin protection via `@admin_required` decorator (wraps `@login_required` + role check)
 - Recipe endpoints use `@login_required` — any authenticated user can CRUD any recipe (shared cookbook)
+- Recipe create/update share a `_validate_recipe_data()` helper in `recipes.py` that validates the payload and returns `(data, error)`. `_parse_ingredients()` and `_parse_steps()` both validate that each item is a `dict`.
 - All API endpoints return JSON
 - `catch_all` route at the bottom of `routes.py` serves Vue SPA for client-side routing
 - GitHub API responses cached for 6 hours in `utils.py`
@@ -188,15 +190,16 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 ### Frontend
 - Composition API with `<script setup>` exclusively — no Options API
-- Composables for shared state (`useAuth`, `useDarkMode`, `useI18n`) — module-level refs for singleton pattern
+- Composables for shared state (`useAuth`, `useDarkMode`, `useI18n`) — module-level refs for singleton pattern. `useNavLinks` provides the shared navigation link list consumed by both `AppHeader` and `AppFooter`.
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
 - `v-html` used for section content (admin-authored, trusted)
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
 - `requiresAuth` route meta guard redirects unauthenticated users to `/login`
+- Logout (`useAuth.js`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the router guard.
 - i18n via custom `useI18n` composable — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` meta resolved in `main.js` afterEach. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
-- Accessibility: skip-to-content link, `:focus-visible` ring on all interactive elements, `aria-expanded` on mobile menu with Escape-to-close, `aria-live` route announcer in App.vue, `role="alert"` on error messages, `role="status"` on loading/success states, `aria-hidden="true"` on decorative SVGs, `aria-label` on icon-only buttons, `prefers-reduced-motion` respected via CSS
+- Accessibility: skip-to-content link, `:focus-visible` ring on all interactive elements, `aria-expanded` on mobile menu with Escape-to-close, `aria-live` route announcer in App.vue, `role="alert"` on error messages, `role="status"` on loading/success states, `aria-hidden="true"` on decorative SVGs, `aria-label` on icon-only buttons, `prefers-reduced-motion` respected via CSS. Sanakenno honeycomb SVG hexagons have `role="button"` and `aria-label` (letter name) for screen reader access.
 
 ### Design
 - Warm stone-grey palette with orange accent (#ff643e)
@@ -212,9 +215,9 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Puzzles**: 41 curated letter sets in `app/api/bee.py` (`PUZZLES` list). Rotates on a 41-day cycle via a deterministic sequential formula: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 7 Finnish rank levels based on % of max_score: Etsi sanoja! (0%), Hyvä alku (2%), Nyt mennään! (10%), Onnistuja (20%), Sanavalmis (40%), Ällistyttävä (70%), Täysi kenno (100%).
-- **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting.
+- **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation against the full word list (sent by API). All game UI strings are Finnish-only regardless of site language setting. The browser tab title shows `"Sanakenno — #N"` where N is the current puzzle number.
 - **Touch zoom prevention**: `touch-action: manipulation` on the root game div prevents double-tap zoom on iOS Safari.
-- **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt}`. Restored on page load when the stored puzzle number matches the current puzzle. Prevents progress loss on refresh or navigation.
+- **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt}`. Restored on page load when the stored puzzle number matches the current puzzle. On restore, `foundWords` is filtered against the current puzzle's word list to discard any stale entries (e.g. from a blocked word). Prevents progress loss on refresh or navigation.
 - **Admin puzzle switcher**: Admins see a number input (1-indexed) and a "Satunnainen" (random) button instead of the daily puzzle. Selected puzzle persists in `localStorage` under key `sanakenno_admin_puzzle`. Confirmation is only requested if there is existing progress to lose. Regular users always see the daily rotation — the admin override is a private test mode only.
 - **Found words sort**: Words are sorted alphabetically, with word length (shortest first) as a tiebreaker.
 - **Animations**: Invalid submission triggers a shake animation (`word-shake`, 0.4s) on the input row. Honeycomb hexagons scale down on `pointerdown` for press feedback. A rank-up notification ("Uusi taso: …!") is shown for 3 seconds when score crosses a rank threshold.
@@ -222,11 +225,11 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Re-submit highlight**: When a player submits an already-found word, that word flashes orange in the found words list for 1.5 s (`lastResubmittedWord` ref), alongside the "Löysit jo tämän!" message.
 - **All-found banner**: When `allFound` computed is true (all words discovered), a "Kaikki N sanaa löydetty!" banner appears above the found words list.
 - **Avut (hints panel)**: Collapsible section visible to all players. Contains three individually activatable hints, identified by string IDs — once unlocked they persist in `hintsUnlocked` (Set) in `sanakenno_state` localStorage across sessions. Each hint has a unique icon used in the title and share text:
-  1. **`summary`** 📊 — "Yleiskuva": remaining/total word count, pangram count, and shortest/longest unfound word lengths.
+  1. **`summary`** 📊 — "Yleiskuva": two-line summary. Line 1: remaining/total word count + percentage + pangram count. Line 2: number of distinct word lengths + length of the longest word in the puzzle.
   2. **`letters`** 🔤 — "Alkukirjaimet": remaining unfound words grouped by starting letter (all puzzle letters shown; fully-found letters displayed muted at 0).
   3. **`distribution`** 📏 — "Pituusjakauma": word count per length (e.g. "4: 12  5: 8  6: 3"), showing remaining per length; fully-found lengths are muted.
   - Admin puzzle switches reset hint state together with game progress.
-- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, and hint icons (📊🔤📏) for any activated hints.
+- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, and hint icons (📊🔤📏) for any activated hints. After copying, a brief toast previewing the share text is shown to the user.
 - **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, and `og:url` for link preview cards (Finnish game description).
 - **Favicon swap**: `SanakennoPage.vue` swaps the favicon to an orange pointy-top hexagon SVG on `onMounted` and restores the original on `onUnmounted`.
 - **Word blocking**: Admins can permanently remove a word via `POST /api/bee/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. `BeeConfig` model also exists in `models.py` as a key-value store for future scheduling state.
@@ -236,7 +239,7 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 
 ## Security Considerations
 
-- **Session signing**: `SECRET_KEY` from `.env` — random fallback for local dev only. Production MUST have a proper key.
+- **Session signing**: `SECRET_KEY` from `.env` — fixed dev-only string fallback in `app/__init__.py` (keeps sessions alive across restarts during local development). Production MUST set a proper secret via `.env`.
 - **Passwords**: Werkzeug scrypt hashing with random salt. Never logged or exposed via API.
 - **SQL injection**: Not possible — SQLAlchemy parameterized queries throughout.
 - **XSS**: Vue auto-escapes `{{ }}`. Section content uses `v-html` but is admin-authored only. Recipe content never uses `v-html`.

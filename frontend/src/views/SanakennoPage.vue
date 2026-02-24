@@ -35,6 +35,8 @@ const pressedHexIndex = ref(null)
 const lastResubmittedWord = ref(null)
 let resubTimer = null
 let rejectTimer = null
+const sharePreview = ref(null)
+let sharePreviewTimer = null
 const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
 const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
 let hiddenAt = null                   // non-reactive: when the tab was last hidden
@@ -249,14 +251,26 @@ function saveState() {
   }))
 }
 
+function recalcScore(words) {
+  const letterSet = new Set([center.value, ...outerLetters.value])
+  let total = 0
+  for (const w of words) {
+    const pts = w.length === 4 ? 1 : w.length
+    const isPangram = [...letterSet].every(c => w.includes(c))
+    total += pts + (isPangram ? 7 : 0)
+  }
+  return total
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(STATE_KEY)
     if (!raw) return
     const saved = JSON.parse(raw)
     if (saved.puzzleNumber !== puzzleNumber.value) return
-    foundWords.value = new Set(saved.foundWords)
-    score.value = saved.score
+    const validWords = (saved.foundWords || []).filter(w => wordsSet.value.has(w))
+    foundWords.value = new Set(validWords)
+    score.value = validWords.length === (saved.foundWords || []).length ? saved.score : recalcScore(validWords)
     hintsUnlocked.value = new Set(saved.hintsUnlocked ?? [])
     startedAt.value = saved.startedAt ?? null
     totalPausedMs.value = saved.totalPausedMs ?? 0
@@ -342,7 +356,10 @@ async function copyStatus() {
 
   try {
     await navigator.clipboard.writeText(lines.join('\n'))
-    showMessage('Kopioitu!', 'ok')
+    showMessage('Kopioitu leikepöydälle!', 'ok', 3000)
+    sharePreview.value = lines.join('\n')
+    if (sharePreviewTimer) clearTimeout(sharePreviewTimer)
+    sharePreviewTimer = setTimeout(() => { sharePreview.value = null }, 4000)
   } catch {
     showMessage('Kopiointi ei onnistunut', 'error')
   }
@@ -524,6 +541,7 @@ onUnmounted(() => {
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
+  if (sharePreviewTimer) clearTimeout(sharePreviewTimer)
 })
 </script>
 
@@ -608,7 +626,7 @@ onUnmounted(() => {
     </div>
   </Teleport>
   <div class="max-w-sm mx-auto mb-5">
-    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno</h1>
+    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
   </div>
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
@@ -718,12 +736,16 @@ onUnmounted(() => {
           viewBox="18 18 264 264"
           width="264"
           height="264"
-          aria-hidden="true"
+          role="group"
+          aria-label="Kirjainkenno"
           class="select-none"
         >
           <g
             v-for="(hex, i) in hexes"
             :key="i"
+            role="button"
+            :aria-label="`Lisää kirjain ${hex.letter.toUpperCase()}`"
+            tabindex="-1"
             style="cursor: pointer;"
             @click="addLetter(hex.letter)"
             @pointerdown="pressedHexIndex = i"
@@ -805,6 +827,13 @@ onUnmounted(() => {
         </button>
       </div>
 
+      <!-- Share preview toast -->
+      <div
+        v-if="sharePreview"
+        class="mb-2 p-2 rounded-lg text-xs whitespace-pre-line"
+        style="background: var(--color-bg-secondary); border: 1px solid var(--color-border); color: var(--color-text-secondary); font-family: var(--font-mono);"
+      >{{ sharePreview }}</div>
+
       <!-- Hints panel -->
       <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
@@ -824,7 +853,7 @@ onUnmounted(() => {
               <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
-              {{ unfoundLengths.uniqueLengths }} eri sanapituutta · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
+              {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
             </div>
             <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
           </div>

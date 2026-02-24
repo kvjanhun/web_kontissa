@@ -1,37 +1,23 @@
 <script setup>
-import { ref, computed } from 'vue'
+import { ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n.js'
+import { useNavLinks } from '../composables/useNavLinks.js'
 import ThemeToggle from './ThemeToggle.vue'
 import LangToggle from './LangToggle.vue'
 
-const { isAuthenticated, isAdmin, logout } = useAuth()
+const { logout } = useAuth()
 const { t } = useI18n()
+const router = useRouter()
 const menuOpen = ref(false)
-
-const navLinks = computed(() => {
-  const links = [
-    { to: '/about',   labelKey: 'nav.about' },
-    { to: '/contact', labelKey: 'nav.contact' },
-    { to: '/sanakenno', labelKey: 'nav.sanakenno' },
-  ]
-  if (isAuthenticated.value) {
-    links.push({ to: '/recipes', labelKey: 'nav.recipes' })
-  }
-  if (isAdmin.value) {
-    links.push({ to: '/admin', labelKey: 'nav.admin' })
-  }
-  if (isAuthenticated.value) {
-    links.push({ to: '/login', labelKey: 'nav.logout', action: handleLogout })
-  } else {
-    links.push({ to: '/login', labelKey: 'nav.login' })
-  }
-  return links
-})
 
 async function handleLogout() {
   await logout()
+  router.push('/login')
 }
+
+const { navLinks } = useNavLinks(handleLogout)
 
 function toggleMenu() {
   menuOpen.value = !menuOpen.value
@@ -94,9 +80,9 @@ function handleDropdownKeydown(e) {
       <router-link
         v-for="link in navLinks"
         :key="link.to"
-        :to="link.to"
+        :to="link.action ? '' : link.to"
         class="!text-stone-400 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
-        @click="closeMenu(); link.action && link.action()"
+        @click.prevent="closeMenu(); link.action ? link.action() : router.push(link.to)"
       >
         {{ t(link.labelKey) }}
       </router-link>

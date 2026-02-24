@@ -136,6 +136,13 @@ class TestCreateRecipe:
         ))
         assert res.status_code == 400
 
+    def test_create_ingredient_not_object(self, logged_in_user):
+        res = logged_in_user.post("/api/recipes", json=self._recipe_payload(
+            ingredients=["just a string"]
+        ))
+        assert res.status_code == 400
+        assert "not an object" in res.get_json()["error"]
+
     def test_create_no_category(self, logged_in_user):
         res = logged_in_user.post("/api/recipes", json=self._recipe_payload(category=None))
         assert res.status_code == 201

@@ -5,12 +5,13 @@ _cached_commit_timestamp = 0
 CACHE_TTL = 60 * 60 * 6  # 6 hours
 
 def get_latest_commit_date():
+    """Return latest commit date (ISO string) with 6-hour cache and stale fallback."""
     global _cached_commit_time, _cached_commit_timestamp
     now = time.time()
-    
+
     if _cached_commit_time and now - _cached_commit_timestamp < CACHE_TTL:
         return _cached_commit_time
-    
+
     url = "https://api.github.com/repos/kvjanhun/web_kontissa/commits/main"
     try:
         response = requests.get(url, timeout=5)
@@ -21,4 +22,5 @@ def get_latest_commit_date():
         return commit_date
     except Exception as e:
         print("Error getting commit date:", e)
+        # Return stale cache if available, otherwise None
         return _cached_commit_time

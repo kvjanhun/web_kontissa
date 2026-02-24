@@ -39,6 +39,8 @@ def _parse_ingredients(items):
     """Validate and parse ingredient dicts."""
     ingredients = []
     for i, item in enumerate(items):
+        if not isinstance(item, dict):
+            return None, f"Ingredient at position {i} is not an object"
         name = (item.get("name") or "").strip()
         if not name:
             return None, f"Ingredient at position {i} is missing a name"
@@ -104,6 +106,39 @@ def api_get_recipe(slug):
     return jsonify(recipe.to_dict(include_children=True))
 
 
+def _validate_recipe_data(data):
+    """Validate and parse recipe JSON body. Returns (title, category, ingredients, steps) or an error response."""
+    title = (data.get("title") or "").strip()
+    if not title:
+        return None, (jsonify({"error": "Title is required"}), 400)
+
+    category = (data.get("category") or "").strip() or None
+    if category and category not in VALID_CATEGORIES:
+        return None, (jsonify({"error": f"Invalid category. Must be one of: {', '.join(VALID_CATEGORIES)}"}), 400)
+
+    raw_ingredients = data.get("ingredients", [])
+    if not raw_ingredients:
+        return None, (jsonify({"error": "At least one ingredient is required"}), 400)
+    if len(raw_ingredients) > MAX_INGREDIENTS:
+        return None, (jsonify({"error": f"Too many ingredients (max {MAX_INGREDIENTS})"}), 400)
+
+    raw_steps = data.get("steps", [])
+    if not raw_steps:
+        return None, (jsonify({"error": "At least one step is required"}), 400)
+    if len(raw_steps) > MAX_STEPS:
+        return None, (jsonify({"error": f"Too many steps (max {MAX_STEPS})"}), 400)
+
+    ingredients, err = _parse_ingredients(raw_ingredients)
+    if err:
+        return None, (jsonify({"error": err}), 400)
+
+    steps, err = _parse_steps(raw_steps)
+    if err:
+        return None, (jsonify({"error": err}), 400)
+
+    return (title, category, ingredients, steps), None
+
+
 @app.route("/api/recipes", methods=["POST"])
 @login_required
 def api_create_recipe():
@@ -111,33 +146,10 @@ def api_create_recipe():
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
 
-    title = (data.get("title") or "").strip()
-    if not title:
-        return jsonify({"error": "Title is required"}), 400
-
-    category = (data.get("category") or "").strip() or None
-    if category and category not in VALID_CATEGORIES:
-        return jsonify({"error": f"Invalid category. Must be one of: {', '.join(VALID_CATEGORIES)}"}), 400
-
-    raw_ingredients = data.get("ingredients", [])
-    if not raw_ingredients:
-        return jsonify({"error": "At least one ingredient is required"}), 400
-    if len(raw_ingredients) > MAX_INGREDIENTS:
-        return jsonify({"error": f"Too many ingredients (max {MAX_INGREDIENTS})"}), 400
-
-    raw_steps = data.get("steps", [])
-    if not raw_steps:
-        return jsonify({"error": "At least one step is required"}), 400
-    if len(raw_steps) > MAX_STEPS:
-        return jsonify({"error": f"Too many steps (max {MAX_STEPS})"}), 400
-
-    ingredients, err = _parse_ingredients(raw_ingredients)
+    parsed, err = _validate_recipe_data(data)
     if err:
-        return jsonify({"error": err}), 400
-
-    steps, err = _parse_steps(raw_steps)
-    if err:
-        return jsonify({"error": err}), 400
+        return err
+    title, category, ingredients, steps = parsed
 
     recipe = Recipe(
         title=title,
@@ -164,41 +176,15 @@ def api_update_recipe(recipe_id):
     if not data:
         return jsonify({"error": "Missing JSON body"}), 400
 
-    title = (data.get("title") or "").strip()
-    if not title:
-        return jsonify({"error": "Title is required"}), 400
-
-    category = (data.get("category") or "").strip() or None
-    if category and category not in VALID_CATEGORIES:
-        return jsonify({"error": f"Invalid category. Must be one of: {', '.join(VALID_CATEGORIES)}"}), 400
-
-    raw_ingredients = data.get("ingredients", [])
-    if not raw_ingredients:
-        return jsonify({"error": "At least one ingredient is required"}), 400
-    if len(raw_ingredients) > MAX_INGREDIENTS:
-        return jsonify({"error": f"Too many ingredients (max {MAX_INGREDIENTS})"}), 400
-
-    raw_steps = data.get("steps", [])
-    if not raw_steps:
-        return jsonify({"error": "At least one step is required"}), 400
-    if len(raw_steps) > MAX_STEPS:
-        return jsonify({"error": f"Too many steps (max {MAX_STEPS})"}), 400
-
-    ingredients, err = _parse_ingredients(raw_ingredients)
+    parsed, err = _validate_recipe_data(data)
     if err:
-        return jsonify({"error": err}), 400
+        return err
+    title, category, ingredients, steps = parsed
 
-    steps, err = _parse_steps(raw_steps)
-    if err:
-        return jsonify({"error": err}), 400
-
-    # Regenerate slug if title changed
     if title != recipe.title:
         recipe.slug = unique_slug(title)
     recipe.title = title
     recipe.category = category
-
-    # Replace all ingredients and steps
     recipe.ingredients = ingredients
     recipe.steps = steps
 

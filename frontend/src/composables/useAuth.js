@@ -17,8 +17,13 @@ async function login(email, password) {
 }
 
 async function logout() {
-  await fetch('/api/logout', { method: 'POST' })
-  user.value = null
+  try {
+    const res = await fetch('/api/logout', { method: 'POST' })
+    if (res.ok) user.value = null
+  } catch {
+    // Network error — clear client state anyway since we can't reach the server
+    user.value = null
+  }
 }
 
 async function checkAuth() {
