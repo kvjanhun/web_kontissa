@@ -33,6 +33,7 @@ class Section(db.Model):
     slug = db.Column(db.String, unique=True, nullable=False)
     title = db.Column(db.String, nullable=False)
     content = db.Column(db.Text, nullable=False)
+    position = db.Column(db.Integer, nullable=True, default=0)
 
     def to_dict(self):
         return {
@@ -40,6 +41,7 @@ class Section(db.Model):
             "slug": self.slug,
             "title": self.title,
             "content": self.content,
+            "position": self.position,
         }
 
 
@@ -113,6 +115,7 @@ class BlockedWord(db.Model):
     __tablename__ = 'blocked_words'
     id = db.Column(db.Integer, primary_key=True)
     word = db.Column(db.String(100), unique=True, nullable=False)
+    blocked_at = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
 
 class PageView(db.Model):
@@ -121,6 +124,8 @@ class PageView(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     path = db.Column(db.String(200), unique=True, nullable=False)
     count = db.Column(db.Integer, nullable=False, default=0)
+    created_at = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
 
 class BeeConfig(db.Model):

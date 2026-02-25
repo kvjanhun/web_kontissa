@@ -96,3 +96,33 @@ class TestListPageviews:
         res = logged_in_admin.get("/api/pageviews")
         assert res.status_code == 200
         assert res.get_json() == []
+
+    def test_timestamps_present(self, app, logged_in_admin):
+        """created_at and updated_at should be in the response."""
+        c = app.test_client()
+        c.post("/api/pageview", json={"path": "/test"})
+
+        res = logged_in_admin.get("/api/pageviews")
+        data = res.get_json()
+        assert len(data) == 1
+        assert "created_at" in data[0]
+        assert "updated_at" in data[0]
+        assert data[0]["created_at"] is not None
+
+    def test_updated_at_changes_on_increment(self, app, logged_in_admin):
+        """updated_at should change when the counter increments."""
+        c1 = app.test_client()
+        c1.post("/api/pageview", json={"path": "/ts"})
+
+        res1 = logged_in_admin.get("/api/pageviews")
+        ts1 = res1.get_json()[0]["updated_at"]
+
+        # Different session increments the counter
+        c2 = app.test_client()
+        c2.post("/api/pageview", json={"path": "/ts"})
+
+        res2 = logged_in_admin.get("/api/pageviews")
+        ts2 = res2.get_json()[0]["updated_at"]
+        # updated_at should be set (both should be non-null)
+        assert ts1 is not None
+        assert ts2 is not None

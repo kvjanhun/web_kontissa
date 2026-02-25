@@ -30,7 +30,7 @@ def legacy_index():
 
 @app.route("/api/sections")
 def api_sections():
-    sections = Section.query.all()
+    sections = Section.query.order_by(Section.position.asc(), Section.id.asc()).all()
     return jsonify([s.to_dict() for s in sections])
 
 @app.route("/api/meta")
@@ -122,6 +122,31 @@ def api_delete_section(section_id):
     db.session.delete(section)
     db.session.commit()
     return jsonify({"message": "Section deleted"})
+
+
+@app.route("/api/sections/reorder", methods=["PUT"])
+@admin_required
+def api_reorder_sections():
+    data = request.get_json()
+    if not data or not isinstance(data.get("order"), list):
+        return jsonify({"error": "order (list of section IDs) required"}), 400
+
+    order = data["order"]
+    if not all(isinstance(i, int) for i in order):
+        return jsonify({"error": "order must be a list of integers"}), 400
+
+    sections = Section.query.all()
+    section_map = {s.id: s for s in sections}
+
+    for sid in order:
+        if sid not in section_map:
+            return jsonify({"error": f"Section {sid} not found"}), 404
+
+    for position, sid in enumerate(order):
+        section_map[sid].position = position
+
+    db.session.commit()
+    return jsonify({"message": "Sections reordered"})
 
 
 @app.route("/sanakenno")

@@ -60,13 +60,20 @@ web_kontissa/
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay + /api/weather fetch
-│       │   └── SectionBlock.vue    # Renders section title + HTML content via v-html
+│       │   ├── SectionBlock.vue    # Renders section title + HTML content via v-html
+│       │   └── admin/
+│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows)
+│       │       ├── AdminPageViews.vue    # Page views table with timestamps
+│       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
+│       │       ├── AdminHealth.vue       # System health key-value display
+│       │       ├── AdminBeeStats.vue     # Sanakenno stats (page views, blocked words, puzzles)
+│       │       └── AdminBlockedWords.vue # Blocked words table with unblock
 │       └── views/
 │           ├── HomePage.vue    # Hero with terminal animation
 │           ├── AboutPage.vue   # Fetches and renders /api/sections
 │           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
-│           ├── AdminPage.vue   # Protected admin dashboard with collapsible sections (Sections CRUD, Page Views)
+│           ├── AdminPage.vue   # Protected admin dashboard, two-level collapsible (Site Admin, Sanakenno Admin) with 6 panel components
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
 │           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
@@ -81,9 +88,10 @@ web_kontissa/
 │   ├── utils.py                # GitHub API commit date with 6-hour cache
 │   ├── create_admin.py         # One-time utility: create admin user with db.create_all()
 │   ├── api/
-│   │   ├── bee.py              # GET /api/bee + POST /api/bee/block (Sanakenno — 41 curated puzzles, word blocking)
+│   │   ├── bee.py              # GET /api/bee + POST /api/bee/block + GET /api/bee/stats + GET /api/bee/blocked + DELETE /api/bee/block/<id>
 │   │   ├── cowsay.py           # GET /api/cowsay
-│   │   ├── pageviews.py        # POST /api/pageview (public) + GET /api/pageviews (admin)
+│   │   ├── health.py           # GET /api/admin/health (system health stats)
+│   │   ├── pageviews.py        # POST /api/pageview (public) + GET /api/pageviews (admin, with timestamps)
 │   │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
 │   ├── wordlists/
 │   │   └── kotus_words.txt     # Filtered Kotus Finnish word list (101k words, ≥4 chars)
@@ -94,11 +102,14 @@ web_kontissa/
 │   └── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
 └── tests/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
+    ├── test_admin_health.py    # Admin health endpoint tests
     ├── test_auth.py            # Auth endpoint tests
     ├── test_bee.py             # Sanakenno endpoint + scoring + variations tests (65 tests)
-    ├── test_pageviews.py       # Page view counter API tests (13 tests)
+    ├── test_bee_stats.py       # Sanakenno stats endpoint tests
+    ├── test_blocked_words.py   # Blocked words list + unblock endpoint tests
+    ├── test_pageviews.py       # Page view counter API tests (with timestamp tests)
     ├── test_recipes.py         # Recipe CRUD tests
-    ├── test_sections.py        # Sections CRUD tests
+    ├── test_sections.py        # Sections CRUD + reorder tests
     └── test_weather.py         # Weather endpoint tests
 ```
 
@@ -106,10 +117,11 @@ web_kontissa/
 
 | Method | Endpoint | Auth | Purpose |
 |--------|----------|------|---------|
-| GET | `/api/sections` | Public | List all sections |
+| GET | `/api/sections` | Public | List all sections (ordered by position) |
 | POST | `/api/sections` | Admin | Create section |
 | PUT | `/api/sections/<id>` | Admin | Update section |
 | DELETE | `/api/sections/<id>` | Admin | Delete section |
+| PUT | `/api/sections/reorder` | Admin | Reorder sections (`{"order": [id, ...]}`) |
 | POST | `/api/login` | Public | Authenticate, start session |
 | POST | `/api/logout` | Login | End session |
 | GET | `/api/me` | Public | Current user or 401 |
@@ -122,10 +134,14 @@ web_kontissa/
 | GET | `/api/recipes/categories` | Login | Valid category list |
 | GET | `/api/bee` | Public | Sanakenno daily puzzle (center, letters, words, max_score, puzzle_number, total_puzzles) |
 | POST | `/api/bee/block` | Admin | Permanently remove a word from all puzzles (stored in blocked_words table) |
+| GET | `/api/bee/blocked` | Admin | List all blocked words with timestamps |
+| DELETE | `/api/bee/block/<id>` | Admin | Unblock a word by ID |
+| GET | `/api/bee/stats` | Admin | Sanakenno stats (page views, blocked count, total puzzles) |
 | GET | `/api/bee/variations?puzzle=N` | Admin | All 7 center-letter variations with stats (word_count, max_score, pangram_count, is_active) |
 | POST | `/api/bee/center` | Admin | Set center letter for a puzzle (`{puzzle: int, center: str}`) |
 | POST | `/api/pageview` | Public | Increment page view counter for a path (`{"path": "/sanakenno"}`) |
-| GET | `/api/pageviews` | Admin | All page view counts, sorted by count desc |
+| GET | `/api/pageviews` | Admin | All page view counts with timestamps, sorted by count desc |
+| GET | `/api/admin/health` | Admin | System health (Python version, DB size, disk, uptime) |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |

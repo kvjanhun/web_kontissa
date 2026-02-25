@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from flask import jsonify, request, session
 from app import app, limiter
 from app.models import db, PageView
@@ -23,6 +25,7 @@ def track_pageview():
     if not already_counted:
         if pv:
             pv.count += 1
+            pv.updated_at = datetime.now(timezone.utc)
         else:
             pv = PageView(path=path, count=1)
             db.session.add(pv)
@@ -37,4 +40,12 @@ def track_pageview():
 @admin_required
 def list_pageviews():
     views = db.session.query(PageView).order_by(PageView.count.desc()).all()
-    return jsonify([{"path": pv.path, "count": pv.count} for pv in views])
+    return jsonify([
+        {
+            "path": pv.path,
+            "count": pv.count,
+            "created_at": pv.created_at.isoformat() + "Z" if pv.created_at else None,
+            "updated_at": pv.updated_at.isoformat() + "Z" if pv.updated_at else None,
+        }
+        for pv in views
+    ])

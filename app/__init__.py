@@ -34,8 +34,25 @@ def unauthorized():
     return jsonify({"error": "Authentication required"}), 401
 
 
+def _run_migrations():
+    """Add columns to existing tables that db.create_all() won't add to SQLite."""
+    migrations = [
+        "ALTER TABLE blocked_words ADD COLUMN blocked_at DATETIME",
+        "ALTER TABLE page_views ADD COLUMN created_at DATETIME",
+        "ALTER TABLE page_views ADD COLUMN updated_at DATETIME",
+        "ALTER TABLE section ADD COLUMN position INTEGER DEFAULT 0",
+    ]
+    for sql in migrations:
+        try:
+            db.session.execute(db.text(sql))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+
 with app.app_context():
     db.create_all()
+    _run_migrations()
 
 from . import routes  # registers the routes with the app
 from . import auth
@@ -44,6 +61,7 @@ from .api import cowsay
 from .api import weather
 from .api import bee
 from .api import pageviews
+from .api import health
 
 with app.app_context():
     bee._seed_centers()

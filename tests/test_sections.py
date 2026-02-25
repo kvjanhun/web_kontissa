@@ -79,6 +79,62 @@ class TestUpdateSection:
         assert res.status_code == 400
 
 
+class TestReorderSections:
+    """PUT /api/sections/reorder"""
+
+    def test_requires_auth(self, client):
+        res = client.put("/api/sections/reorder", json={"order": []})
+        assert res.status_code == 401
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.put("/api/sections/reorder", json={"order": []})
+        assert res.status_code == 403
+
+    def test_reorders_sections(self, app, logged_in_admin):
+        from app.models import db, Section
+        with app.app_context():
+            s1 = Section(title="A", slug="a", content="a")
+            s2 = Section(title="B", slug="b", content="b")
+            db.session.add_all([s1, s2])
+            db.session.commit()
+            id1, id2 = s1.id, s2.id
+
+        # Reverse order
+        res = logged_in_admin.put("/api/sections/reorder", json={"order": [id2, id1]})
+        assert res.status_code == 200
+
+        # Verify order in GET
+        res = logged_in_admin.get("/api/sections")
+        data = res.get_json()
+        assert data[0]["id"] == id2
+        assert data[0]["position"] == 0
+        assert data[1]["id"] == id1
+        assert data[1]["position"] == 1
+
+    def test_validates_ids(self, logged_in_admin):
+        res = logged_in_admin.put("/api/sections/reorder", json={"order": [9999]})
+        assert res.status_code == 404
+
+    def test_rejects_missing_order(self, logged_in_admin):
+        res = logged_in_admin.put("/api/sections/reorder", json={})
+        assert res.status_code == 400
+
+    def test_rejects_non_int_order(self, logged_in_admin):
+        res = logged_in_admin.put("/api/sections/reorder", json={"order": ["a"]})
+        assert res.status_code == 400
+
+    def test_position_in_get_response(self, app, logged_in_admin):
+        from app.models import db, Section
+        with app.app_context():
+            s = Section(title="X", slug="x", content="x")
+            db.session.add(s)
+            db.session.commit()
+
+        res = logged_in_admin.get("/api/sections")
+        data = res.get_json()
+        assert "position" in data[0]
+
+
 class TestDeleteSection:
     def test_delete_as_admin(self, logged_in_admin, sample_section):
         res = logged_in_admin.delete(f"/api/sections/{sample_section['id']}")

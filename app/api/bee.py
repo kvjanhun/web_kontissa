@@ -4,7 +4,7 @@ from flask_login import current_user, login_required
 import os
 
 from app import app
-from app.models import db, BlockedWord, BeeConfig
+from app.models import db, BlockedWord, BeeConfig, PageView
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -291,3 +291,59 @@ def bee_set_center():
     _PUZZLE_CACHE.pop(puzzle_idx, None)
 
     return jsonify({"puzzle": puzzle_idx, "center": center})
+
+
+@app.route("/api/bee/stats")
+@login_required
+def bee_stats():
+    """Sanakenno overview stats (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    sanakenno_pv = db.session.query(PageView).filter_by(path="/sanakenno").first()
+    page_views = sanakenno_pv.count if sanakenno_pv else 0
+    blocked_words_count = db.session.query(BlockedWord).count()
+    total_puzzles = len(PUZZLES)
+
+    return jsonify({
+        "page_views": page_views,
+        "blocked_words_count": blocked_words_count,
+        "total_puzzles": total_puzzles,
+    })
+
+
+@app.route("/api/bee/blocked")
+@login_required
+def bee_blocked_list():
+    """List all blocked words with timestamps (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    words = db.session.query(BlockedWord).order_by(BlockedWord.blocked_at.desc()).all()
+    return jsonify([
+        {
+            "id": bw.id,
+            "word": bw.word,
+            "blocked_at": bw.blocked_at.isoformat() + "Z" if bw.blocked_at else None,
+        }
+        for bw in words
+    ])
+
+
+@app.route("/api/bee/block/<int:word_id>", methods=["DELETE"])
+@login_required
+def bee_unblock_word(word_id):
+    """Unblock a word by ID (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    bw = db.session.get(BlockedWord, word_id)
+    if not bw:
+        return jsonify({"error": "Blocked word not found"}), 404
+
+    word = bw.word
+    db.session.delete(bw)
+    db.session.commit()
+    _PUZZLE_CACHE.clear()
+
+    return jsonify({"word": word, "unblocked": True})
