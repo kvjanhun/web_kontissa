@@ -43,6 +43,7 @@ from . import recipes
 from .api import cowsay
 from .api import weather
 from .api import bee
+from .api import pageviews
 
 with app.app_context():
     bee._seed_centers()

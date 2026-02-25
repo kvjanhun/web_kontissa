@@ -49,7 +49,8 @@ web_kontissa/
 │       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
 │       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
 │       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
-│       │   └── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
+│       │   ├── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
+│       │   └── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
 │       ├── locales/
 │       │   ├── en.json         # English translations (~90 keys)
 │       │   └── fi.json         # Finnish translations
@@ -65,7 +66,7 @@ web_kontissa/
 │           ├── AboutPage.vue   # Fetches and renders /api/sections
 │           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
-│           ├── AdminPage.vue   # Protected section CRUD (add/edit/delete)
+│           ├── AdminPage.vue   # Protected admin dashboard with collapsible sections (Sections CRUD, Page Views)
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
 │           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
@@ -73,7 +74,7 @@ web_kontissa/
 │           └── NotFound.vue    # 404
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
-│   ├── models.py               # User, Section, Recipe, Ingredient, Step, BlockedWord, BeeConfig models
+│   ├── models.py               # User, Section, Recipe, Ingredient, Step, BlockedWord, BeeConfig, PageView models
 │   ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
 │   ├── auth.py                 # /api/login, /api/logout, /api/me
 │   ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
@@ -82,6 +83,7 @@ web_kontissa/
 │   ├── api/
 │   │   ├── bee.py              # GET /api/bee + POST /api/bee/block (Sanakenno — 41 curated puzzles, word blocking)
 │   │   ├── cowsay.py           # GET /api/cowsay
+│   │   ├── pageviews.py        # POST /api/pageview (public) + GET /api/pageviews (admin)
 │   │   └── weather.py          # GET /api/weather (FMI open data, 10-min cache)
 │   ├── wordlists/
 │   │   └── kotus_words.txt     # Filtered Kotus Finnish word list (101k words, ≥4 chars)
@@ -94,6 +96,7 @@ web_kontissa/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
     ├── test_auth.py            # Auth endpoint tests
     ├── test_bee.py             # Sanakenno endpoint + scoring + variations tests (65 tests)
+    ├── test_pageviews.py       # Page view counter API tests (13 tests)
     ├── test_recipes.py         # Recipe CRUD tests
     ├── test_sections.py        # Sections CRUD tests
     └── test_weather.py         # Weather endpoint tests
@@ -121,6 +124,8 @@ web_kontissa/
 | POST | `/api/bee/block` | Admin | Permanently remove a word from all puzzles (stored in blocked_words table) |
 | GET | `/api/bee/variations?puzzle=N` | Admin | All 7 center-letter variations with stats (word_count, max_score, pangram_count, is_active) |
 | POST | `/api/bee/center` | Admin | Set center letter for a puzzle (`{puzzle: int, center: str}`) |
+| POST | `/api/pageview` | Public | Increment page view counter for a path (`{"path": "/sanakenno"}`) |
+| GET | `/api/pageviews` | Admin | All page view counts, sorted by count desc |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
@@ -233,7 +238,7 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
   3. **`distribution`** 📏 — "Pituusjakauma": word count per length (e.g. "4: 12  5: 8  6: 3"), showing remaining per length; fully-found lengths are muted.
   4. **`pairs`** 🔠 — "Alkuparit": remaining unfound words grouped by first two letters, formatted like Alkukirjaimet; fully-found pairs displayed muted at 0.
   - Admin puzzle switches reset hint state together with game progress.
-- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: elapsed time since `startedAt`, current rank, score/max_score, and hint icons (📊🔤📏🔠) for any activated hints. After copying, a brief toast previewing the share text is shown to the user.
+- **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: puzzle number, current rank, score/max_score, and hint icons (📊🔤📏🔠) for any activated hints. After copying, a brief "Kopioitu leikepöydälle!" confirmation is shown.
 - **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, and `og:url` for link preview cards (Finnish game description).
 - **Favicon swap**: `SanakennoPage.vue` swaps the favicon to an orange pointy-top hexagon SVG on `onMounted` and restores the original on `onUnmounted`.
 - **Word blocking**: Admins can permanently remove a word via `POST /api/bee/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. `BeeConfig` model also exists in `models.py` as a key-value store for future scheduling state.

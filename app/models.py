@@ -115,6 +115,14 @@ class BlockedWord(db.Model):
     word = db.Column(db.String(100), unique=True, nullable=False)
 
 
+class PageView(db.Model):
+    """Per-path page view counter. Single row per path, upserted on each hit."""
+    __tablename__ = 'page_views'
+    id = db.Column(db.Integer, primary_key=True)
+    path = db.Column(db.String(200), unique=True, nullable=False)
+    count = db.Column(db.Integer, nullable=False, default=0)
+
+
 class BeeConfig(db.Model):
     """Key-value store for Sanakenno puzzle scheduling state."""
     __tablename__ = 'bee_config'
