@@ -99,7 +99,7 @@ const RANKS = [
   { pct: 0,   name: 'Etsi sanoja!' },
 ]
 
-const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏' }
+const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏', pairs: '🔠' }
 
 const rank = computed(() => {
   if (!puzzle.value || puzzle.value.max_score === 0) return RANKS[RANKS.length - 1].name
@@ -223,10 +223,12 @@ const unfoundLengths = computed(() => {
   return { longest, uniqueLengths: lengths.size }
 })
 
-const pangramCount = computed(() => {
-  if (!puzzle.value) return 0
+const pangramStats = computed(() => {
+  if (!puzzle.value) return { total: 0, found: 0, remaining: 0 }
   const letterSet = new Set([center.value, ...outerLetters.value])
-  return allWords.value.filter(w => [...letterSet].every(c => w.includes(c))).length
+  const pangrams = allWords.value.filter(w => [...letterSet].every(c => w.includes(c)))
+  const found = pangrams.filter(w => foundWords.value.has(w)).length
+  return { total: pangrams.length, found, remaining: pangrams.length - found }
 })
 
 // Hint 3: word count per length (remaining)
@@ -241,6 +243,20 @@ const lengthDistribution = computed(() => {
   return Object.entries(dist)
     .map(([len, { total, found }]) => ({ len: parseInt(len), total, remaining: total - found }))
     .sort((a, b) => a.len - b.len)
+})
+
+// Hint 4: remaining words per two-letter pair, sorted alphabetically
+const pairMap = computed(() => {
+  const map = {}
+  for (const word of allWords.value) {
+    const pair = word.slice(0, 2)
+    if (!map[pair]) map[pair] = { total: 0, found: 0 }
+    map[pair].total++
+    if (foundWords.value.has(word)) map[pair].found++
+  }
+  return Object.entries(map)
+    .map(([pair, { total, found }]) => ({ pair, remaining: total - found }))
+    .sort((a, b) => a.pair.localeCompare(b.pair))
 })
 
 // --- Favicon swap ---
@@ -646,7 +662,7 @@ onUnmounted(() => {
               <li>✦ Sisältää <span style="color: var(--color-accent);">oranssin keskikirjaimen</span></li>
               <li>✦ Olla vähintään 4 kirjainta pitkä</li>
               <li>✦ Koostua vain annetuista kirjaimista — samaa kirjainta voi käyttää useasti</li>
-              <li>✦ Löytyä suomen kielen sanakirjasta</li>
+              <li>✦ Löytyä suomen kielen sanakirjasta (<a href="https://kaino.kotus.fi/sanat/nykysuomi/" target="_blank" rel="noopener" style="color: var(--color-accent); text-decoration: underline;">Kotus</a>)</li>
             </ul>
           </div>
 
@@ -671,7 +687,7 @@ onUnmounted(() => {
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">💡 Avut:</p>
-            <p>Kolme vihjettä, jotka jäävät auki koko pelin ajaksi.</p>
+            <p>Neljä vihjettä, jotka jäävät auki koko pelin ajaksi.</p>
           </div>
         </div>
       </div>
@@ -925,7 +941,7 @@ onUnmounted(() => {
           </div>
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
             <div v-if="unfoundLengths">
-              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramCount }} {{ pangramCount === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
               {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
@@ -975,6 +991,29 @@ onUnmounted(() => {
               class="text-sm"
               :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
             >{{ item.len }}: {{ item.remaining }}</span>
+          </div>
+        </div>
+
+        <!-- Hint 4: remaining words per two-letter pair -->
+        <div>
+          <div class="flex items-center justify-between mb-1">
+            <span style="color: var(--color-text-secondary);">Alkuparit 🔠</span>
+            <button
+              v-if="!hintsUnlocked.has('pairs')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click="unlockHint('pairs')"
+            >Aktivoi</button>
+          </div>
+          <div v-if="hintsUnlocked.has('pairs')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in pairMap"
+              :key="item.pair"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >
+              {{ item.pair.toUpperCase() }}&nbsp;{{ item.remaining }}
+            </span>
           </div>
         </div>
 
