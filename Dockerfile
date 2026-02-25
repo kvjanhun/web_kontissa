@@ -14,4 +14,4 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY run.py .
 COPY --from=frontend /src/app/static/dist/ ./app/static/dist/
-CMD ["gunicorn", "-w", "2", "-b", "0.0.0.0:80", "run:app"]
+CMD ["gunicorn", "--preload", "-w", "2", "-b", "0.0.0.0:80", "run:app"]

@@ -181,7 +181,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - **Firewall (iptables)**: Default deny inbound. Only ports 80, 443 open publicly. SSH restricted to two LAN IPs. Container port 8080 blocked from external access.
 - **TLS**: Let's Encrypt with certbot, ECDSA certificates, TLSv1.2+1.3 only. Auto-renewal via systemd timer with nginx reload hook.
 - **Deployment**: Push to GitHub main → webhook (token-authenticated) → `deploy-site.sh` (git pull, docker compose up --build, systemctl restart).
-- **Services**: `site-container.service` (Docker app), `webhook.service` (deploy listener, runs as kvjanhun).
+- **Services**: `web-kontissa.service` (Docker Compose app, runs as kvjanhun), `webhook.service` (deploy listener, runs as kvjanhun). The old `site-container.service` (static HTML site) has been disabled.
 
 ## Key Patterns & Conventions
 
