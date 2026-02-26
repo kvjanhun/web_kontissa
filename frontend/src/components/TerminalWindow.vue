@@ -1,110 +1,164 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { useTerminal } from '../composables/useTerminal.js'
 
-const typedCommand = ref('')
-const cowsayOutput = ref('')
-const typedWeatherCmd = ref('')
-const weatherOutput = ref('')
-const showWeatherPrompt = ref(false)
-const showNewPrompt = ref(false)
+const {
+  outputLines,
+  currentInput,
+  isBooting,
+  isProcessing,
+  executeCommand,
+  runBootSequence,
+  historyUp,
+  historyDown,
+} = useTerminal()
 
-const typeText = (text, target, delay = 80) => {
-  return new Promise((resolve) => {
-    let i = 0
-    const step = () => {
-      if (i < text.length) {
-        target.value += text[i]
-        i++
-        setTimeout(step, delay)
-      } else {
-        resolve()
-      }
+const hiddenInput = ref(null)
+const scrollContainer = ref(null)
+const scrollTop = ref(0)
+const scrollHeight = ref(1)
+const clientHeight = ref(1)
+
+const canScroll = computed(() => scrollHeight.value > clientHeight.value)
+const thumbHeight = computed(() => {
+  if (!canScroll.value) return 0
+  return Math.max(24, (clientHeight.value / scrollHeight.value) * clientHeight.value)
+})
+const thumbTop = computed(() => {
+  if (!canScroll.value) return 0
+  const maxScroll = scrollHeight.value - clientHeight.value
+  const maxThumb = clientHeight.value - thumbHeight.value
+  return maxScroll > 0 ? (scrollTop.value / maxScroll) * maxThumb : 0
+})
+
+function updateScrollMetrics() {
+  const el = scrollContainer.value
+  if (!el) return
+  scrollTop.value = el.scrollTop
+  scrollHeight.value = el.scrollHeight
+  clientHeight.value = el.clientHeight
+}
+
+function focusInput() {
+  hiddenInput.value?.focus()
+}
+
+async function handleEnter() {
+  if (isBooting.value || isProcessing.value) return
+  const cmd = currentInput.value
+  currentInput.value = ''
+  await executeCommand(cmd)
+}
+
+function handleKeydown(e) {
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    historyUp()
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    historyDown()
+  }
+}
+
+function scrollToBottom() {
+  nextTick(() => {
+    if (scrollContainer.value) {
+      scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
+      updateScrollMetrics()
     }
-    step()
   })
 }
 
-const fetchCowsay = async () => {
-  try {
-    const res = await fetch('/api/cowsay')
-    const data = await res.json()
-    cowsayOutput.value = data.output
-  } catch {
-    cowsayOutput.value = 'Error fetching cowsay'
+let resizeObserver = null
+
+watch(outputLines, scrollToBottom, { deep: true })
+
+onMounted(async () => {
+  if (scrollContainer.value) {
+    resizeObserver = new ResizeObserver(updateScrollMetrics)
+    resizeObserver.observe(scrollContainer.value)
   }
-}
+  await runBootSequence()
+  focusInput()
+})
 
-const fetchWeather = async () => {
-  try {
-    const res = await fetch('/api/weather')
-    const data = await res.json()
-    if (data.error) {
-      weatherOutput.value = '  Weather data unavailable'
-      return
-    }
-    const temp = data.temperature != null ? Math.round(data.temperature) : '?'
-    const feels = data.feels_like != null ? Math.round(data.feels_like) : '?'
-    const wind = data.wind_speed != null ? data.wind_speed : '?'
-    const cond = data.condition || 'N/A'
-    const station = data.station || 'Vantaa'
-    weatherOutput.value =
-      `  ${station}  ${temp}°C (feels like ${feels}°C)\n` +
-      `  Wind ${wind} m/s  |  ${cond}`
-  } catch {
-    weatherOutput.value = '  Weather data unavailable'
-  }
-}
-
-const runSequence = async () => {
-  await typeText('cowsay moo', typedCommand)
-  await new Promise((r) => setTimeout(r, 100))
-  await fetchCowsay()
-  showWeatherPrompt.value = true
-
-  await new Promise((r) => setTimeout(r, 1000))
-  await typeText('weather', typedWeatherCmd)
-  await new Promise((r) => setTimeout(r, 100))
-  await fetchWeather()
-  showNewPrompt.value = true
-}
-
-onMounted(() => {
-  setTimeout(runSequence, 3000)
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
 })
 </script>
 
 <template>
-  <div class="w-full rounded-lg overflow-hidden shadow-lg min-h-[340px]">
-    <div class="bg-term-bg font-mono text-sm text-white p-4 min-h-[340px]">
-      <div class="flex font-mono">
-        <span class="flex text-gray-300">
-          <span class="text-term-user">konsta@erez.ac</span>
-          <span>:</span>
-          <span class="text-term-dir">~</span>
-          <span class="mr-[1ch]">$</span>
-        </span>
-        <span class="text-white">{{ typedCommand }}</span>
+  <div
+    class="w-full rounded-lg overflow-hidden shadow-lg"
+    @click="focusInput"
+  >
+    <div class="relative bg-term-bg">
+      <!-- Scrollable content -->
+      <div
+        ref="scrollContainer"
+        class="font-mono text-sm text-white p-4 h-[340px] overflow-y-scroll pr-6"
+        style="-ms-overflow-style: none; scrollbar-width: none;"
+        role="log"
+        aria-live="polite"
+        @scroll="updateScrollMetrics"
+      >
+        <!-- Output lines -->
+        <div
+          v-for="(line, i) in outputLines"
+          :key="i"
+          v-html="line.html"
+        />
+
+        <!-- Active prompt (when not booting) -->
+        <div v-if="!isBooting" class="flex font-mono">
+          <span class="flex text-gray-300 shrink-0">
+            <span class="text-term-user">konsta@erez.ac</span>
+            <span>:</span>
+            <span class="text-term-dir">~</span>
+            <span class="mr-[1ch]">$</span>
+          </span>
+          <span class="text-white whitespace-pre">{{ currentInput }}</span>
+          <span class="block h-3.5 w-[0.6em] my-px cursor-blink shrink-0"></span>
+        </div>
       </div>
-      <pre class="font-mono text-white whitespace-pre-wrap m-0">{{ cowsayOutput }}</pre>
-      <div class="flex font-mono" v-if="showWeatherPrompt">
-        <span class="flex text-gray-300">
-          <span class="text-term-user">konsta@erez.ac</span>
-          <span>:</span>
-          <span class="text-term-dir">~</span>
-          <span class="mr-[1ch]">$</span>
-        </span>
-        <span class="text-white">{{ typedWeatherCmd }}</span>
-      </div>
-      <pre class="font-mono text-white whitespace-pre-wrap m-0">{{ weatherOutput }}</pre>
-      <div class="flex font-mono" v-if="showNewPrompt">
-        <span class="flex text-gray-300">
-          <span class="text-term-user">konsta@erez.ac</span>
-          <span>:</span>
-          <span class="text-term-dir">~</span>
-          <span class="mr-[1ch]">$</span>
-          <span class="block h-3.5 w-px my-px cursor-blink"></span>
-        </span>
+
+      <!-- Custom scrollbar track (inside terminal padding) -->
+      <div
+        class="absolute top-2 bottom-2 right-1.5 w-1.5 rounded-full"
+        style="background: #1a1a1a;"
+        aria-hidden="true"
+      >
+        <div
+          v-if="canScroll"
+          class="w-1.5 rounded-full"
+          :style="{
+            background: '#555',
+            height: thumbHeight + 'px',
+            marginTop: thumbTop + 'px',
+          }"
+        />
       </div>
     </div>
+
+    <!-- Hidden input for keyboard capture -->
+    <input
+      ref="hiddenInput"
+      v-model="currentInput"
+      class="sr-only"
+      type="text"
+      autocapitalize="off"
+      autocorrect="off"
+      spellcheck="false"
+      aria-label="Terminal input"
+      @keydown.enter.prevent="handleEnter"
+      @keydown="handleKeydown"
+    />
   </div>
 </template>
+
+<style scoped>
+/* Hide native scrollbar across all browsers */
+.overflow-y-scroll::-webkit-scrollbar {
+  display: none;
+}
+</style>

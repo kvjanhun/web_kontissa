@@ -50,7 +50,8 @@ web_kontissa/
 │       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
 │       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
 │       │   ├── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
-│       │   └── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
+│       │   ├── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
+│       │   └── useTerminal.js  # Interactive shell logic: boot sequence, command handlers, history navigation
 │       ├── locales/
 │       │   ├── en.json         # English translations (~90 keys)
 │       │   └── fi.json         # Finnish translations
@@ -59,7 +60,8 @@ web_kontissa/
 │       │   ├── AppFooter.vue   # Full auth-aware nav links + last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
-│       │   ├── TerminalWindow.vue  # Typing animation → /api/cowsay + /api/weather fetch
+│       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, weather, about, neofetch, cowsay, clear
+│       │   ├── weatherIcons.js    # Inline SVG weather icons + wawaToIcon(code) mapper
 │       │   ├── SectionBlock.vue    # Renders section title + HTML content via v-html
 │       │   └── admin/
 │       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows)
@@ -107,6 +109,7 @@ web_kontissa/
     ├── test_bee.py             # Sanakenno endpoint + scoring + variations tests (65 tests)
     ├── test_bee_stats.py       # Sanakenno stats endpoint tests
     ├── test_blocked_words.py   # Blocked words list + unblock endpoint tests
+    ├── test_cowsay.py           # Cowsay endpoint tests (default, custom message, truncation, special chars)
     ├── test_pageviews.py       # Page view counter API tests (with timestamp tests)
     ├── test_recipes.py         # Recipe CRUD tests
     ├── test_sections.py        # Sections CRUD + reorder tests
@@ -142,7 +145,7 @@ web_kontissa/
 | POST | `/api/pageview` | Public | Increment page view counter for a path (`{"path": "/sanakenno"}`) |
 | GET | `/api/pageviews` | Admin | All page view counts with timestamps, sorted by count desc |
 | GET | `/api/admin/health` | Admin | System health (Python version, DB size, disk, uptime) |
-| GET | `/api/cowsay` | Public | ASCII cow art |
+| GET | `/api/cowsay?message=` | Public | ASCII cow art (optional message param, max 200 chars, default "moo") |
 | GET | `/api/weather` | Public | Current weather from FMI (Helsinki-Vantaa), cached 10 min |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
