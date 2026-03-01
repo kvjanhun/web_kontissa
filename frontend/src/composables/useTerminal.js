@@ -1,9 +1,12 @@
 import { ref } from 'vue'
 import { useDarkMode } from './useDarkMode.js'
+import { useAuth } from './useAuth.js'
 import { wawaToIcon } from '../components/weatherIcons.js'
 
 const PROMPT_HTML = '<span class="flex text-gray-300 shrink-0"><span class="text-term-user">konsta@erez.ac</span><span>:</span><span class="text-term-dir">~</span><span class="mr-[1ch]">$</span></span>'
 const MAX_HISTORY = 50
+
+let hasBooted = false
 
 const outputLines = ref([])
 const currentInput = ref('')
@@ -38,6 +41,10 @@ async function delay(ms) {
 }
 
 async function runBootSequence() {
+  if (hasBooted) {
+    isBooting.value = false
+    return
+  }
   isBooting.value = true
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-US', {
@@ -48,7 +55,7 @@ async function runBootSequence() {
   const bootLines = [
     'Welcome to erez.ac (GNU/Linux 5.14.0-el9 x86_64)',
     '',
-    ' * Server: Intel NUC11ATKC2, Helsinki',
+    ' * Server: Intel NUC11ATKC2, Vantaa',
     ' * Stack:  Flask 3.1 + Vue 3 + SQLite',
     ' * Status: <span class="text-term-user">All systems operational</span>',
     '',
@@ -61,6 +68,7 @@ async function runBootSequence() {
   }
 
   pushLine('', 'boot')
+  hasBooted = true
   isBooting.value = false
 }
 
@@ -70,10 +78,15 @@ function handleHelp() {
   pushLine(
     '<table class="text-sm">' +
     '<tr><td class="pr-4 text-term-user">help</td><td class="text-gray-300">Show available commands</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">weather</td><td class="text-gray-300">Current Helsinki weather</td></tr>' +
     '<tr><td class="pr-4 text-term-user">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">neofetch</td><td class="text-gray-300">System info</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">skills</td><td class="text-gray-300">Technical skills</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">fetch</td><td class="text-gray-300">System info</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">cowthink &lt;msg&gt;</td><td class="text-gray-300">ASCII cow thinks your message</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">uptime</td><td class="text-gray-300">Server uptime</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">date</td><td class="text-gray-300">Current date and time</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">whoami</td><td class="text-gray-300">Current user</td></tr>' +
     '<tr><td class="pr-4 text-term-user">clear</td><td class="text-gray-300">Clear terminal</td></tr>' +
     '</table>'
   )
@@ -125,18 +138,23 @@ function handleAbout() {
   )
 }
 
-function handleNeofetch() {
+function handleFetch() {
   const { isDark } = useDarkMode()
   const logo = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192.3 146" class="w-20 shrink-0" aria-hidden="true"><path fill="#e00" d="m128,84c12.5,0 30.6-2.6 30.6-17.5a19.53,19.53 0 0 0-0.3-3.4L150.9,30.7C149.2,23.6 147.7,20.3 135.2,14.1 125.5,9.1 104.4,1 98.1,1 92.2,1 90.5,8.5 83.6,8.5 76.9,8.5 72,2.9 65.7,2.9c-6,0-9.9,4.1-12.9,12.5 0,0-8.4,23.7-9.5,27.2a6.15,6.15 0 0 0-0.2,1.9C43,53.7 79.3,83.9 128,84m32.5-11.4c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5-7.3C22.8,52.5 1,55.5 1,74.7 1,106.2 75.6,145 134.6,145c45.3,0 56.7-20.5 56.7-36.7 0-12.7-11-27.1-30.8-35.7"/><path fill="#600" d="m160.5,72.6c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5-7.3l3.7-9.1a6.15,6.15 0 0 0-0.2,1.9c0,9.2 36.3,39.4 84.9,39.4 12.5,0 30.6-2.6 30.6-17.5A19.53,19.53 0 0 0 158.3,63Z"/></svg>'
 
   const info = [
     '<span class="text-red-400 font-bold">konsta</span><span class="text-gray-300">@</span><span class="text-red-400 font-bold">erez.ac</span>',
-    '<span class="text-gray-500">───────────────────────────</span>',
-    `<span class="text-term-dir">OS</span>      <span class="text-gray-300">RHEL 9 (5.14.0-el9 x86_64)</span>`,
-    `<span class="text-term-dir">Host</span>    <span class="text-gray-300">Intel NUC11ATKC2, Helsinki</span>`,
-    `<span class="text-term-dir">Stack</span>   <span class="text-gray-300">Flask 3.1 / Vue 3 / SQLite</span>`,
-    `<span class="text-term-dir">Theme</span>   <span class="text-gray-300">${isDark.value ? 'Dark' : 'Light'} mode</span>`,
-    `<span class="text-term-dir">Font</span>    <span class="text-gray-300">Ubuntu Mono / DM Sans</span>`,
+    '<span class="text-gray-500">─────────────────────────────────────</span>',
+    `<span class="text-term-dir">OS</span>       <span class="text-gray-300">RHEL 9 (5.14.0-el9 x86_64)</span>`,
+    `<span class="text-term-dir">Host</span>     <span class="text-gray-300">Intel NUC11ATKC2, Vantaa</span>`,
+    `<span class="text-term-dir">CPU</span>      <span class="text-gray-300">Intel Celeron N4505 @ 2.00GHz</span>`,
+    `<span class="text-term-dir">Memory</span>   <span class="text-gray-300">7.3 GiB</span>`,
+    `<span class="text-term-dir">Disk</span>     <span class="text-gray-300">70G (31% used)</span>`,
+    `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">47 weeks</span>`,
+    `<span class="text-term-dir">Docker</span>   <span class="text-gray-300">28.0.4</span>`,
+    `<span class="text-term-dir">Stack</span>    <span class="text-gray-300">Flask 3.1 / Vue 3 / SQLite</span>`,
+    `<span class="text-term-dir">Theme</span>    <span class="text-gray-300">${isDark.value ? 'Dark' : 'Light'} mode</span>`,
+    `<span class="text-term-dir">Font</span>     <span class="text-gray-300">Ubuntu Mono / DM Sans</span>`,
   ]
 
   pushLine(
@@ -147,10 +165,48 @@ function handleNeofetch() {
   )
 }
 
-async function handleCowsay(message) {
-  const msg = message.trim() || 'moo'
+function parseCowArgs(argsArray) {
+  let character = 'cow'
+  let message = ''
+  const rest = [...argsArray]
+
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '-f' && i + 1 < rest.length) {
+      character = rest[i + 1]
+      i++
+    } else if (rest[i] === '-l') {
+      return { list: true }
+    } else {
+      message = rest.slice(i).join(' ')
+      break
+    }
+  }
+
+  return { character, message: message || 'moo' }
+}
+
+async function handleCowsay(argsArray, think = false) {
+  const parsed = parseCowArgs(argsArray)
+
+  if (parsed.list) {
+    try {
+      const res = await fetch('/api/cowsay/characters')
+      const data = await res.json()
+      pushLine(`<span class="text-gray-300">${escapeHtml(data.characters.join('  '))}</span>`)
+    } catch {
+      pushLine('<span class="text-red-400">Error fetching character list</span>')
+    }
+    return
+  }
+
+  const params = new URLSearchParams({
+    message: parsed.message,
+    character: parsed.character,
+  })
+  if (think) params.set('think', 'true')
+
   try {
-    const res = await fetch(`/api/cowsay?message=${encodeURIComponent(msg)}`)
+    const res = await fetch(`/api/cowsay?${params}`)
     const data = await res.json()
     if (data.error) {
       pushLine(`<span class="text-red-400">${escapeHtml(data.error)}</span>`)
@@ -159,6 +215,44 @@ async function handleCowsay(message) {
     pushLine(`<pre class="font-mono text-sm whitespace-pre m-0">${escapeHtml(data.output)}</pre>`)
   } catch {
     pushLine('<span class="text-red-400">Error fetching cowsay</span>')
+  }
+}
+
+function handleSkills() {
+  pushLine(
+    '<div class="my-1 text-sm space-y-1.5">' +
+    '<div><span class="text-term-user font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · TypeScript · SQL · Bash · HTML/CSS</span></div>' +
+    '<div><span class="text-term-dir font-bold">Frontend</span>   <span class="text-gray-300">Vue 3 · React · Tailwind CSS · Vite</span></div>' +
+    '<div><span class="text-accent font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite · PostgreSQL</span></div>' +
+    '<div><span class="text-purple-400 font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux (RHEL) · GitHub Actions</span></div>' +
+    '<div><span class="text-yellow-400 font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
+    '</div>'
+  )
+}
+
+function getCommandText(cmd, argsArray) {
+  switch (cmd) {
+    case 'uptime':
+      return 'up 47 weeks, 20 hours, 33 minutes'
+    case 'date': {
+      const now = new Date()
+      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      const d = days[now.getDay()]
+      const m = months[now.getMonth()]
+      const day = String(now.getDate()).padStart(2, ' ')
+      const hh = String(now.getHours()).padStart(2, '0')
+      const mm = String(now.getMinutes()).padStart(2, '0')
+      const ss = String(now.getSeconds()).padStart(2, '0')
+      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
+      return `${d} ${m} ${day} ${hh}:${mm}:${ss} ${tz} ${now.getFullYear()}`
+    }
+    case 'whoami': {
+      const { user } = useAuth()
+      return user.value ? user.value.username : 'visitor'
+    }
+    default:
+      return null
   }
 }
 
@@ -180,9 +274,35 @@ async function executeCommand(input) {
 
   pushPromptLine(trimmed)
 
+  // Handle piping to cowsay/cowthink
+  const pipeMatch = trimmed.match(/^(.+?)\s*\|\s*(cowsay|cowthink)(.*)$/i)
+  if (pipeMatch) {
+    const leftSide = pipeMatch[1].trim()
+    const leftParts = leftSide.split(/\s+/)
+    const leftCmd = leftParts[0].toLowerCase()
+    const leftArgs = leftParts.slice(1)
+    const pipeTo = pipeMatch[2].toLowerCase()
+    const pipeArgs = pipeMatch[3].trim().split(/\s+/).filter(Boolean)
+
+    isProcessing.value = true
+    try {
+      const text = getCommandText(leftCmd, leftArgs)
+      if (text === null) {
+        pushLine(`<span class="text-red-400">bash: ${escapeHtml(leftCmd)}: cannot pipe output</span>`)
+        return
+      }
+      // Prepend piped text to cowsay args (flags first, then text)
+      const cowArgs = [...pipeArgs, text]
+      await handleCowsay(cowArgs, pipeTo === 'cowthink')
+    } finally {
+      isProcessing.value = false
+    }
+    return
+  }
+
   const parts = trimmed.split(/\s+/)
   const cmd = parts[0].toLowerCase()
-  const args = parts.slice(1).join(' ')
+  const argsArray = parts.slice(1)
 
   isProcessing.value = true
   try {
@@ -196,12 +316,25 @@ async function executeCommand(input) {
       case 'about':
         handleAbout()
         break
-      case 'neofetch':
-        handleNeofetch()
+      case 'fetch':
+        handleFetch()
+        break
+      case 'skills':
+        handleSkills()
         break
       case 'cowsay':
-        await handleCowsay(args)
+        await handleCowsay(argsArray)
         break
+      case 'cowthink':
+        await handleCowsay(argsArray, true)
+        break
+      case 'uptime':
+      case 'date':
+      case 'whoami': {
+        const text = getCommandText(cmd, argsArray)
+        pushLine(`<span class="text-gray-300">${escapeHtml(text)}</span>`)
+        break
+      }
       case 'clear':
         outputLines.value = []
         break

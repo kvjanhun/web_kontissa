@@ -79,6 +79,7 @@ onMounted(async () => {
     resizeObserver.observe(scrollContainer.value)
   }
   await runBootSequence()
+  scrollToBottom()
   focusInput()
 })
 
@@ -118,7 +119,7 @@ onBeforeUnmount(() => {
             <span class="mr-[1ch]">$</span>
           </span>
           <span class="text-white whitespace-pre">{{ currentInput }}</span>
-          <span class="block h-3.5 w-[0.6em] my-px cursor-blink shrink-0"></span>
+          <span class="block self-center h-[1em] w-[0.6em] cursor-blink shrink-0"></span>
         </div>
       </div>
 
