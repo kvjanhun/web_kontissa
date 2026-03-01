@@ -35,6 +35,9 @@
 - recipes.py: `_validate_recipe_data()` shared helper for create+update; `_parse_ingredients()` validates isinstance(item, dict)
 - SECRET_KEY dev fallback: fixed string (not os.urandom) so sessions survive Flask restarts in dev
 - Logout (useAuth.js): awaits server response before clearing client state; button uses @click.prevent + manual navigation
+- Section model: `section_type` column (String, default 'text', valid: 'text'|'pills'). POST sets it (default 'text' if omitted); PUT patches it only when present. Invalid value returns 400. Included in all GET responses.
+- SectionBlock.vue: card-style article (rounded-lg, bg-secondary, border) for all section types. 'text' type renders via v-html with `.section-content :deep(p + p)` margin. 'pills' type splits content on commas and renders each as a badge span (no v-html). `pills` computed strips whitespace and filters empty values.
+- AdminSections.vue: create + edit forms have a `<select>` for section_type (Text/Pills). Content textarea placeholder switches dynamically based on selected type.
 
 ## Structure Notes
 - `scripts/` and `tests/` are top-level siblings of `app/` and `frontend/`

@@ -135,6 +135,55 @@ class TestReorderSections:
         assert "position" in data[0]
 
 
+class TestSectionType:
+    def test_default_section_type_is_text(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Plain", "slug": "plain", "content": "<p>Text</p>",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["section_type"] == "text"
+
+    def test_create_pills_section(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Tech", "slug": "tech", "content": "Python, Flask, Vue.js",
+            "section_type": "pills",
+        })
+        assert res.status_code == 201
+        data = res.get_json()
+        assert data["section_type"] == "pills"
+        assert data["content"] == "Python, Flask, Vue.js"
+
+    def test_create_invalid_section_type(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Bad", "slug": "bad", "content": "x",
+            "section_type": "invalid",
+        })
+        assert res.status_code == 400
+        assert "section_type" in res.get_json()["error"]
+
+    def test_update_section_type(self, logged_in_admin, sample_section):
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={
+            "section_type": "pills", "content": "Python, Docker",
+        })
+        assert res.status_code == 200
+        assert res.get_json()["section_type"] == "pills"
+
+    def test_update_invalid_section_type(self, logged_in_admin, sample_section):
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={
+            "section_type": "bad",
+        })
+        assert res.status_code == 400
+
+    def test_section_type_in_list_response(self, logged_in_admin):
+        logged_in_admin.post("/api/sections", json={
+            "title": "Tech", "slug": "tech", "content": "Python",
+            "section_type": "pills",
+        })
+        res = logged_in_admin.get("/api/sections")
+        data = res.get_json()
+        assert any(s["section_type"] == "pills" for s in data)
+
+
 class TestDeleteSection:
     def test_delete_as_admin(self, logged_in_admin, sample_section):
         res = logged_in_admin.delete(f"/api/sections/{sample_section['id']}")

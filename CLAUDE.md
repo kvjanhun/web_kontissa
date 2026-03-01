@@ -62,9 +62,9 @@ web_kontissa/
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, uptime, date, time, whoami, clear
 │       │   ├── weatherIcons.js    # Inline SVG weather icons + wawaToIcon(code) mapper
-│       │   ├── SectionBlock.vue    # Renders section title + HTML content via v-html
+│       │   ├── SectionBlock.vue    # Card-style article (rounded-lg, bg-secondary, border); renders HTML via v-html for 'text' type, or comma-separated badges for 'pills' type
 │       │   └── admin/
-│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows)
+│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows); type selector dropdown (Text/Pills) in create and edit forms; placeholder text is dynamic based on selected type
 │       │       ├── AdminPageViews.vue    # Page views table with timestamps
 │       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
 │       │       ├── AdminHealth.vue       # System health key-value display
@@ -83,7 +83,7 @@ web_kontissa/
 │           └── NotFound.vue    # 404
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
-│   ├── models.py               # User, Section, Recipe, Ingredient, Step, BlockedWord, BeeConfig, PageView models
+│   ├── models.py               # User, Section (with section_type), Recipe, Ingredient, Step, BlockedWord, BeeConfig, PageView models
 │   ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
 │   ├── auth.py                 # /api/login, /api/logout, /api/me
 │   ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
@@ -211,6 +211,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Admin protection via `@admin_required` decorator (wraps `@login_required` + role check)
 - Recipe endpoints use `@login_required` — any authenticated user can CRUD any recipe (shared cookbook)
 - Recipe create/update share a `_validate_recipe_data()` helper in `recipes.py` that validates the payload and returns `(data, error)`. `_parse_ingredients()` and `_parse_steps()` both validate that each item is a `dict`.
+- `Section` model has a `section_type` column (`String`, default `'text'`). Valid values are `'text'` and `'pills'`. POST validates and sets it; PUT only updates it when the field is present in the request body. Invalid values return 400. The field is included in all GET responses.
 - All API endpoints return JSON
 - `catch_all` route at the bottom of `routes.py` serves Vue SPA for client-side routing
 - GitHub API responses cached for 6 hours in `utils.py`
@@ -222,7 +223,8 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
-- `v-html` used for section content (admin-authored, trusted)
+- `v-html` used for section content of type `'text'` (admin-authored, trusted). Sections of type `'pills'` split `content` on commas and render each value as a badge — no `v-html` involved.
+- `SectionBlock.vue` applies card styling (`rounded-lg`, `bg-secondary`, border) to every section regardless of type. Paragraph spacing (`p + p` margin) is applied via a scoped deep selector on `.section-content`.
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
 - `requiresAuth` route meta guard redirects unauthenticated users to `/login`
 - Logout (`useAuth.js`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the router guard.

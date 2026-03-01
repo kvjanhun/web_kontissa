@@ -9,8 +9,8 @@ const editingId = ref(null)
 const error = ref('')
 const success = ref('')
 
-const form = ref({ title: '', slug: '', content: '' })
-const editForm = ref({ title: '', slug: '', content: '' })
+const form = ref({ title: '', slug: '', content: '', section_type: 'text' })
+const editForm = ref({ title: '', slug: '', content: '', section_type: 'text' })
 
 onMounted(() => loadSections())
 
@@ -33,14 +33,14 @@ async function createSection() {
   })
   const data = await res.json()
   if (!res.ok) { error.value = data.error; return }
-  form.value = { title: '', slug: '', content: '' }
+  form.value = { title: '', slug: '', content: '', section_type: 'text' }
   success.value = t('admin.created')
   await loadSections()
 }
 
 function startEdit(section) {
   editingId.value = section.id
-  editForm.value = { title: section.title, slug: section.slug, content: section.content }
+  editForm.value = { title: section.title, slug: section.slug, content: section.content, section_type: section.section_type || 'text' }
 }
 
 function cancelEdit() { editingId.value = null }
@@ -95,8 +95,12 @@ async function moveSection(index, direction) {
         <div class="flex gap-3">
           <input v-model="form.title" :placeholder="t('admin.title')" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
           <input v-model="form.slug" :placeholder="t('admin.slug')" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+          <select v-model="form.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
+            <option value="text">Text</option>
+            <option value="pills">Pills</option>
+          </select>
         </div>
-        <textarea v-model="form.content" :placeholder="t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+        <textarea v-model="form.content" :placeholder="form.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <button type="submit" class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.addSection') }}</button>
       </form>
     </div>
@@ -113,7 +117,7 @@ async function moveSection(index, direction) {
         <div class="flex justify-between items-start mb-2">
           <div>
             <h3 class="text-base font-medium" :style="{ color: 'var(--color-text-primary)' }">{{ section.title }}</h3>
-            <span class="text-xs" :style="{ color: 'var(--color-text-secondary)' }">slug: {{ section.slug }} | id: {{ section.id }} | pos: {{ section.position }}</span>
+            <span class="text-xs" :style="{ color: 'var(--color-text-secondary)' }">slug: {{ section.slug }} | id: {{ section.id }} | pos: {{ section.position }} | type: {{ section.section_type || 'text' }}</span>
           </div>
           <div class="flex gap-2">
             <button @click="moveSection(idx, -1)" :disabled="idx === 0" class="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-white/10 disabled:opacity-30" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }" aria-label="Move up">&uarr;</button>
@@ -130,8 +134,12 @@ async function moveSection(index, direction) {
         <div class="flex gap-3">
           <input v-model="editForm.title" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
           <input v-model="editForm.slug" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+          <select v-model="editForm.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
+            <option value="text">Text</option>
+            <option value="pills">Pills</option>
+          </select>
         </div>
-        <textarea v-model="editForm.content" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+        <textarea v-model="editForm.content" :placeholder="editForm.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <div class="flex gap-2">
           <button type="submit" class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.save') }}</button>
           <button type="button" @click="cancelEdit" class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.cancel') }}</button>

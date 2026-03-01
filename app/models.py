@@ -33,6 +33,7 @@ class Section(db.Model):
     slug = db.Column(db.String, unique=True, nullable=False)
     title = db.Column(db.String, nullable=False)
     content = db.Column(db.Text, nullable=False)
+    section_type = db.Column(db.String, nullable=False, default='text')
     position = db.Column(db.Integer, nullable=True, default=0)
 
     def to_dict(self):
@@ -41,6 +42,7 @@ class Section(db.Model):
             "slug": self.slug,
             "title": self.title,
             "content": self.content,
+            "section_type": self.section_type,
             "position": self.position,
         }
 

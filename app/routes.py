@@ -78,13 +78,18 @@ def api_create_section():
     slug = data.get("slug", "").strip()
     content = data.get("content", "").strip()
 
+    section_type = data.get("section_type", "text").strip()
+
     if not title or not slug or not content:
         return jsonify({"error": "title, slug, and content are required"}), 400
+
+    if section_type not in ("text", "pills"):
+        return jsonify({"error": "section_type must be 'text' or 'pills'"}), 400
 
     if Section.query.filter_by(slug=slug).first():
         return jsonify({"error": "A section with this slug already exists"}), 409
 
-    section = Section(title=title, slug=slug, content=content)
+    section = Section(title=title, slug=slug, content=content, section_type=section_type)
     db.session.add(section)
     db.session.commit()
     return jsonify(section.to_dict()), 201
@@ -107,6 +112,11 @@ def api_update_section(section_id):
         section.slug = data["slug"].strip()
     if "content" in data:
         section.content = data["content"].strip()
+    if "section_type" in data:
+        section_type = data["section_type"].strip()
+        if section_type not in ("text", "pills"):
+            return jsonify({"error": "section_type must be 'text' or 'pills'"}), 400
+        section.section_type = section_type
 
     db.session.commit()
     return jsonify(section.to_dict())
