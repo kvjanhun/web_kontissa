@@ -9,7 +9,6 @@ const { isAdmin } = useAuth()
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
 const LEGACY_STATE_KEY = 'sanakenno_state'  // migration from single-key format
-const ADMIN_PUZZLE_KEY = 'sanakenno_admin_puzzle'
 
 // --- State ---
 const puzzle = ref(null)
@@ -399,7 +398,6 @@ function choosePuzzle(idx) {
   const target = ((idx % totalPuzzles.value) + totalPuzzles.value) % totalPuzzles.value
   saveState()  // persist current puzzle progress before switching
   resetGameState()
-  localStorage.setItem(ADMIN_PUZZLE_KEY, String(target))
   fetchPuzzle(target)
 }
 
@@ -600,13 +598,7 @@ onMounted(() => {
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('blur', handleVisibilityChange)
   window.addEventListener('pagehide', handlePageHide)
-  if (isAdmin.value) {
-    const saved = localStorage.getItem(ADMIN_PUZZLE_KEY)
-    const idx = saved !== null ? parseInt(saved, 10) : null
-    fetchPuzzle(!isNaN(idx) ? idx : null)
-  } else {
-    fetchPuzzle()
-  }
+  fetchPuzzle()
 })
 
 onUnmounted(() => {
