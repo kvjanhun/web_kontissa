@@ -102,6 +102,14 @@ const RANKS = [
 
 const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏', pairs: '🔠' }
 
+const HINT_SVG = {
+  bulb: '<svg xmlns="http://www.w3.org/2000/svg" width="1.15em" height="1.15em" viewBox="-1 -1 40 64" fill="none" stroke="currentColor" aria-hidden="true" style="vertical-align: -0.3em;" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8.6,48l20.6-3c0-6.5,8.8-14.6,8.8-25.6C38,8.7,29.5,0,19,0S0,8.7,0,19.4c0,10.9,8.6,19,8.6,25.5V48z"/><path d="M10,52.3l18.8-2.9"/><path d="M10,56.2l18.8-2.9"/><path d="M26.3,59.1c0,1.6-3.1,2.9-7,2.9s-7-1.3-7-2.9"/><path d="M16.4,40.8c0-12.4-3.5-16.8-3.5-16.8s1.4,3.1,3,3.1c1.7,0,3-1.4,3-3.1c0,1.7,1.4,3.1,3,3.1c1.7,0,3-3.1,3-3.1s-2.8,6.7-2.8,16.8"/></svg>',
+  summary: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 64 64" fill="none" stroke="currentColor" aria-hidden="true"><circle cx="28" cy="28" r="26" stroke-width="5"/><circle cx="28" cy="28" r="22" stroke-width="1.5"/><path d="M60.828,60.828c-1.562,1.562-4.095,1.562-5.656,0L44.769,50.425c2.145-1.606,4.051-3.513,5.657-5.656l10.402,10.402C62.391,56.732,62.391,59.266,60.828,60.828z" fill="currentColor" stroke="none"/><line x1="46" y1="46" x2="52" y2="52" stroke-width="5" stroke-linecap="round"/></svg>',
+  letters: '<svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 180 300" fill="currentColor" stroke="currentColor" stroke-width="8" stroke-linejoin="round" aria-hidden="true"><path d="M92.5,15.7c-0.4-1.3-1.2-2.4-2.2-3.3l-0.1-0.1c-0.5-0.4-1-0.7-1.5-1c-0.3-0.2-0.6-0.3-0.9-0.4c-0.5-0.2-1-0.3-1.5-0.4c-1.2-0.3-2.5-0.3-3.8,0.1l-0.1,0c-0.5,0.2-0.9,0.3-1.3,0.5c-0.4,0.2-0.8,0.5-1.2,0.7c-0.3,0.2-0.7,0.5-1,0.8c-0.3,0.3-0.6,0.6-0.9,1c-0.2,0.3-0.5,0.7-0.7,1c-0.2,0.3-0.4,0.7-0.6,1.1c-0.2,0.4-0.3,0.7-0.4,1.1L0.8,280.5c-1.1,3.8,1,7.8,4.8,8.9c0.7,0.2,1.4,0.3,2,0.3c3.1,0,5.9-2,6.8-5.1l17.6-59.2h113.8l19.2,59.3c1,3,3.8,4.9,6.8,4.9c0.7,0,1.5-0.1,2.2-0.3c3.8-1.2,5.8-5.3,4.6-9L92.5,15.7zM35.8,210.6L86,41.9l54.7,168.7H35.8z"/></svg>',
+  distribution: '<svg xmlns="http://www.w3.org/2000/svg" width="1.15em" height="1em" viewBox="0 0 20 14" fill="currentColor" stroke="currentColor" aria-hidden="true"><rect x="0.5" y="0.5" width="19" height="13" rx="1" fill="none" stroke-width="1.3"/><line x1="4" y1="0.5" x2="4" y2="5" stroke-width="1"/><line x1="8" y1="0.5" x2="8" y2="7.5" stroke-width="1"/><line x1="12" y1="0.5" x2="12" y2="5" stroke-width="1"/><line x1="16" y1="0.5" x2="16" y2="7.5" stroke-width="1"/></svg>',
+  pairs: '<svg xmlns="http://www.w3.org/2000/svg" width="1.15em" height="1em" viewBox="0 0 300 300" fill="currentColor" stroke="currentColor" stroke-width="8" stroke-linejoin="round" aria-hidden="true"><path d="M92.5,15.7c-0.4-1.3-1.2-2.4-2.2-3.3l-0.1-0.1c-0.5-0.4-1-0.7-1.5-1c-0.3-0.2-0.6-0.3-0.9-0.4c-0.5-0.2-1-0.3-1.5-0.4c-1.2-0.3-2.5-0.3-3.8,0.1l-0.1,0c-0.5,0.2-0.9,0.3-1.3,0.5c-0.4,0.2-0.8,0.5-1.2,0.7c-0.3,0.2-0.7,0.5-1,0.8c-0.3,0.3-0.6,0.6-0.9,1c-0.2,0.3-0.5,0.7-0.7,1c-0.2,0.3-0.4,0.7-0.6,1.1c-0.2,0.4-0.3,0.7-0.4,1.1L0.8,280.5c-1.1,3.8,1,7.8,4.8,8.9c0.7,0.2,1.4,0.3,2,0.3c3.1,0,5.9-2,6.8-5.1l17.6-59.2h113.8l19.2,59.3c1,3,3.8,4.9,6.8,4.9c0.7,0,1.5-0.1,2.2-0.3c3.8-1.2,5.8-5.3,4.6-9L92.5,15.7zM35.8,210.6L86,41.9l54.7,168.7H35.8z"/><path d="M298.8,166.5c-7.7-12-18.2-19.3-31.4-21.8c-32.5-6.2-69.5,20.2-71.1,21.3c-3.2,2.3-3.9,6.8-1.6,10s6.8,3.9,10,1.6c0.3-0.2,33.4-23.9,60.1-18.9c8.7,1.6,15.5,6.2,20.9,13.8v24.6c-16.5-0.9-61-1.1-82.9,19.1c-8.7,8-13,18.1-12.8,30.1c0.2,16.6,9.2,29.6,25.2,36.7c9.1,4,20.1,6,31.4,6c13.8,0,27.9-2.9,39.1-8.3v1.3c0,3.9,3.2,7.1,7.1,7.1s7.1-3.2,7.2-7.1V170.4C299.9,169,299.5,167.6,298.8,166.5zM220.9,270c-11-4.9-16.6-12.9-16.8-23.9c-0.1-7.9,2.6-14.2,8.2-19.4c18.1-16.6,59.1-16,73.2-15.3v52.9C271.5,274.3,241.2,279,220.9,270z"/></svg>',
+}
+
 const rank = computed(() => {
   if (!puzzle.value || puzzle.value.max_score === 0) return RANKS[RANKS.length - 1].name
   const pct = (score.value / puzzle.value.max_score) * 100
@@ -831,6 +839,7 @@ onUnmounted(() => {
           role="group"
           aria-label="Kirjainkenno"
           class="select-none"
+          style="touch-action: none;"
         >
           <g
             v-for="(hex, i) in hexes"
@@ -908,7 +917,7 @@ onUnmounted(() => {
           @click="showHints = !showHints"
           :aria-expanded="showHints"
         >
-          💡 Avut {{ showHints ? '▲' : '▼' }}
+          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
         </button>
         <div class="flex items-center gap-2">
           <span
@@ -932,7 +941,7 @@ onUnmounted(() => {
         <!-- Hint 1: overview — remaining words, pangrams, length range -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Yleiskuva 📊</span>
+            <span style="color: var(--color-text-secondary);">Yleiskuva <span v-html="HINT_SVG.summary" class="inline-block align-middle ml-1" /></span>
             <button
               v-if="!hintsUnlocked.has('summary')"
               class="text-xs px-2 py-0.5 rounded"
@@ -954,7 +963,7 @@ onUnmounted(() => {
         <!-- Hint 2: words left per first letter -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Alkukirjaimet 🔤</span>
+            <span style="color: var(--color-text-secondary);">Alkukirjaimet <span v-html="HINT_SVG.letters" class="inline-block align-middle ml-1" /></span>
             <button
               v-if="!hintsUnlocked.has('letters')"
               class="text-xs px-2 py-0.5 rounded"
@@ -977,7 +986,7 @@ onUnmounted(() => {
         <!-- Hint 3: word count per length -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Pituusjakauma 📏</span>
+            <span style="color: var(--color-text-secondary);">Pituusjakauma <span v-html="HINT_SVG.distribution" class="inline-block align-middle ml-1" /></span>
             <button
               v-if="!hintsUnlocked.has('distribution')"
               class="text-xs px-2 py-0.5 rounded"
@@ -998,7 +1007,7 @@ onUnmounted(() => {
         <!-- Hint 4: remaining words per two-letter pair -->
         <div>
           <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Alkuparit 🔠</span>
+            <span style="color: var(--color-text-secondary);">Alkuparit <span v-html="HINT_SVG.pairs" class="inline-block align-middle ml-1" /></span>
             <button
               v-if="!hintsUnlocked.has('pairs')"
               class="text-xs px-2 py-0.5 rounded"
