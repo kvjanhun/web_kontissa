@@ -17,6 +17,33 @@ const sections = ref([])
 const loading = ref(true)
 const error = ref(null)
 
+const COMPACT_TYPES = new Set(['currently', 'pills'])
+
+const layoutGroups = computed(() => {
+  const groups = []
+  let compactBuffer = []
+
+  for (const s of sections.value) {
+    if (COMPACT_TYPES.has(s.section_type)) {
+      compactBuffer.push(s)
+      if (compactBuffer.length === 2) {
+        groups.push({ type: 'pair', sections: [...compactBuffer] })
+        compactBuffer = []
+      }
+    } else {
+      if (compactBuffer.length) {
+        groups.push({ type: 'single', section: compactBuffer[0] })
+        compactBuffer = []
+      }
+      groups.push({ type: 'single', section: s })
+    }
+  }
+  if (compactBuffer.length) {
+    groups.push({ type: 'single', section: compactBuffer[0] })
+  }
+  return groups
+})
+
 onMounted(async () => {
   try {
     const res = await fetch('/api/sections')
@@ -32,8 +59,6 @@ onMounted(async () => {
 
 <template>
   <div>
-    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('about.heading') }}</h1>
-
     <div v-if="loading" class="space-y-6">
       <div v-for="n in 3" :key="n" class="animate-pulse">
         <div class="h-8 rounded w-1/4 mb-3" :style="{ backgroundColor: 'var(--color-bg-tertiary)' }"></div>
@@ -48,7 +73,12 @@ onMounted(async () => {
     </div>
 
     <template v-else>
-      <SectionBlock v-for="section in sections" :key="section.id" :section="section" />
+      <template v-for="(group, gi) in layoutGroups" :key="gi">
+        <div v-if="group.type === 'pair'" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <SectionBlock v-for="s in group.sections" :key="s.id" :section="s" :compact="true" />
+        </div>
+        <SectionBlock v-else :section="group.section" />
+      </template>
     </template>
   </div>
 </template>

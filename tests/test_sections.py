@@ -174,6 +174,36 @@ class TestSectionType:
         })
         assert res.status_code == 400
 
+    def test_create_quote_section(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Tagline", "slug": "tagline", "content": "Human after all.",
+            "section_type": "quote",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["section_type"] == "quote"
+
+    def test_create_currently_section(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Currently", "slug": "currently", "content": "Playing: Elden Ring\nReading: SICP",
+            "section_type": "currently",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["section_type"] == "currently"
+
+    def test_update_to_quote_type(self, logged_in_admin, sample_section):
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={
+            "section_type": "quote", "content": "A quote.",
+        })
+        assert res.status_code == 200
+        assert res.get_json()["section_type"] == "quote"
+
+    def test_update_to_currently_type(self, logged_in_admin, sample_section):
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={
+            "section_type": "currently", "content": "Playing: Chess",
+        })
+        assert res.status_code == 200
+        assert res.get_json()["section_type"] == "currently"
+
     def test_section_type_in_list_response(self, logged_in_admin):
         logged_in_admin.post("/api/sections", json={
             "title": "Tech", "slug": "tech", "content": "Python",

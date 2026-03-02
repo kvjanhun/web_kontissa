@@ -62,9 +62,9 @@ web_kontissa/
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
 │       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, uptime, date, time, whoami, clear
 │       │   ├── weatherIcons.js    # Inline SVG weather icons + wawaToIcon(code) mapper
-│       │   ├── SectionBlock.vue    # Card-style article (rounded-lg, bg-secondary, border); renders HTML via v-html for 'text' type, or comma-separated badges for 'pills' type
+│       │   ├── SectionBlock.vue    # Section renderer with 4 types: 'quote' (decorative centered blockquote, no card), 'currently' (card with accent-bordered label:value items), 'pills' (card with 3-col grid of flat accent-bordered items), 'text' (card with v-html content). All card types have orange accent bar under title.
 │       │   └── admin/
-│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows); type selector dropdown (Text/Pills) in create and edit forms; placeholder text is dynamic based on selected type
+│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows); type selector dropdown (Text/Pills/Quote/Currently) in create and edit forms; placeholder text is dynamic based on selected type
 │       │       ├── AdminPageViews.vue    # Page views table with timestamps
 │       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
 │       │       ├── AdminHealth.vue       # System health key-value display
@@ -72,7 +72,7 @@ web_kontissa/
 │       │       └── AdminBlockedWords.vue # Blocked words table with unblock
 │       └── views/
 │           ├── HomePage.vue    # Hero with terminal animation
-│           ├── AboutPage.vue   # Fetches and renders /api/sections
+│           ├── AboutPage.vue   # Fetches and renders /api/sections; groups compact types (currently, pills) into side-by-side pairs on md+ screens; no h1 heading (quote section serves as intro)
 │           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
 │           ├── AdminPage.vue   # Protected admin dashboard, two-level collapsible (Site Admin, Sanakenno Admin) with 6 panel components
@@ -211,7 +211,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Admin protection via `@admin_required` decorator (wraps `@login_required` + role check)
 - Recipe endpoints use `@login_required` — any authenticated user can CRUD any recipe (shared cookbook)
 - Recipe create/update share a `_validate_recipe_data()` helper in `recipes.py` that validates the payload and returns `(data, error)`. `_parse_ingredients()` and `_parse_steps()` both validate that each item is a `dict`.
-- `Section` model has a `section_type` column (`String`, default `'text'`). Valid values are `'text'` and `'pills'`. POST validates and sets it; PUT only updates it when the field is present in the request body. Invalid values return 400. The field is included in all GET responses.
+- `Section` model has a `section_type` column (`String`, default `'text'`). Valid values are `'text'`, `'pills'`, `'quote'`, and `'currently'`. POST validates and sets it; PUT only updates it when the field is present in the request body. Invalid values return 400. The field is included in all GET responses.
 - All API endpoints return JSON
 - `catch_all` route at the bottom of `routes.py` serves Vue SPA for client-side routing
 - GitHub API responses cached for 6 hours in `utils.py`
@@ -223,8 +223,9 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
-- `v-html` used for section content of type `'text'` (admin-authored, trusted). Sections of type `'pills'` split `content` on commas and render each value as a badge — no `v-html` involved.
-- `SectionBlock.vue` applies card styling (`rounded-lg`, `bg-secondary`, border) to every section regardless of type. Paragraph spacing (`p + p` margin) is applied via a scoped deep selector on `.section-content`.
+- `v-html` used for section content of type `'text'` (admin-authored, trusted). Other section types use `{{ }}` text interpolation — no `v-html` involved.
+- `SectionBlock.vue` renders 4 section types: `'quote'` (decorative centered blockquote with large opening quote mark, no card wrapper), `'currently'` (card with line-separated `label: value` items rendered as accent-bordered rows), `'pills'` (card with comma-separated items in a 3-column grid of accent-bordered flat items), `'text'` (card with `v-html` content). All card types (currently, pills, text) have an orange accent bar under the title. Paragraph spacing (`p + p` margin) is applied via a scoped deep selector on `.section-content`. Supports a `compact` prop to suppress bottom margin when used in paired grid layout.
+- `AboutPage.vue` groups adjacent compact section types (`currently`, `pills`) into side-by-side two-column grid pairs on `md+` screens. The "About" h1 heading is removed — the quote section serves as the page intro.
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
 - `requiresAuth` route meta guard redirects unauthenticated users to `/login`
 - Logout (`useAuth.js`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the router guard.

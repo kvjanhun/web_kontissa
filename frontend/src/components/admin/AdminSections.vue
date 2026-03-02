@@ -98,9 +98,11 @@ async function moveSection(index, direction) {
           <select v-model="form.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
             <option value="text">Text</option>
             <option value="pills">Pills</option>
+            <option value="quote">Quote</option>
+            <option value="currently">Currently</option>
           </select>
         </div>
-        <textarea v-model="form.content" :placeholder="form.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+        <textarea v-model="form.content" :placeholder="form.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : form.section_type === 'quote' ? 'A short tagline or quote' : form.section_type === 'currently' ? 'One item per line, e.g.\nPlaying: Elden Ring\nReading: SICP' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <button type="submit" class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.addSection') }}</button>
       </form>
     </div>
@@ -137,9 +139,11 @@ async function moveSection(index, direction) {
           <select v-model="editForm.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
             <option value="text">Text</option>
             <option value="pills">Pills</option>
+            <option value="quote">Quote</option>
+            <option value="currently">Currently</option>
           </select>
         </div>
-        <textarea v-model="editForm.content" :placeholder="editForm.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+        <textarea v-model="editForm.content" :placeholder="editForm.section_type === 'pills' ? 'Comma-separated values, e.g. Python, Flask, Vue.js' : editForm.section_type === 'quote' ? 'A short tagline or quote' : editForm.section_type === 'currently' ? 'One item per line, e.g.\nPlaying: Elden Ring\nReading: SICP' : t('admin.contentHtml')" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <div class="flex gap-2">
           <button type="submit" class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.save') }}</button>
           <button type="button" @click="cancelEdit" class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.cancel') }}</button>
