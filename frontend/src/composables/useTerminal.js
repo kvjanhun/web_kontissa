@@ -83,7 +83,7 @@ function handleHelp() {
     '<tr><td class="pr-4 text-term-user">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
     '<tr><td class="pr-4 text-term-user">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
     '<tr><td class="pr-4 text-term-user">cowthink &lt;msg&gt;</td><td class="text-gray-300">ASCII cow thinks your message</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">echo &lt;text&gt;</td><td class="text-gray-300">Print text (pipeable to cowsay)</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">echo &lt;text&gt;</td><td class="text-gray-300">Print text</td></tr>' +
     '<tr><td class="pr-4 text-term-user">date</td><td class="text-gray-300">Current date and time</td></tr>' +
     '<tr><td class="pr-4 text-term-user">clear</td><td class="text-gray-300">Clear terminal</td></tr>' +
     '</table>'
