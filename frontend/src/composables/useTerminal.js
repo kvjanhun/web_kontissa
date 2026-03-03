@@ -1,6 +1,5 @@
 import { ref } from 'vue'
 import { useDarkMode } from './useDarkMode.js'
-import { useAuth } from './useAuth.js'
 import { wawaToIcon } from '../components/weatherIcons.js'
 
 const PROMPT_HTML = '<span class="flex text-gray-300 shrink-0"><span class="text-term-user">konsta@erez.ac</span><span>:</span><span class="text-term-dir">~</span><span class="mr-[1ch]">$</span></span>'
@@ -57,7 +56,7 @@ async function runBootSequence() {
     '',
     ' * Server: Intel NUC11ATKC2, Vantaa',
     ' * Stack:  Flask 3.1 + Vue 3 + SQLite',
-    ' * Status: <span class="text-term-user">All systems operational</span>',
+    ' * Type <span class="text-term-user">help</span> for available commands',
     '',
     `Last login: ${dateStr} from visitor`,
   ]
@@ -84,9 +83,8 @@ function handleHelp() {
     '<tr><td class="pr-4 text-term-user">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
     '<tr><td class="pr-4 text-term-user">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
     '<tr><td class="pr-4 text-term-user">cowthink &lt;msg&gt;</td><td class="text-gray-300">ASCII cow thinks your message</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">uptime</td><td class="text-gray-300">Server uptime</td></tr>' +
+    '<tr><td class="pr-4 text-term-user">echo &lt;text&gt;</td><td class="text-gray-300">Print text (pipeable to cowsay)</td></tr>' +
     '<tr><td class="pr-4 text-term-user">date</td><td class="text-gray-300">Current date and time</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">whoami</td><td class="text-gray-300">Current user</td></tr>' +
     '<tr><td class="pr-4 text-term-user">clear</td><td class="text-gray-300">Clear terminal</td></tr>' +
     '</table>'
   )
@@ -232,8 +230,8 @@ function handleSkills() {
 
 function getCommandText(cmd, argsArray) {
   switch (cmd) {
-    case 'uptime':
-      return 'up 47 weeks, 20 hours, 33 minutes'
+    case 'echo':
+      return argsArray.join(' ')
     case 'date': {
       const now = new Date()
       const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -246,10 +244,6 @@ function getCommandText(cmd, argsArray) {
       const ss = String(now.getSeconds()).padStart(2, '0')
       const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
       return `${d} ${m} ${day} ${hh}:${mm}:${ss} ${tz} ${now.getFullYear()}`
-    }
-    case 'whoami': {
-      const { user } = useAuth()
-      return user.value ? user.value.username : 'visitor'
     }
     default:
       return null
@@ -328,9 +322,8 @@ async function executeCommand(input) {
       case 'cowthink':
         await handleCowsay(argsArray, true)
         break
-      case 'uptime':
-      case 'date':
-      case 'whoami': {
+      case 'echo':
+      case 'date': {
         const text = getCommandText(cmd, argsArray)
         pushLine(`<span class="text-gray-300">${escapeHtml(text)}</span>`)
         break
