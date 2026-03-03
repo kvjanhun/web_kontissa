@@ -9,6 +9,13 @@ const editingId = ref(null)
 const error = ref('')
 const success = ref('')
 
+const TYPE_COLORS = {
+  text: 'bg-stone-500/20 text-stone-400',
+  pills: 'bg-blue-500/20 text-blue-400',
+  quote: 'bg-purple-500/20 text-purple-400',
+  currently: 'bg-green-500/20 text-green-400',
+}
+
 const form = ref({ title: '', slug: '', content: '', section_type: 'text' })
 const editForm = ref({ title: '', slug: '', content: '', section_type: 'text' })
 
@@ -119,7 +126,8 @@ async function moveSection(index, direction) {
         <div class="flex justify-between items-start mb-2">
           <div>
             <h3 class="text-base font-medium" :style="{ color: 'var(--color-text-primary)' }">{{ section.title }}</h3>
-            <span class="text-xs" :style="{ color: 'var(--color-text-secondary)' }">slug: {{ section.slug }} | id: {{ section.id }} | pos: {{ section.position }} | type: {{ section.section_type || 'text' }}</span>
+            <span class="text-xs" :style="{ color: 'var(--color-text-secondary)' }">slug: {{ section.slug }} | id: {{ section.id }} | pos: {{ section.position }}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded-full ml-2" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
           </div>
           <div class="flex gap-2">
             <button @click="moveSection(idx, -1)" :disabled="idx === 0" class="text-xs px-2 py-1 rounded transition-colors duration-200 hover:bg-white/10 disabled:opacity-30" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }" aria-label="Move up">&uarr;</button>
