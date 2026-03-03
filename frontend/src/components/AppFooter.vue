@@ -1,23 +1,11 @@
 <script setup>
-import { useRouter } from 'vue-router'
-import { useAuth } from '../composables/useAuth'
 import { useI18n } from '../composables/useI18n.js'
-import { useNavLinks } from '../composables/useNavLinks.js'
 
-const { logout } = useAuth()
 const { t } = useI18n()
-const router = useRouter()
 
 defineProps({
   updateDate: { type: String, default: '' }
 })
-
-async function handleLogout() {
-  await logout()
-  router.push('/login')
-}
-
-const { navLinks } = useNavLinks(handleLogout)
 </script>
 
 <template>
@@ -30,15 +18,9 @@ const { navLinks } = useNavLinks(handleLogout)
   >
     <!-- Row 1: nav links -->
     <nav class="flex flex-wrap gap-x-5 gap-y-2 text-sm mb-3" aria-label="Footer">
-      <router-link
-        v-for="link in navLinks"
-        :key="link.to"
-        :to="link.action ? '' : link.to"
-        class="!text-stone-400 hover:!text-accent transition-colors"
-        @click.prevent="link.action ? link.action() : router.push(link.to)"
-      >
-        {{ t(link.labelKey) }}
-      </router-link>
+      <router-link to="/about" class="!text-stone-400 hover:!text-accent transition-colors">{{ t('nav.about') }}</router-link>
+      <router-link to="/contact" class="!text-stone-400 hover:!text-accent transition-colors">{{ t('nav.contact') }}</router-link>
+      <router-link to="/sanakenno" class="!text-stone-400 hover:!text-accent transition-colors">{{ t('nav.sanakenno') }}</router-link>
     </nav>
 
     <!-- Row 2: last updated -->

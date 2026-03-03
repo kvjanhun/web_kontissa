@@ -36,7 +36,8 @@ async function deleteRecipe(id) {
     <div v-if="error" role="alert" class="mb-4 p-3 rounded-lg text-sm bg-red-500/10 text-red-400 border border-red-500/20">{{ error }}</div>
     <div v-if="loading" class="text-center py-4" :style="{ color: 'var(--color-text-secondary)' }">Loading...</div>
     <div v-else-if="recipes.length === 0" class="text-center py-4" :style="{ color: 'var(--color-text-secondary)' }">No recipes yet.</div>
-    <table v-else class="w-full text-sm">
+    <div v-else class="overflow-x-auto">
+    <table class="w-full text-sm">
       <thead>
         <tr :style="{ borderBottom: '1px solid var(--color-border)' }">
           <th class="text-left py-2 px-3 font-medium" :style="{ color: 'var(--color-text-secondary)' }">Title</th>
@@ -57,5 +58,6 @@ async function deleteRecipe(id) {
         </tr>
       </tbody>
     </table>
+    </div>
   </div>
 </template>

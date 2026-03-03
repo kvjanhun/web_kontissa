@@ -221,9 +221,9 @@ async function handleCowsay(argsArray, think = false) {
 function handleSkills() {
   pushLine(
     '<div class="my-1 text-sm space-y-1.5">' +
-    '<div><span class="text-term-user font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · TypeScript · SQL · Bash · HTML/CSS</span></div>' +
+    '<div><span class="text-term-user font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
     '<div><span class="text-term-dir font-bold">Frontend</span>   <span class="text-gray-300">Vue 3 · React · Tailwind CSS · Vite</span></div>' +
-    '<div><span class="text-accent font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite · PostgreSQL</span></div>' +
+    '<div><span class="text-accent font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
     '<div><span class="text-purple-400 font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux (RHEL) · GitHub Actions</span></div>' +
     '<div><span class="text-yellow-400 font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
     '</div>'

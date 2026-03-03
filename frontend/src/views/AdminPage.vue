@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, shallowRef, markRaw } from 'vue'
+import { ref, onMounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
 import { useAuth } from '../composables/useAuth'
@@ -22,36 +22,20 @@ const router = useRouter()
 const { isAdmin } = useAuth()
 const { t } = useI18n()
 
-const categories = [
-  {
-    name: 'Site Admin',
-    key: 'site',
-    panels: [
-      { name: 'Sections', key: 'sections', component: markRaw(AdminSections) },
-      { name: 'Page Views', key: 'pageviews', component: markRaw(AdminPageViews) },
-      { name: 'Recipes', key: 'recipes', component: markRaw(AdminRecipes) },
-      { name: 'System Health', key: 'health', component: markRaw(AdminHealth) },
-    ]
-  },
-  {
-    name: 'Sanakenno Admin',
-    key: 'sanakenno',
-    panels: [
-      { name: 'Stats', key: 'stats', component: markRaw(AdminBeeStats) },
-      { name: 'Blocked Words', key: 'blocked', component: markRaw(AdminBlockedWords) },
-    ]
-  },
+const tabs = [
+  { key: 'sections', labelKey: 'admin.tab.sections', component: markRaw(AdminSections) },
+  { key: 'analytics', labelKey: 'admin.tab.analytics', component: markRaw(AdminPageViews) },
+  { key: 'recipes', labelKey: 'admin.tab.recipes', component: markRaw(AdminRecipes) },
+  { key: 'health', labelKey: 'admin.tab.health', component: markRaw(AdminHealth) },
+  { key: 'sanakenno', labelKey: 'admin.tab.sanakenno', components: [markRaw(AdminBeeStats), markRaw(AdminBlockedWords)] },
 ]
 
-const expandedCategories = ref({})
-const expandedPanels = ref({})
+const activeTab = ref('sections')
+const mountedTabs = ref(new Set(['sections']))
 
-function toggleCategory(key) {
-  expandedCategories.value[key] = !expandedCategories.value[key]
-}
-
-function togglePanel(key) {
-  expandedPanels.value[key] = !expandedPanels.value[key]
+function selectTab(key) {
+  activeTab.value = key
+  mountedTabs.value.add(key)
 }
 
 onMounted(() => {
@@ -66,38 +50,46 @@ onMounted(() => {
   <div class="max-w-3xl mx-auto mt-8">
     <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('admin.heading') }}</h1>
 
-    <div v-for="category in categories" :key="category.key" class="mb-6">
-      <!-- Category header -->
+    <!-- Tab bar -->
+    <div class="flex flex-wrap gap-2 mb-6" role="tablist">
       <button
-        @click="toggleCategory(category.key)"
-        class="w-full flex justify-between items-center p-3 rounded-lg text-left text-lg font-medium"
-        :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', cursor: 'pointer' }"
-        :aria-expanded="!!expandedCategories[category.key]"
+        v-for="tab in tabs"
+        :key="tab.key"
+        role="tab"
+        :aria-selected="activeTab === tab.key"
+        :id="`tab-${tab.key}`"
+        :aria-controls="`panel-${tab.key}`"
+        class="px-4 py-2 rounded-lg text-sm font-medium transition-colors duration-200"
+        :class="activeTab === tab.key
+          ? 'bg-accent text-white'
+          : 'hover:bg-white/10'"
+        :style="activeTab === tab.key
+          ? {}
+          : { color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }"
+        @click="selectTab(tab.key)"
       >
-        <span>{{ category.name }}</span>
-        <span :style="{ color: 'var(--color-text-tertiary)' }">{{ expandedCategories[category.key] ? '\u25B2' : '\u25BC' }}</span>
+        {{ t(tab.labelKey) }}
       </button>
+    </div>
 
-      <!-- Category content -->
-      <div v-if="expandedCategories[category.key]" class="mt-2 ml-4 space-y-3">
-        <div v-for="panel in category.panels" :key="panel.key">
-          <!-- Panel header -->
-          <button
-            @click="togglePanel(panel.key)"
-            class="w-full flex justify-between items-center p-3 rounded-lg text-left text-base font-medium"
-            :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)', cursor: 'pointer' }"
-            :aria-expanded="!!expandedPanels[panel.key]"
-          >
-            <span>{{ panel.name }}</span>
-            <span :style="{ color: 'var(--color-text-tertiary)' }">{{ expandedPanels[panel.key] ? '\u25B2' : '\u25BC' }}</span>
-          </button>
-
-          <!-- Panel content (lazy rendered) -->
-          <div v-if="expandedPanels[panel.key]" class="mt-2 p-4 rounded-lg" :style="{ border: '1px solid var(--color-border)' }">
-            <component :is="panel.component" />
+    <!-- Tab panels -->
+    <div
+      v-for="tab in tabs"
+      :key="tab.key"
+      v-show="activeTab === tab.key"
+      role="tabpanel"
+      :id="`panel-${tab.key}`"
+      :aria-labelledby="`tab-${tab.key}`"
+    >
+      <template v-if="mountedTabs.has(tab.key)">
+        <!-- Sanakenno tab renders two components stacked -->
+        <template v-if="tab.components">
+          <div class="space-y-6">
+            <component v-for="(comp, i) in tab.components" :key="i" :is="comp" />
           </div>
-        </div>
-      </div>
+        </template>
+        <component v-else :is="tab.component" />
+      </template>
     </div>
   </div>
 </template>

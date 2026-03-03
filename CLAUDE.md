@@ -17,7 +17,7 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Vue 3 SPA frontend, Flask
 | Layer | Technology |
 |-------|-----------|
 | Frontend | Vue 3 (Composition API, `<script setup>`), Vue Router 4, Tailwind CSS 4 |
-| Build | Vite 6 |
+| Build | Vite 6, vite-ssg (static site generation for SEO) |
 | Backend | Flask 3.1, Flask-SQLAlchemy, Flask-Login, Flask-Limiter (30 req/min default) |
 | Database | SQLite |
 | Auth | Flask-Login session cookies, werkzeug scrypt password hashing |
@@ -38,10 +38,10 @@ web_kontissa/
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
-│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist
+│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
 │   └── src/
-│       ├── main.js             # createApp, router, mount
+│       ├── main.js             # ViteSSG entry: createApp with SSG, router guards, i18n title updates
 │       ├── router.js           # 11 routes, lazy loading, admin + auth guards via beforeEach
 │       ├── style.css           # Tailwind import, CSS custom properties theme, dark mode, DM Sans + Ubuntu Mono
 │       ├── App.vue             # Layout shell: AppHeader, router-view, AppFooter. Calls checkAuth() on mount
@@ -75,7 +75,7 @@ web_kontissa/
 │           ├── AboutPage.vue   # Fetches and renders /api/sections; groups compact types (currently, pills) into side-by-side pairs on md+ screens; no h1 heading (quote section serves as intro)
 │           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
 │           ├── LoginPage.vue   # Auth form or logged-in state with logout
-│           ├── AdminPage.vue   # Protected admin dashboard, two-level collapsible (Site Admin, Sanakenno Admin) with 6 panel components
+│           ├── AdminPage.vue   # Protected admin dashboard, flat tab bar (Sections, Analytics, Recipes, Health, Sanakenno) with lazy-mounted panels
 │           ├── RecipeListPage.vue    # Recipe cards with search + category filter
 │           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
 │           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
@@ -220,6 +220,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 ### Frontend
 - Composition API with `<script setup>` exclusively — no Options API
 - Composables for shared state (`useAuth`, `useDarkMode`, `useI18n`) — module-level refs for singleton pattern. `useNavLinks` provides the shared navigation link list consumed by both `AppHeader` and `AppFooter`.
+- **Static site generation (SSG)**: `vite-ssg` pre-renders `/`, `/about`, `/contact`, `/login` at build time into static HTML with real content (SEO-friendly). Vue hydrates on top in the browser for interactivity. `main.js` exports `createApp` via `ViteSSG()` instead of the standard `createApp()`. Protected and dynamic routes (`/admin`, `/recipes/*`, `/sanakenno`) are not pre-rendered.
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors

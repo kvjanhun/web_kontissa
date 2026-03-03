@@ -41,7 +41,12 @@
   "notFound.heading": "Sivua ei l\u00f6ytynyt",
   "notFound.backHome": "Takaisin etusivulle",
 
-  "admin.heading": "Hallinta \u2014 Osiot",
+  "admin.heading": "Hallinta",
+  "admin.tab.sections": "Osiot",
+  "admin.tab.analytics": "Analytiikka",
+  "admin.tab.recipes": "Reseptit",
+  "admin.tab.health": "Terveys",
+  "admin.tab.sanakenno": "Sanakenno",
   "admin.addSection": "Lis\u00e4\u00e4 osio",
   "admin.title": "Otsikko",
   "admin.slug": "polku",

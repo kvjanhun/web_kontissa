@@ -41,7 +41,12 @@
   "notFound.heading": "Page not found",
   "notFound.backHome": "Back to home",
 
-  "admin.heading": "Admin \u2014 Sections",
+  "admin.heading": "Admin",
+  "admin.tab.sections": "Sections",
+  "admin.tab.analytics": "Analytics",
+  "admin.tab.recipes": "Recipes",
+  "admin.tab.health": "Health",
+  "admin.tab.sanakenno": "Sanakenno",
   "admin.addSection": "Add Section",
   "admin.title": "Title",
   "admin.slug": "slug",
