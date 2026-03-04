@@ -454,10 +454,17 @@ function formatElapsed(ms) {
 async function copyStatus() {
   const hintEmojis = [...hintsUnlocked.value].map(id => HINT_ICONS[id] || '').join('') || '–'
 
+  const max = puzzle.value?.max_score ?? 0
+  const alistyttavaTarget = Math.ceil(0.7 * max)
+  const isTaysiKenno = rank.value === 'Täysi kenno'
+  const scoreDisplay = isTaysiKenno
+    ? `${max}/${max}`
+    : `${score.value}/${alistyttavaTarget}`
+
   const lines = [
     `Sanakenno — Peli ${(puzzleNumber.value ?? 0) + 1}`,
     rank.value,
-    `${score.value}/${puzzle.value?.max_score ?? '?'} pistettä`,
+    `${scoreDisplay} pistettä`,
     `Avut: ${hintEmojis}`,
     `https://erez.ac/sanakenno`,
   ]
