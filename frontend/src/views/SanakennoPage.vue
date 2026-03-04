@@ -1167,15 +1167,29 @@ onUnmounted(() => {
           </template>
         </p>
         <p class="text-lg font-semibold" style="color: var(--color-text-primary);">
-          {{ score }} / {{ puzzle?.max_score }} pistettä
+          <template v-if="celebration === 'taysikenno'">
+            {{ puzzle?.max_score }} / {{ puzzle?.max_score }} pistettä
+          </template>
+          <template v-else>
+            {{ score }} / {{ Math.ceil(0.7 * (puzzle?.max_score ?? 0)) }} pistettä
+          </template>
         </p>
-        <button
-          class="mt-4 px-4 py-2 rounded-lg text-sm font-medium"
-          style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-          @click="celebration = null"
-        >
-          Jatka pelaamista
-        </button>
+        <div class="flex justify-center gap-2 mt-4">
+          <button
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+            @click="copyStatus(); celebration = null"
+          >
+            📋 Jaa tulos
+          </button>
+          <button
+            class="px-4 py-2 rounded-lg text-sm font-medium"
+            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+            @click="celebration = null"
+          >
+            {{ celebration === 'taysikenno' ? 'OK' : 'Jatka pelaamista' }}
+          </button>
+        </div>
       </div>
     </div>
   </Teleport>
