@@ -143,3 +143,16 @@ class BeeConfig(db.Model):
     __tablename__ = 'bee_config'
     key = db.Column(db.String(50), primary_key=True)
     value = db.Column(db.Text, nullable=False)
+
+
+class BeeAchievement(db.Model):
+    """Records when anonymous players reach rank milestones in Sanakenno."""
+    __tablename__ = 'bee_achievements'
+    id = db.Column(db.Integer, primary_key=True)
+    puzzle_number = db.Column(db.Integer, nullable=False)
+    rank = db.Column(db.String(50), nullable=False, index=True)
+    score = db.Column(db.Integer, nullable=False)
+    max_score = db.Column(db.Integer, nullable=False)
+    words_found = db.Column(db.Integer, nullable=False)
+    elapsed_ms = db.Column(db.Integer, nullable=True)
+    achieved_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

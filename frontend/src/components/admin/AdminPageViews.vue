@@ -4,7 +4,7 @@ import { ref, computed, onMounted } from 'vue'
 const pageViews = ref([])
 const events = ref(null)
 const loading = ref(true)
-const selectedDays = ref(30)
+const selectedDays = ref(7)
 const enabledPaths = ref(new Set())
 
 const PATH_COLORS = ['#ff643e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16']

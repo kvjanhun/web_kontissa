@@ -597,6 +597,20 @@ async function submitWord() {
 
   const rankAfter = rank.value
   if (rankAfter !== rankBefore) {
+    // Fire-and-forget achievement tracking
+    fetch('/api/kenno/achievement', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        puzzle_number: puzzleNumber.value,
+        rank: rankAfter,
+        score: score.value,
+        max_score: puzzle.value.max_score,
+        words_found: foundWords.value.size,
+        elapsed_ms: Math.round(getElapsedMs()),
+      }),
+    }).catch(() => {})
+
     if (rankAfter === 'Ällistyttävä') {
       celebration.value = 'alistyttava'
       if (celebrationTimer) clearTimeout(celebrationTimer)

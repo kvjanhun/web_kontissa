@@ -1,12 +1,12 @@
 from collections import Counter
-from datetime import date
-from flask import jsonify, request
+from datetime import date, datetime, timedelta, timezone
+from flask import jsonify, request, session
 from flask_login import current_user, login_required
 import hashlib
 import os
 
 from app import app
-from app.models import db, BlockedWord, BeeConfig, PageView
+from app.models import db, BlockedWord, BeeConfig, BeeAchievement, PageView
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -358,6 +358,105 @@ def bee_blocked_list():
         }
         for bw in words
     ])
+
+
+VALID_RANKS = [
+    "Etsi sanoja!", "Hyvä alku", "Nyt mennään!",
+    "Onnistuja", "Sanavalmis", "Ällistyttävä", "Täysi kenno",
+]
+
+
+@app.route("/api/kenno/achievement", methods=["POST"])
+def bee_achievement():
+    """Record an anonymous rank achievement (session-deduped)."""
+    data = request.get_json() or {}
+
+    rank = data.get("rank")
+    if rank not in VALID_RANKS:
+        return jsonify({"error": "Invalid rank"}), 400
+
+    puzzle_number = data.get("puzzle_number")
+    if not isinstance(puzzle_number, int) or puzzle_number < 0 or puzzle_number >= len(PUZZLES):
+        return jsonify({"error": "Invalid puzzle_number"}), 400
+
+    score_val = data.get("score")
+    max_score_val = data.get("max_score")
+    words_found = data.get("words_found")
+    if (
+        not isinstance(score_val, int) or score_val < 0
+        or not isinstance(max_score_val, int) or max_score_val <= 0
+        or not isinstance(words_found, int) or words_found < 0
+    ):
+        return jsonify({"error": "Invalid score, max_score, or words_found"}), 400
+
+    elapsed_ms = data.get("elapsed_ms")
+    if elapsed_ms is not None and (not isinstance(elapsed_ms, int) or elapsed_ms < 0):
+        return jsonify({"error": "Invalid elapsed_ms"}), 400
+
+    # Session dedup: one record per puzzle+rank per session
+    achieved_key = f"{puzzle_number}:{rank}"
+    achieved_ranks = session.get("achieved_ranks", [])
+    if achieved_key in achieved_ranks:
+        return jsonify({"status": "already_recorded"}), 200
+
+    achievement = BeeAchievement(
+        puzzle_number=puzzle_number,
+        rank=rank,
+        score=score_val,
+        max_score=max_score_val,
+        words_found=words_found,
+        elapsed_ms=elapsed_ms,
+    )
+    db.session.add(achievement)
+    db.session.commit()
+
+    achieved_ranks.append(achieved_key)
+    session["achieved_ranks"] = achieved_ranks
+
+    return jsonify({"status": "recorded"}), 201
+
+
+@app.route("/api/kenno/achievements")
+@login_required
+def bee_achievements():
+    """Daily achievement summary (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    days = request.args.get("days", 30, type=int)
+    days = max(1, min(90, days))
+
+    now = datetime.now(timezone.utc)
+    start = now - timedelta(days=days)
+
+    rows = (
+        db.session.query(
+            db.func.date(BeeAchievement.achieved_at),
+            BeeAchievement.rank,
+            db.func.count(),
+        )
+        .filter(BeeAchievement.achieved_at >= start)
+        .group_by(db.func.date(BeeAchievement.achieved_at), BeeAchievement.rank)
+        .all()
+    )
+
+    # Build lookup: date_str -> rank -> count
+    lookup = {}
+    for date_str, rank, count in rows:
+        lookup.setdefault(str(date_str), {})[rank] = count
+
+    # Fill all dates in range
+    daily = []
+    totals = {r: 0 for r in VALID_RANKS}
+    for i in range(days):
+        d = (now - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        day_counts = {r: lookup.get(d, {}).get(r, 0) for r in VALID_RANKS}
+        day_total = sum(day_counts.values())
+        daily.append({"date": d, "counts": day_counts, "total": day_total})
+        for r in VALID_RANKS:
+            totals[r] += day_counts[r]
+
+    return jsonify({"days": days, "daily": daily, "totals": totals})
 
 
 @app.route("/api/kenno/block/<int:word_id>", methods=["DELETE"])

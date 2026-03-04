@@ -523,3 +523,132 @@ class TestSetCenter:
         data = logged_in_admin.get("/api/kenno/variations?puzzle=0").get_json()
         active = [v for v in data["variations"] if v["is_active"]][0]
         assert active["center"] == new_center
+
+
+# ---------------------------------------------------------------------------
+# Rank achievement tracking
+# ---------------------------------------------------------------------------
+
+class TestBeeAchievements:
+    """POST /api/kenno/achievement and GET /api/kenno/achievements."""
+
+    VALID_ACHIEVEMENT = {
+        "puzzle_number": 0,
+        "rank": "Hyvä alku",
+        "score": 5,
+        "max_score": 100,
+        "words_found": 3,
+        "elapsed_ms": 60000,
+    }
+
+    def test_post_valid_achievement(self, client):
+        res = client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        assert res.status_code == 201
+        assert res.get_json()["status"] == "recorded"
+
+    def test_post_rejects_unknown_rank(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "rank": "Mega Master"}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_post_rejects_invalid_puzzle_number(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "puzzle_number": 9999}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_post_rejects_negative_puzzle_number(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "puzzle_number": -1}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_post_rejects_string_puzzle_number(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "puzzle_number": "abc"}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_post_rejects_negative_score(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "score": -5}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_post_rejects_zero_max_score(self, client):
+        data = {**self.VALID_ACHIEVEMENT, "max_score": 0}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 400
+
+    def test_session_dedup_same_puzzle_rank(self, client):
+        """Same puzzle+rank in same session should only record once."""
+        res1 = client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        assert res1.status_code == 201
+
+        res2 = client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        assert res2.status_code == 200
+        assert res2.get_json()["status"] == "already_recorded"
+
+    def test_different_ranks_same_puzzle_both_recorded(self, client):
+        """Different ranks for the same puzzle should both be recorded."""
+        res1 = client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        assert res1.status_code == 201
+
+        data2 = {**self.VALID_ACHIEVEMENT, "rank": "Nyt mennään!", "score": 15}
+        res2 = client.post("/api/kenno/achievement", json=data2)
+        assert res2.status_code == 201
+
+    def test_different_puzzles_same_rank_both_recorded(self, client):
+        """Same rank on different puzzles should both be recorded."""
+        res1 = client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        assert res1.status_code == 201
+
+        data2 = {**self.VALID_ACHIEVEMENT, "puzzle_number": 1}
+        res2 = client.post("/api/kenno/achievement", json=data2)
+        assert res2.status_code == 201
+
+    def test_elapsed_ms_optional(self, client):
+        data = {k: v for k, v in self.VALID_ACHIEVEMENT.items() if k != "elapsed_ms"}
+        res = client.post("/api/kenno/achievement", json=data)
+        assert res.status_code == 201
+
+    def test_get_requires_admin(self, logged_in_user):
+        res = logged_in_user.get("/api/kenno/achievements")
+        assert res.status_code == 403
+
+    def test_get_requires_auth(self, client):
+        res = client.get("/api/kenno/achievements")
+        assert res.status_code == 401
+
+    def test_get_returns_daily_counts(self, client, logged_in_admin):
+        # Post some achievements as anonymous client
+        client.post("/api/kenno/achievement", json=self.VALID_ACHIEVEMENT)
+        data2 = {**self.VALID_ACHIEVEMENT, "rank": "Sanavalmis", "score": 40}
+        client.post("/api/kenno/achievement", json=data2)
+
+        # Fetch as admin
+        res = logged_in_admin.get("/api/kenno/achievements?days=7")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["days"] == 7
+        assert len(data["daily"]) == 7
+        assert "totals" in data
+
+        # Today's entry should have the counts
+        today = data["daily"][-1]
+        assert today["counts"]["Hyvä alku"] >= 1
+        assert today["counts"]["Sanavalmis"] >= 1
+        assert today["total"] >= 2
+
+    def test_get_days_clamped_to_max_90(self, logged_in_admin):
+        res = logged_in_admin.get("/api/kenno/achievements?days=200")
+        data = res.get_json()
+        assert data["days"] == 90
+
+    def test_get_days_clamped_to_min_1(self, logged_in_admin):
+        res = logged_in_admin.get("/api/kenno/achievements?days=0")
+        data = res.get_json()
+        assert data["days"] == 1
+
+    def test_get_all_ranks_present_in_totals(self, logged_in_admin):
+        from app.api.bee import VALID_RANKS
+        res = logged_in_admin.get("/api/kenno/achievements")
+        data = res.get_json()
+        for rank in VALID_RANKS:
+            assert rank in data["totals"]
