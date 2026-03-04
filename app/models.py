@@ -130,6 +130,14 @@ class PageView(db.Model):
     updated_at = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
 
 
+class PageViewEvent(db.Model):
+    """Individual page view event with timestamp for time-series analytics."""
+    __tablename__ = 'page_view_events'
+    id = db.Column(db.Integer, primary_key=True)
+    path = db.Column(db.String(200), nullable=False, index=True)
+    timestamp = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class BeeConfig(db.Model):
     """Key-value store for Sanakenno puzzle scheduling state."""
     __tablename__ = 'bee_config'

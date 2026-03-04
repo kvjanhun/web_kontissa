@@ -80,7 +80,9 @@ onMounted(async () => {
   }
   await runBootSequence()
   scrollToBottom()
-  focusInput()
+  if (window.matchMedia('(pointer: fine)').matches) {
+    focusInput()
+  }
 })
 
 onBeforeUnmount(() => {

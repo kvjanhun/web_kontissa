@@ -44,7 +44,6 @@ function handleDropdownKeydown(e) {
   >
     <div class="flex gap-6 items-center">
       <router-link to="/" class="!text-white text-2xl font-normal tracking-tight">erez.ac</router-link>
-      <span class="font-light text-stone-400 text-sm max-sm:hidden">Konsta Janhunen</span>
     </div>
 
     <div class="flex items-center gap-2">

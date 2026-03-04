@@ -1,8 +1,9 @@
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from flask import jsonify, request, session
+from sqlalchemy import func
 from app import app, limiter
-from app.models import db, PageView
+from app.models import db, PageView, PageViewEvent
 from app.routes import admin_required
 
 
@@ -29,6 +30,7 @@ def track_pageview():
         else:
             pv = PageView(path=path, count=1)
             db.session.add(pv)
+        db.session.add(PageViewEvent(path=path))
         db.session.commit()
         viewed.append(path)
         session["viewed_pages"] = viewed
@@ -49,3 +51,47 @@ def list_pageviews():
         }
         for pv in views
     ])
+
+
+@app.route("/api/pageviews/events")
+@admin_required
+def pageview_events():
+    days = request.args.get("days", 30, type=int)
+    days = max(1, min(days, 90))
+
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    rows = (
+        db.session.query(
+            func.date(PageViewEvent.timestamp).label("date"),
+            PageViewEvent.path,
+            func.count().label("cnt"),
+        )
+        .filter(PageViewEvent.timestamp >= since)
+        .group_by(func.date(PageViewEvent.timestamp), PageViewEvent.path)
+        .all()
+    )
+
+    # Build date→{path: count} mapping
+    data = {}
+    all_paths = set()
+    for date_str, path, cnt in rows:
+        date_key = str(date_str)
+        data.setdefault(date_key, {})[path] = cnt
+        all_paths.add(path)
+
+    # Fill all dates in range
+    series = []
+    today = datetime.now(timezone.utc).date()
+    for i in range(days):
+        d = (today - timedelta(days=days - 1 - i)).isoformat()
+        if d in data:
+            series.append({"date": d, "counts": data[d]})
+        else:
+            series.append({"date": d, "counts": {}})
+
+    return jsonify({
+        "days": days,
+        "paths": sorted(all_paths),
+        "series": series,
+    })

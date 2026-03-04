@@ -1,7 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import { useAuth } from '../composables/useAuth'
-import { trackPageView } from '../composables/usePageView'
 import ThemeToggle from '../components/ThemeToggle.vue'
 
 const { isAdmin } = useAuth()
@@ -644,7 +643,6 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
-  trackPageView('/sanakenno')
   _swapFavicon(BEE_FAVICON)
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)

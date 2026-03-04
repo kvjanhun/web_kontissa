@@ -3,6 +3,7 @@ import App from './App.vue'
 import { routes } from './router.js'
 import { useAuth } from './composables/useAuth'
 import { useI18n } from './composables/useI18n'
+import { trackPageView } from './composables/usePageView'
 import './style.css'
 
 export const createApp = ViteSSG(
@@ -23,6 +24,9 @@ export const createApp = ViteSSG(
       if (isClient) {
         const { t } = useI18n()
         document.title = to.meta.titleKey ? t(to.meta.titleKey) : 'erez.ac'
+        if (to.matched.length > 0 && to.path !== '/admin') {
+          trackPageView(to.path)
+        }
       }
     })
   }

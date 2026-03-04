@@ -126,3 +126,71 @@ class TestListPageviews:
         # updated_at should be set (both should be non-null)
         assert ts1 is not None
         assert ts2 is not None
+
+
+class TestPageviewEvents:
+    """GET /api/pageviews/events"""
+
+    def test_requires_admin(self, client):
+        res = client.get("/api/pageviews/events")
+        assert res.status_code == 401
+
+    def test_regular_user_denied(self, logged_in_user):
+        res = logged_in_user.get("/api/pageviews/events")
+        assert res.status_code == 403
+
+    def test_returns_empty_series(self, logged_in_admin):
+        res = logged_in_admin.get("/api/pageviews/events")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["days"] == 30
+        assert data["paths"] == []
+        assert len(data["series"]) == 30
+
+    def test_records_events(self, app, logged_in_admin):
+        """Page view events are recorded alongside summary counts."""
+        c1 = app.test_client()
+        c2 = app.test_client()
+        c1.post("/api/pageview", json={"path": "/sanakenno"})
+        c2.post("/api/pageview", json={"path": "/sanakenno"})
+
+        res = logged_in_admin.get("/api/pageviews/events?days=1")
+        data = res.get_json()
+        assert "/sanakenno" in data["paths"]
+        # Find today's entry
+        today_entry = data["series"][-1]
+        assert today_entry["counts"].get("/sanakenno") == 2
+
+    def test_multiple_paths(self, app, logged_in_admin):
+        c1 = app.test_client()
+        c2 = app.test_client()
+        c1.post("/api/pageview", json={"path": "/sanakenno"})
+        c2.post("/api/pageview", json={"path": "/about"})
+
+        res = logged_in_admin.get("/api/pageviews/events?days=1")
+        data = res.get_json()
+        assert sorted(data["paths"]) == ["/about", "/sanakenno"]
+
+    def test_days_param_clamped(self, logged_in_admin):
+        """Days param is clamped to 1-90."""
+        res = logged_in_admin.get("/api/pageviews/events?days=200")
+        assert res.get_json()["days"] == 90
+
+        res = logged_in_admin.get("/api/pageviews/events?days=0")
+        assert res.get_json()["days"] == 1
+
+    def test_series_length_matches_days(self, logged_in_admin):
+        res = logged_in_admin.get("/api/pageviews/events?days=7")
+        data = res.get_json()
+        assert data["days"] == 7
+        assert len(data["series"]) == 7
+
+    def test_deduped_sessions_dont_create_events(self, client, logged_in_admin):
+        """Same session, same path — only one event created."""
+        client.post("/api/pageview", json={"path": "/test"})
+        client.post("/api/pageview", json={"path": "/test"})
+
+        res = logged_in_admin.get("/api/pageviews/events?days=1")
+        data = res.get_json()
+        today_entry = data["series"][-1]
+        assert today_entry["counts"].get("/test") == 1
