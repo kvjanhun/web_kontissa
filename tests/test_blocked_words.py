@@ -5,18 +5,18 @@ from app.api.bee import _PUZZLE_CACHE
 
 
 class TestBlockedWordsList:
-    """GET /api/bee/blocked"""
+    """GET /api/kenno/blocked"""
 
     def test_requires_auth(self, client):
-        res = client.get("/api/bee/blocked")
+        res = client.get("/api/kenno/blocked")
         assert res.status_code == 401
 
     def test_requires_admin(self, logged_in_user):
-        res = logged_in_user.get("/api/bee/blocked")
+        res = logged_in_user.get("/api/kenno/blocked")
         assert res.status_code == 403
 
     def test_returns_empty_list(self, logged_in_admin):
-        res = logged_in_admin.get("/api/bee/blocked")
+        res = logged_in_admin.get("/api/kenno/blocked")
         assert res.status_code == 200
         assert res.get_json() == []
 
@@ -25,7 +25,7 @@ class TestBlockedWordsList:
             db.session.add(BlockedWord(word="testword"))
             db.session.commit()
 
-        res = logged_in_admin.get("/api/bee/blocked")
+        res = logged_in_admin.get("/api/kenno/blocked")
         assert res.status_code == 200
         data = res.get_json()
         assert len(data) == 1
@@ -40,7 +40,7 @@ class TestBlockedWordsList:
             db.session.add(BlockedWord(word="second"))
             db.session.commit()
 
-        res = logged_in_admin.get("/api/bee/blocked")
+        res = logged_in_admin.get("/api/kenno/blocked")
         data = res.get_json()
         assert len(data) == 2
         # Most recently blocked should be first
@@ -49,14 +49,14 @@ class TestBlockedWordsList:
 
 
 class TestUnblockWord:
-    """DELETE /api/bee/block/<id>"""
+    """DELETE /api/kenno/block/<id>"""
 
     def test_requires_auth(self, client):
-        res = client.delete("/api/bee/block/1")
+        res = client.delete("/api/kenno/block/1")
         assert res.status_code == 401
 
     def test_requires_admin(self, logged_in_user):
-        res = logged_in_user.delete("/api/bee/block/1")
+        res = logged_in_user.delete("/api/kenno/block/1")
         assert res.status_code == 403
 
     def test_unblocks_word(self, app, logged_in_admin):
@@ -66,7 +66,7 @@ class TestUnblockWord:
             db.session.commit()
             word_id = bw.id
 
-        res = logged_in_admin.delete(f"/api/bee/block/{word_id}")
+        res = logged_in_admin.delete(f"/api/kenno/block/{word_id}")
         assert res.status_code == 200
         data = res.get_json()
         assert data["word"] == "badword"
@@ -84,9 +84,9 @@ class TestUnblockWord:
             word_id = bw.id
 
         _PUZZLE_CACHE["dummy"] = "data"
-        logged_in_admin.delete(f"/api/bee/block/{word_id}")
+        logged_in_admin.delete(f"/api/kenno/block/{word_id}")
         assert "dummy" not in _PUZZLE_CACHE
 
     def test_404_for_missing(self, logged_in_admin):
-        res = logged_in_admin.delete("/api/bee/block/9999")
+        res = logged_in_admin.delete("/api/kenno/block/9999")
         assert res.status_code == 404

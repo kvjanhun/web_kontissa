@@ -1,6 +1,8 @@
+from collections import Counter
 from datetime import date
 from flask import jsonify, request
 from flask_login import current_user, login_required
+import hashlib
 import os
 
 from app import app
@@ -104,6 +106,10 @@ def _score_word(word, all_letters_frozenset):
     return pts
 
 
+def _hash_word(word):
+    return hashlib.sha256(word.encode()).hexdigest()
+
+
 def _compute_puzzle(puzzle):
     center = puzzle["center"]
     outer = puzzle["outer"]
@@ -117,6 +123,10 @@ def _compute_puzzle(puzzle):
 
     words = []
     max_score = 0
+    pangram_count = 0
+    by_letter = Counter()
+    by_length = Counter()
+    by_pair = Counter()
     for word in _ALL_WORDS:
         if word in blocked:
             continue
@@ -127,8 +137,23 @@ def _compute_puzzle(puzzle):
         ):
             words.append(word)
             max_score += _score_word(word, letter_frozenset)
+            if letter_frozenset.issubset(set(word)):
+                pangram_count += 1
+            by_letter[word[0]] += 1
+            by_length[len(word)] += 1
+            by_pair[word[:2]] += 1
 
-    return sorted(words), max_score
+    sorted_words = sorted(words)
+    word_hashes = [_hash_word(w) for w in sorted_words]
+    hint_data = {
+        "word_count": len(sorted_words),
+        "pangram_count": pangram_count,
+        "by_letter": dict(by_letter),
+        "by_length": {str(k): v for k, v in by_length.items()},
+        "by_pair": dict(by_pair),
+    }
+
+    return sorted_words, max_score, word_hashes, hint_data
 
 
 _PUZZLE_CACHE: dict = {}  # Cleared on container restart or when words are blocked
@@ -187,34 +212,39 @@ def _compute_variation(letters, center_letter):
     }
 
 
-@app.route("/api/bee")
-def bee():
+@app.route("/api/kenno")
+def kenno():
     puzzle_number = _get_puzzle_for_date(date.today())
 
-    override = request.args.get("puzzle", type=int)
-    if (
-        override is not None
-        and current_user.is_authenticated
+    is_admin = (
+        current_user.is_authenticated
         and getattr(current_user, "role", None) == "admin"
-    ):
+    )
+
+    override = request.args.get("puzzle", type=int)
+    if override is not None and is_admin:
         puzzle_number = override % len(PUZZLES)
 
     puzzle = _get_puzzle_dict(puzzle_number)
-    words, max_score = _get_puzzle_data(puzzle_number)
+    words, max_score, word_hashes, hint_data = _get_puzzle_data(puzzle_number)
 
-    return jsonify(
-        {
-            "center": puzzle["center"],
-            "letters": puzzle["outer"],
-            "words": words,
-            "max_score": max_score,
-            "puzzle_number": puzzle_number,
-            "total_puzzles": len(PUZZLES),
-        }
-    )
+    result = {
+        "center": puzzle["center"],
+        "letters": puzzle["outer"],
+        "word_hashes": word_hashes,
+        "hint_data": hint_data,
+        "max_score": max_score,
+        "puzzle_number": puzzle_number,
+        "total_puzzles": len(PUZZLES),
+    }
+
+    if is_admin:
+        result["words"] = words
+
+    return jsonify(result)
 
 
-@app.route("/api/bee/block", methods=["POST"])
+@app.route("/api/kenno/block", methods=["POST"])
 @login_required
 def bee_block_word():
     if getattr(current_user, "role", None) != "admin":
@@ -233,7 +263,7 @@ def bee_block_word():
     return jsonify({"word": word, "blocked": True})
 
 
-@app.route("/api/bee/variations")
+@app.route("/api/kenno/variations")
 @login_required
 def bee_variations():
     """Return all 7 center-letter variations for a puzzle (admin only)."""
@@ -260,7 +290,7 @@ def bee_variations():
     })
 
 
-@app.route("/api/bee/center", methods=["POST"])
+@app.route("/api/kenno/center", methods=["POST"])
 @login_required
 def bee_set_center():
     """Set the center letter for a puzzle (admin only)."""
@@ -293,7 +323,7 @@ def bee_set_center():
     return jsonify({"puzzle": puzzle_idx, "center": center})
 
 
-@app.route("/api/bee/stats")
+@app.route("/api/kenno/stats")
 @login_required
 def bee_stats():
     """Sanakenno overview stats (admin only)."""
@@ -312,7 +342,7 @@ def bee_stats():
     })
 
 
-@app.route("/api/bee/blocked")
+@app.route("/api/kenno/blocked")
 @login_required
 def bee_blocked_list():
     """List all blocked words with timestamps (admin only)."""
@@ -330,7 +360,7 @@ def bee_blocked_list():
     ])
 
 
-@app.route("/api/bee/block/<int:word_id>", methods=["DELETE"])
+@app.route("/api/kenno/block/<int:word_id>", methods=["DELETE"])
 @login_required
 def bee_unblock_word(word_id):
     """Unblock a word by ID (admin only)."""

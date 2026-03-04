@@ -6,7 +6,7 @@ const loading = ref(true)
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/bee/stats')
+    const res = await fetch('/api/kenno/stats')
     if (res.ok) stats.value = await res.json()
   } catch { /* ignore */ }
   finally { loading.value = false }

@@ -38,10 +38,11 @@ Browser                         Vite / Flask                    Database
   |  <-- JSON [{slug, title, ...}] |<-----------------------------|
   |                                 |                              |
   |  Navigate to /sanakenno:       |                              |
-  |  GET /api/bee ---------------->|  compute puzzle (cached)     |
+  |  GET /api/kenno -------------->|  compute puzzle (cached)     |
   |  <-- JSON {center, letters,    |  SELECT FROM bee_config      |
-  |            words, max_score,   |<-----------------------------|
-  |            puzzle_number, ...} |                              |
+  |            word_hashes,        |<-----------------------------|
+  |            hint_data,          |                              |
+  |            max_score, ...}     |                              |
   |                                 |                              |
   |  Navigate to /recipes:         |                              |
   |  GET /api/recipes ------------>|  SELECT * FROM recipe        |
@@ -174,23 +175,24 @@ Fetches real-time weather observations from the Finnish Meteorological Institute
 ### `app/api/bee.py` — Sanakenno Game API
 
 ```
-GET  /api/bee                      → {center, letters, words[], max_score, puzzle_number, total_puzzles}
-POST /api/bee/block                → blocks a word (admin)
-GET  /api/bee/blocked              → list blocked words with timestamps (admin)
-DELETE /api/bee/block/<id>         → unblock a word by ID (admin)
-GET  /api/bee/stats                → {page_views, blocked_words_count, total_puzzles} (admin)
-GET  /api/bee/variations?puzzle=N  → all 7 center-letter variations with stats (admin)
-POST /api/bee/center               → set center letter for a puzzle (admin)
+GET  /api/kenno                      → {center, letters, word_hashes[], hint_data, max_score, puzzle_number, total_puzzles} (admin also gets words[])
+POST /api/kenno/block                → blocks a word (admin)
+GET  /api/kenno/blocked              → list blocked words with timestamps (admin)
+DELETE /api/kenno/block/<id>         → unblock a word by ID (admin)
+GET  /api/kenno/stats                → {page_views, blocked_words_count, total_puzzles} (admin)
+GET  /api/kenno/variations?puzzle=N  → all 7 center-letter variations with stats (admin)
+POST /api/kenno/center               → set center letter for a puzzle (admin)
 ```
 
 Key implementation details:
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k Finnish words, loaded at startup into `_ALL_WORDS` (a `frozenset`). Hyphenated compounds are normalised by stripping the hyphen.
+- **Word hiding**: The public API returns SHA-256 hashes of valid words (`word_hashes`) instead of plaintext, plus pre-computed `hint_data` for the hint panels. Admin requests also receive the plaintext `words` array.
 - **Puzzles**: 41 curated letter sets in `PUZZLES`. Each entry is `{"letters": [7 sorted letters]}`. The center letter for each puzzle is stored in `BeeConfig` (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup by `_seed_centers()`.
 - **Rotation**: Today's puzzle index = `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`.
 - **Scoring**: 4-letter word = 1 pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
-- **Cache**: Valid words and max_score are computed lazily on first access and stored in `_PUZZLE_CACHE` (dict keyed by puzzle index). Blocking or unblocking a word clears the entire cache. Admin override (`?puzzle=N`) is accepted when the request comes from an authenticated admin.
-- **Admin tools**: `GET /api/bee/variations` computes stats for all 7 possible center letters of a puzzle. `POST /api/bee/center` switches the active center and clears that puzzle's cache entry.
+- **Cache**: Valid words, max_score, word_hashes, and hint_data are computed lazily on first access and stored in `_PUZZLE_CACHE` (dict keyed by puzzle index). Blocking or unblocking a word clears the entire cache. Admin override (`?puzzle=N`) is accepted when the request comes from an authenticated admin.
+- **Admin tools**: `GET /api/kenno/variations` computes stats for all 7 possible center letters of a puzzle. `POST /api/kenno/center` switches the active center and clears that puzzle's cache entry.
 
 ### `app/api/pageviews.py` — Page View Tracking
 
@@ -412,13 +414,13 @@ Find words using the 7 displayed letters. Every word must contain the center let
 
 ### How the API Works
 
-`GET /api/bee` returns the full puzzle for the day: `center`, `letters` (the other 6), `words` (complete valid word list), `max_score`, `puzzle_number` (0-indexed internally), and `total_puzzles` (41). The entire word list is sent to the browser — validation is client-side, so there are no per-word round-trips.
+`GET /api/kenno` returns the daily puzzle: `center`, `letters` (the other 6), `word_hashes` (SHA-256 hex digests of each valid word), `hint_data` (pre-computed metadata for hints: word_count, pangram_count, by_letter, by_length, by_pair), `max_score`, `puzzle_number` (0-indexed internally), and `total_puzzles` (41). Admin requests also include the plaintext `words` array. The word list is hidden behind hashes — the frontend validates guesses by hashing the input and checking against the hash set.
 
 Puzzle rotation: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. The valid word list and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`. Blocking a word clears this cache and the word is excluded on the next compute.
 
 ### Frontend (SanakennoPage.vue)
 
-- SVG honeycomb of 7 hexagons; keyboard input (letters / Backspace / Enter); click or tap to enter letters
+- SVG honeycomb of 7 hexagons; keyboard input (letters / Backspace / Enter); click or tap to enter letters; word validation via SHA-256 hash comparison
 - Browser tab title: `"Sanakenno — #N"` where N is the 1-indexed puzzle number
 - Favicon swapped to an orange pointy-top hexagon SVG on mount; restored on unmount
 - Touch zoom prevented: `touch-action: manipulation` on the root div; `touch-action: none` on the SVG to prevent scroll interpretation of hexagon taps
@@ -455,8 +457,8 @@ Button next to the Avut toggle. Copies a plain-text summary to the clipboard: pu
 ### Admin Features
 
 - **Puzzle switcher**: Admins see a 1-indexed number input and "Satunnainen" (random) button. Selected puzzle persists in `localStorage` under `sanakenno_admin_puzzle`. Confirmation requested only if there is existing progress to lose.
-- **Center variation selector**: 7-column grid showing word count, max score, and pangram count for each possible center letter. Active center highlighted with accent color. Clicking a letter calls `POST /api/bee/center`.
-- **Word blocking**: `AdminBlockedWords.vue` shows blocked words with timestamps and an unblock button. New words blocked via `AdminBeeStats.vue` form which calls `POST /api/bee/block`.
+- **Center variation selector**: 7-column grid showing word count, max score, and pangram count for each possible center letter. Active center highlighted with accent color. Clicking a letter calls `POST /api/kenno/center`.
+- **Word blocking**: `AdminBlockedWords.vue` shows blocked words with timestamps and an unblock button. New words blocked via `AdminBeeStats.vue` form which calls `POST /api/kenno/block`.
 
 ### OG Meta Tags
 
@@ -601,14 +603,14 @@ GET /api/sections → 200 (JSON, ~1KB)
 **Navigate to /sanakenno (client-side):**
 ```
 No page reload — Vue Router swaps the view
-GET /api/bee → 200 (JSON with full word list, ~50KB)
+GET /api/kenno → 200 (JSON with word hashes + hint data)
 POST /api/pageview {"path": "/sanakenno"} → 200
 ```
 
 **Direct visit to /sanakenno:**
 ```
 GET /sanakenno → 200 (index.html with patched OG meta tags)
-GET /api/bee → 200
+GET /api/kenno → 200
 POST /api/pageview {"path": "/sanakenno"} → 200
 ```
 
@@ -656,7 +658,7 @@ GET / → 200 (index.html — note: crawlers may not execute JS)
 13. **GitHub API caching** — 6-hour TTL avoids rate limiting while keeping the "last updated" reasonably fresh
 14. **Vite dev proxy** — Vite dev server proxies API requests to Flask at port 5001, enabling HMR during development
 15. **Accessibility-first** — skip link, focus indicators, ARIA attributes, route announcer, reduced motion support
-16. **Sanakenno: public, no auth** — the game is fully public; the word list is sent in full to the client; all validation is client-side. No per-guess API calls means no server load during gameplay.
+16. **Sanakenno: public, no auth** — the game is fully public; the word list is hidden behind SHA-256 hashes; validation is client-side via hash comparison. No per-guess API calls means no server load during gameplay.
 17. **Section type system** — four types (`text`, `pills`, `quote`, `currently`) validated server-side, rendered client-side by `SectionBlock.vue`. Adding a new type requires changes in `routes.py` (validation), `SectionBlock.vue` (rendering), and `AdminSections.vue` (form dropdown).
 18. **Page view dedup via session** — `POST /api/pageview` counts each path at most once per browser session, avoiding inflation from refreshes. The `PageView` table has one row per path; `count` is the total unique-session hit count.
 19. **OG meta patching for Sanakenno** — the `/sanakenno` Flask route is a special case that reads and regex-patches `index.html` before serving, giving the game page distinct social link previews without a separate HTML template.

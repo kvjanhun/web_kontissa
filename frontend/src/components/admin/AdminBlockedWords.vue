@@ -7,7 +7,7 @@ const error = ref('')
 
 onMounted(async () => {
   try {
-    const res = await fetch('/api/bee/blocked')
+    const res = await fetch('/api/kenno/blocked')
     if (res.ok) words.value = await res.json()
   } catch { /* ignore */ }
   finally { loading.value = false }
@@ -21,7 +21,7 @@ function formatDate(iso) {
 async function unblock(id, word) {
   if (!confirm(`Unblock "${word}"? It will reappear in puzzles.`)) return
   error.value = ''
-  const res = await fetch(`/api/bee/block/${id}`, { method: 'DELETE' })
+  const res = await fetch(`/api/kenno/block/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     const data = await res.json()
     error.value = data.error || 'Failed to unblock'

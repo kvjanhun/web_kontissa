@@ -28,6 +28,8 @@ const showHints = ref(false)
 const showRules = ref(false)
 const showRemainingWords = ref(false)
 const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
+const celebration = ref(null)  // null | 'alistyttava' | 'taysikenno'
+let celebrationTimer = null
 
 // --- Center variation selector (admin) ---
 const variations = ref([])
@@ -38,7 +40,7 @@ async function fetchVariations() {
   if (!isAdmin.value || puzzleNumber.value == null) return
   variationsLoading.value = true
   try {
-    const res = await fetch(`/api/bee/variations?puzzle=${puzzleNumber.value}`)
+    const res = await fetch(`/api/kenno/variations?puzzle=${puzzleNumber.value}`)
     if (!res.ok) throw new Error()
     const data = await res.json()
     variations.value = data.variations
@@ -53,7 +55,7 @@ async function setCenter(letter) {
   if (centerSaving.value) return
   centerSaving.value = true
   try {
-    const res = await fetch('/api/bee/center', {
+    const res = await fetch('/api/kenno/center', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ puzzle: puzzleNumber.value, center: letter }),
@@ -85,9 +87,17 @@ let hiddenAt = null                   // non-reactive: when the tab was last hid
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
-const wordsSet = computed(() => new Set(puzzle.value?.words ?? []))
+const wordHashSet = computed(() => new Set(puzzle.value?.word_hashes ?? []))
 const allLetters = computed(() => new Set([center.value, ...outerLetters.value]))
+// Admin-only: full word list (only present when logged in as admin)
 const allWords = computed(() => puzzle.value?.words ?? [])
+
+async function hashWord(word) {
+  const data = new TextEncoder().encode(word)
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data)
+  const hashArray = Array.from(new Uint8Array(hashBuffer))
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
+}
 
 const RANKS = [
   { pct: 100, name: 'Täysi kenno' },
@@ -120,7 +130,11 @@ const rank = computed(() => {
 
 const rankThresholds = computed(() => {
   const max = puzzle.value?.max_score ?? 0
-  return [...RANKS].reverse().map(r => ({
+  // Hide Täysi kenno from the visible list — it's a surprise reveal
+  const visible = rank.value === 'Täysi kenno'
+    ? RANKS
+    : RANKS.filter(r => r.name !== 'Täysi kenno')
+  return [...visible].reverse().map(r => ({
     name: r.name,
     points: Math.ceil(r.pct / 100 * max),
     isCurrent: rank.value === r.name,
@@ -140,9 +154,10 @@ const progressToNextRank = computed(() => {
   return Math.min(100, ((score.value - currentRankPts) / (nextRankPts - currentRankPts)) * 100)
 })
 
-const allFound = computed(() =>
-  puzzle.value !== null && allWords.value.length > 0 && foundWords.value.size === allWords.value.length
-)
+const allFound = computed(() => {
+  if (!puzzle.value?.hint_data) return false
+  return foundWords.value.size === puzzle.value.hint_data.word_count
+})
 
 // Colour each character of the word being typed:
 //   center letter  → accent (orange)
@@ -166,22 +181,14 @@ const remainingWords = computed(() =>
 async function blockWord(word) {
   if (!confirm(`Remove "${word}" from the word list permanently?`)) return
   try {
-    const res = await fetch('/api/bee/block', {
+    const res = await fetch('/api/kenno/block', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ word }),
     })
     if (!res.ok) throw new Error()
-    // Update local state immediately without a full refetch
-    const letterSet = new Set([center.value, ...outerLetters.value])
-    const isPangram = [...letterSet].every(c => word.includes(c))
-    const pts = word.length === 4 ? 1 : word.length
-    const bonus = isPangram ? 7 : 0
-    puzzle.value = {
-      ...puzzle.value,
-      words: puzzle.value.words.filter(w => w !== word),
-      max_score: puzzle.value.max_score - pts - bonus,
-    }
+    // Refetch the puzzle to get updated word_hashes and hint_data
+    await fetchPuzzle(puzzleNumber.value)
   } catch {
     showMessage('Could not remove word', 'error')
   }
@@ -203,67 +210,86 @@ function toColumns(words) {
 const wordColumns = computed(() => toColumns(sortedFoundWords.value))
 const remainingWordColumns = computed(() => toColumns(remainingWords.value))
 
-// --- Hint computeds ---
-// Hint 2: remaining words per starting letter, sorted alphabetically
-const letterMap = computed(() => {
+// --- Hint computeds (using hint_data from API) ---
+
+// Track found word stats for subtracting from hint_data totals
+const foundByLetter = computed(() => {
   const map = {}
-  for (const word of allWords.value) {
+  for (const word of foundWords.value) {
     const l = word[0]
-    if (!map[l]) map[l] = { total: 0, found: 0 }
-    map[l].total++
-    if (foundWords.value.has(word)) map[l].found++
+    map[l] = (map[l] || 0) + 1
   }
-  return Object.entries(map)
-    .map(([letter, { total, found }]) => ({ letter, remaining: total - found }))
+  return map
+})
+
+const foundByLength = computed(() => {
+  const map = {}
+  for (const word of foundWords.value) {
+    const k = String(word.length)
+    map[k] = (map[k] || 0) + 1
+  }
+  return map
+})
+
+const foundByPair = computed(() => {
+  const map = {}
+  for (const word of foundWords.value) {
+    const pair = word.slice(0, 2)
+    map[pair] = (map[pair] || 0) + 1
+  }
+  return map
+})
+
+// Hint 2: remaining words per starting letter
+const letterMap = computed(() => {
+  const hd = puzzle.value?.hint_data
+  if (!hd) return []
+  return Object.entries(hd.by_letter)
+    .map(([letter, total]) => ({ letter, remaining: total - (foundByLetter.value[letter] || 0) }))
     .sort((a, b) => a.letter.localeCompare(b.letter))
 })
 
-// Hint 1 (summary): longest unfound word + unique unfound lengths
+// Hint 1 (summary): remaining word stats
 const unfoundLengths = computed(() => {
-  const unfound = allWords.value.filter(w => !foundWords.value.has(w))
-  if (unfound.length === 0) return null
-  const lengths = new Set()
+  const hd = puzzle.value?.hint_data
+  if (!hd) return null
+  const remaining = hd.word_count - foundWords.value.size
+  if (remaining === 0) return null
   let longest = 0
-  for (const w of unfound) {
-    lengths.add(w.length)
-    if (w.length > longest) longest = w.length
+  const uniqueLengths = new Set()
+  for (const [len, total] of Object.entries(hd.by_length)) {
+    const found = foundByLength.value[len] || 0
+    if (total - found > 0) {
+      uniqueLengths.add(parseInt(len))
+      if (parseInt(len) > longest) longest = parseInt(len)
+    }
   }
-  return { longest, uniqueLengths: lengths.size }
+  return { longest, uniqueLengths: uniqueLengths.size }
 })
 
 const pangramStats = computed(() => {
-  if (!puzzle.value) return { total: 0, found: 0, remaining: 0 }
+  const hd = puzzle.value?.hint_data
+  if (!hd) return { total: 0, found: 0, remaining: 0 }
   const letterSet = new Set([center.value, ...outerLetters.value])
-  const pangrams = allWords.value.filter(w => [...letterSet].every(c => w.includes(c)))
-  const found = pangrams.filter(w => foundWords.value.has(w)).length
-  return { total: pangrams.length, found, remaining: pangrams.length - found }
+  const foundPangrams = [...foundWords.value].filter(w => [...letterSet].every(c => w.includes(c))).length
+  return { total: hd.pangram_count, found: foundPangrams, remaining: hd.pangram_count - foundPangrams }
 })
 
 // Hint 3: word count per length (remaining)
 const lengthDistribution = computed(() => {
-  const dist = {}
-  for (const word of allWords.value) {
-    const len = word.length
-    if (!dist[len]) dist[len] = { total: 0, found: 0 }
-    dist[len].total++
-    if (foundWords.value.has(word)) dist[len].found++
-  }
-  return Object.entries(dist)
-    .map(([len, { total, found }]) => ({ len: parseInt(len), total, remaining: total - found }))
+  const hd = puzzle.value?.hint_data
+  if (!hd) return []
+  return Object.entries(hd.by_length)
+    .map(([len, total]) => ({ len: parseInt(len), total, remaining: total - (foundByLength.value[len] || 0) }))
     .sort((a, b) => a.len - b.len)
 })
 
-// Hint 4: remaining words per two-letter pair, sorted alphabetically
+// Hint 4: remaining words per two-letter pair
 const pairMap = computed(() => {
-  const map = {}
-  for (const word of allWords.value) {
-    const pair = word.slice(0, 2)
-    if (!map[pair]) map[pair] = { total: 0, found: 0 }
-    map[pair].total++
-    if (foundWords.value.has(word)) map[pair].found++
-  }
-  return Object.entries(map)
-    .map(([pair, { total, found }]) => ({ pair, remaining: total - found }))
+  const hd = puzzle.value?.hint_data
+  if (!hd) return []
+  return Object.entries(hd.by_pair)
+    .map(([pair, total]) => ({ pair, remaining: total - (foundByPair.value[pair] || 0) }))
     .sort((a, b) => a.pair.localeCompare(b.pair))
 })
 
@@ -328,7 +354,7 @@ function recalcScore(words) {
   return total
 }
 
-function loadState() {
+async function loadState() {
   try {
     // Try per-puzzle key first
     let raw = localStorage.getItem(stateKey(puzzleNumber.value))
@@ -347,7 +373,12 @@ function loadState() {
 
     if (!raw) return
     const saved = JSON.parse(raw)
-    const validWords = (saved.foundWords || []).filter(w => wordsSet.value.has(w))
+    // Validate saved words against current word hashes
+    const validWords = []
+    for (const w of (saved.foundWords || [])) {
+      const h = await hashWord(w)
+      if (wordHashSet.value.has(h)) validWords.push(w)
+    }
     foundWords.value = new Set(validWords)
     score.value = validWords.length === (saved.foundWords || []).length ? saved.score : recalcScore(validWords)
     hintsUnlocked.value = new Set(saved.hintsUnlocked ?? [])
@@ -361,7 +392,7 @@ async function fetchPuzzle(overrideIndex) {
   loading.value = true
   fetchError.value = ''
   try {
-    const url = overrideIndex != null ? `/api/bee?puzzle=${overrideIndex}` : '/api/bee'
+    const url = overrideIndex != null ? `/api/kenno?puzzle=${overrideIndex}` : '/api/kenno'
     const res = await fetch(url)
     if (!res.ok) throw new Error('Verkkovirhe')
     const data = await res.json()
@@ -370,7 +401,7 @@ async function fetchPuzzle(overrideIndex) {
     puzzleNumber.value = data.puzzle_number
     totalPuzzles.value = data.total_puzzles
     puzzleInputDisplay.value = data.puzzle_number + 1
-    loadState()
+    await loadState()
     if (startedAt.value === null) startedAt.value = Date.now()
     if (isAdmin.value) fetchVariations()
   } catch {
@@ -392,6 +423,8 @@ function resetGameState() {
   startedAt.value = null
   totalPausedMs.value = 0
   hiddenAt = null
+  celebration.value = null
+  if (celebrationTimer) { clearTimeout(celebrationTimer); celebrationTimer = null }
 }
 
 function choosePuzzle(idx) {
@@ -515,7 +548,7 @@ function rejectWord(msg) {
   }, 2000)
 }
 
-function submitWord() {
+async function submitWord() {
   // Normalise: strip dashes so lähi-itä and lähiitä both work
   const word = currentWord.value.toLowerCase().replace(/-/g, '')
 
@@ -535,7 +568,9 @@ function submitWord() {
     resubTimer = setTimeout(() => { lastResubmittedWord.value = null }, 1500)
     return
   }
-  if (!wordsSet.value.has(word)) {
+
+  const wordHash = await hashWord(word)
+  if (!wordHashSet.value.has(wordHash)) {
     rejectWord('Ei sanakirjassa'); return
   }
 
@@ -556,7 +591,17 @@ function submitWord() {
 
   const rankAfter = rank.value
   if (rankAfter !== rankBefore) {
-    showMessage('Uusi taso: ' + rankAfter + '!', 'special', 3000)
+    if (rankAfter === 'Ällistyttävä') {
+      celebration.value = 'alistyttava'
+      if (celebrationTimer) clearTimeout(celebrationTimer)
+      celebrationTimer = setTimeout(() => { celebration.value = null }, 5000)
+    } else if (rankAfter === 'Täysi kenno') {
+      celebration.value = 'taysikenno'
+      if (celebrationTimer) clearTimeout(celebrationTimer)
+      celebrationTimer = setTimeout(() => { celebration.value = null }, 8000)
+    } else {
+      showMessage('Uusi taso: ' + rankAfter + '!', 'special', 3000)
+    }
   } else if (isPangram) {
     showMessage('Pangrammi!', 'special')
   } else {
@@ -611,6 +656,7 @@ onUnmounted(() => {
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
   if (shareCopiedTimer) clearTimeout(shareCopiedTimer)
+  if (celebrationTimer) clearTimeout(celebrationTimer)
 })
 </script>
 
@@ -683,7 +729,7 @@ onUnmounted(() => {
 
           <div>
             <p class="font-medium mb-1" style="color: var(--color-text-primary);">Tasot:</p>
-            <p>Pisteesi määrittävät tason. Huipulla odottaa <span style="color: var(--color-accent);">Täysi kenno</span>.</p>
+            <p>Pisteesi määrittävät tason. Tavoittele tasoa <span style="color: var(--color-accent);">Ällistyttävä</span>!</p>
           </div>
 
           <div>
@@ -943,7 +989,7 @@ onUnmounted(() => {
           </div>
           <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
             <div v-if="unfoundLengths">
-              <span style="color: var(--color-text-primary);">{{ allWords.length - foundWords.size }}/{{ allWords.length }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / allWords.length) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+              <span style="color: var(--color-text-primary);">{{ puzzle.hint_data.word_count - foundWords.size }}/{{ puzzle.hint_data.word_count }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / puzzle.hint_data.word_count) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
             </div>
             <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
               {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
@@ -1025,7 +1071,7 @@ onUnmounted(() => {
       <!-- All found celebration -->
       <div v-if="allFound" class="text-center py-4 rounded-lg mb-4" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
         <p class="text-2xl mb-1">🎉</p>
-        <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ allWords.length }} sanaa löydetty!</p>
+        <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ puzzle.hint_data.word_count }} sanaa löydetty!</p>
       </div>
 
       <!-- Found words -->
@@ -1081,6 +1127,51 @@ onUnmounted(() => {
 
     </template>
   </div>
+
+  <!-- Celebration overlay -->
+  <Teleport to="body">
+    <div
+      v-if="celebration"
+      class="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style="background: rgba(0,0,0,0.5);"
+      @click="celebration = null"
+    >
+      <div
+        class="w-full max-w-sm rounded-xl p-8 text-center"
+        :class="celebration === 'taysikenno' ? 'celebration-card-intense' : 'celebration-card'"
+        style="background: var(--color-bg-primary);"
+        @click.stop
+      >
+        <p class="text-4xl mb-3" v-if="celebration === 'taysikenno'">🏆</p>
+        <p class="text-3xl mb-3" v-else>🎉</p>
+        <h2
+          class="font-bold mb-2"
+          :class="celebration === 'taysikenno' ? 'text-2xl' : 'text-xl'"
+          style="color: var(--color-accent);"
+        >
+          {{ celebration === 'taysikenno' ? 'Täysi kenno!' : 'Ällistyttävä!' }}
+        </h2>
+        <p class="text-sm mb-4" style="color: var(--color-text-secondary);">
+          <template v-if="celebration === 'taysikenno'">
+            Täydellinen tulos! Löysit kaikki sanat.
+          </template>
+          <template v-else>
+            Huikea suoritus! Olet saavuttanut huipputason.
+          </template>
+        </p>
+        <p class="text-lg font-semibold" style="color: var(--color-text-primary);">
+          {{ score }} / {{ puzzle?.max_score }} pistettä
+        </p>
+        <button
+          class="mt-4 px-4 py-2 rounded-lg text-sm font-medium"
+          style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+          @click="celebration = null"
+        >
+          Jatka pelaamista
+        </button>
+      </div>
+    </div>
+  </Teleport>
 </template>
 
 <style scoped>
@@ -1093,5 +1184,25 @@ onUnmounted(() => {
 }
 .word-shake {
   animation: shake 0.4s ease-in-out;
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 8px rgba(255, 100, 62, 0.3); }
+  50%      { box-shadow: 0 0 20px rgba(255, 100, 62, 0.6); }
+}
+.celebration-card {
+  border: 2px solid var(--color-accent);
+  animation: glow 2s ease-in-out infinite;
+}
+
+@keyframes glow-intense {
+  0%, 100% { box-shadow: 0 0 12px rgba(255, 100, 62, 0.4), 0 0 24px rgba(255, 180, 60, 0.2); }
+  50%      { box-shadow: 0 0 28px rgba(255, 100, 62, 0.7), 0 0 48px rgba(255, 180, 60, 0.4); }
+}
+.celebration-card-intense {
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-image: linear-gradient(135deg, var(--color-accent), #ffb43c, var(--color-accent)) 1;
+  animation: glow-intense 2s ease-in-out infinite;
 }
 </style>
