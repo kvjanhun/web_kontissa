@@ -1,5 +1,7 @@
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
+
+const WORDS_PER_COLUMN = 10
 
 const puzzleInput = ref(1)
 const totalPuzzles = ref(null)
@@ -8,10 +10,21 @@ const variationsLoading = ref(false)
 const variationsError = ref('')
 const centerSaving = ref(false)
 
-const wordListOpen = ref(false)
 const words = ref([])
 const wordsLoading = ref(false)
 const wordsError = ref('')
+
+const sortedWords = computed(() =>
+  [...words.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
+)
+
+const wordColumns = computed(() => {
+  const cols = []
+  for (let i = 0; i < sortedWords.value.length; i += WORDS_PER_COLUMN) {
+    cols.push(sortedWords.value.slice(i, i + WORDS_PER_COLUMN))
+  }
+  return cols
+})
 
 async function fetchStats() {
   try {
@@ -19,6 +32,16 @@ async function fetchStats() {
     if (res.ok) {
       const data = await res.json()
       totalPuzzles.value = data.total_puzzles
+    }
+  } catch { /* ignore */ }
+}
+
+async function fetchTodayPuzzle() {
+  try {
+    const res = await fetch('/api/kenno')
+    if (res.ok) {
+      const data = await res.json()
+      puzzleInput.value = data.puzzle_number + 1
     }
   } catch { /* ignore */ }
 }
@@ -51,7 +74,7 @@ async function setCenter(letter) {
     })
     if (!res.ok) throw new Error()
     await fetchVariations()
-    if (wordListOpen.value) await fetchWords()
+    await fetchWords()
   } catch {
     variationsError.value = 'Could not change center letter.'
   } finally {
@@ -66,19 +89,12 @@ async function fetchWords() {
     const res = await fetch(`/api/kenno?puzzle=${puzzleInput.value - 1}`)
     if (!res.ok) throw new Error()
     const data = await res.json()
-    words.value = (data.words ?? []).slice().sort((a, b) => a.localeCompare(b) || a.length - b.length)
+    words.value = data.words ?? []
   } catch {
     wordsError.value = 'Failed to load word list.'
     words.value = []
   } finally {
     wordsLoading.value = false
-  }
-}
-
-async function toggleWordList() {
-  wordListOpen.value = !wordListOpen.value
-  if (wordListOpen.value && words.value.length === 0) {
-    await fetchWords()
   }
 }
 
@@ -101,21 +117,23 @@ async function blockWord(word) {
 function onPuzzleChange() {
   variations.value = []
   words.value = []
-  wordListOpen.value = false
   variationsError.value = ''
   wordsError.value = ''
   fetchVariations()
+  fetchWords()
 }
 
 onMounted(async () => {
   await fetchStats()
+  await fetchTodayPuzzle()
   await fetchVariations()
+  await fetchWords()
 })
 </script>
 
 <template>
   <div>
-    <h3 class="text-sm font-semibold mb-3" :style="{ color: 'var(--color-text-primary)' }">Bee Puzzle Tool</h3>
+    <h3 class="text-sm font-semibold mb-3" :style="{ color: 'var(--color-text-primary)' }">Kenno Tool</h3>
 
     <!-- Puzzle selector -->
     <div class="flex items-center gap-2 mb-4">
@@ -168,47 +186,38 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Word list section -->
+    <!-- Word list (always visible) -->
     <div v-if="variations.length > 0">
-      <button
-        class="text-sm font-medium mb-2"
-        style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
-        @click="toggleWordList"
-        :aria-expanded="wordListOpen"
-      >
-        Word list {{ wordListOpen ? '▲' : '▼' }}
-      </button>
-
-      <div v-if="wordListOpen">
-        <div v-if="wordsLoading" class="text-sm py-2" :style="{ color: 'var(--color-text-secondary)' }">
-          Loading words…
-        </div>
-        <div v-else-if="wordsError" class="text-sm py-2" :style="{ color: '#ef4444' }">
-          {{ wordsError }}
-        </div>
-        <div v-else-if="words.length > 0">
-          <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
-            {{ words.length }} words — click × to permanently block a word
-          </p>
-          <div class="flex flex-wrap gap-x-4 gap-y-0.5">
-            <div
-              v-for="word in words"
+      <div v-if="wordsLoading" class="text-sm py-2" :style="{ color: 'var(--color-text-secondary)' }">
+        Loading words…
+      </div>
+      <div v-else-if="wordsError" class="text-sm py-2" :style="{ color: '#ef4444' }">
+        {{ wordsError }}
+      </div>
+      <div v-else-if="sortedWords.length > 0">
+        <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
+          {{ sortedWords.length }} words — click × to permanently block a word
+        </p>
+        <div class="flex flex-wrap gap-x-6 gap-y-2">
+          <ul v-for="(col, ci) in wordColumns" :key="ci">
+            <li
+              v-for="word in col"
               :key="word"
-              class="flex items-center gap-0.5"
+              class="flex items-center gap-1 text-sm py-0.5"
             >
-              <span class="text-sm" :style="{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }">{{ word }}</span>
+              <span :style="{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }">{{ word }}</span>
               <button
                 @click="blockWord(word)"
                 class="text-xs leading-none opacity-40 hover:opacity-100"
                 style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px;"
                 aria-label="Block word"
               >×</button>
-            </div>
-          </div>
+            </li>
+          </ul>
         </div>
-        <div v-else class="text-sm py-2" :style="{ color: 'var(--color-text-tertiary)' }">
-          No words found for this puzzle.
-        </div>
+      </div>
+      <div v-else class="text-sm py-2" :style="{ color: 'var(--color-text-tertiary)' }">
+        No words found for this puzzle.
       </div>
     </div>
   </div>

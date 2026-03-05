@@ -593,9 +593,10 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- Minimal standalone top bar -->
-  <div class="max-w-sm mx-auto flex justify-between items-center mb-4">
+  <!-- Top bar: nav + title + controls in one row -->
+  <div class="max-w-sm mx-auto flex justify-between items-center mb-2">
     <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
+    <h1 class="text-lg font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
     <div class="flex items-center gap-1">
       <button
         @click="showRules = true"
@@ -672,9 +673,6 @@ onUnmounted(() => {
       </div>
     </div>
   </Teleport>
-  <div class="max-w-sm mx-auto mb-5">
-    <h1 class="text-2xl font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
-  </div>
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
   <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
@@ -687,32 +685,61 @@ onUnmounted(() => {
     </div>
 
     <template v-else-if="puzzle">
-      <!-- Score & rank -->
-      <div class="flex items-center gap-3 mb-2">
-        <span class="text-base font-medium" style="color: var(--color-text-primary)">
-          Pisteet: {{ score }}
-        </span>
-        <button
-          class="px-3 py-0.5 rounded-full text-sm font-medium"
-          style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-          @click="showRanks = !showRanks"
-          :aria-expanded="showRanks"
-          aria-label="Näytä tasorajat"
-        >
-          {{ rank }}
-        </button>
+      <!-- Sticky score / hints bar — stays visible when top nav scrolls away -->
+      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background: var(--color-bg-primary); padding-bottom: 0.25rem;">
+        <!-- Score & rank -->
+        <div class="flex items-center gap-3 mb-1">
+          <span class="text-base font-medium" style="color: var(--color-text-primary)">
+            Pisteet: {{ score }}
+          </span>
+          <button
+            class="px-3 py-0.5 rounded-full text-sm font-medium"
+            style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+            @click="showRanks = !showRanks"
+            :aria-expanded="showRanks"
+            aria-label="Näytä tasorajat"
+          >
+            {{ rank }}
+          </button>
+        </div>
+
+        <!-- Progress bar toward next rank -->
+        <div class="w-full h-1 rounded-full mb-1" :style="{ background: 'var(--color-bg-secondary)' }">
+          <div
+            class="h-full rounded-full"
+            :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
+          ></div>
+        </div>
+
+        <!-- Avut (hints) toggle row + share button -->
+        <div class="flex items-center justify-between">
+          <button
+            class="text-sm font-medium"
+            style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
+            @click="showHints = !showHints"
+            :aria-expanded="showHints"
+          >
+            <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
+          </button>
+          <div class="flex items-center gap-2">
+            <span
+              v-if="shareCopied"
+              class="text-xs"
+              style="color: var(--color-text-secondary);"
+            >Kopioitu leikepöydälle!</span>
+            <button
+              class="text-xs px-2 py-1 rounded"
+              style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+              @click="copyStatus"
+            >
+              📋 Jaa tulos
+            </button>
+          </div>
+        </div>
       </div>
 
-      <!-- Progress bar toward next rank -->
-      <div class="w-full h-1 rounded-full mb-2" :style="{ background: 'var(--color-bg-secondary)' }">
-        <div
-          class="h-full rounded-full"
-          :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
-        ></div>
-      </div>
-
-      <!-- Rank thresholds -->
-      <div v-if="showRanks" class="mb-3 p-3 rounded-lg text-sm" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+      <!-- Rank thresholds (expandable, outside sticky) -->
+      <div v-if="showRanks" class="mb-2 p-3 rounded-lg text-sm" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
         <div
           v-for="r in rankThresholds"
           :key="r.name"
@@ -724,36 +751,8 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-else class="mb-4"></div>
-
-      <!-- Avut (hints) toggle row + share button -->
-      <div class="flex items-center justify-between mb-2">
-        <button
-          class="text-sm font-medium"
-          style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
-          @click="showHints = !showHints"
-          :aria-expanded="showHints"
-        >
-          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
-        </button>
-        <div class="flex items-center gap-2">
-          <span
-            v-if="shareCopied"
-            class="text-xs"
-            style="color: var(--color-text-secondary);"
-          >Kopioitu leikepöydälle!</span>
-          <button
-            class="text-xs px-2 py-1 rounded"
-            style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-            @click="copyStatus"
-          >
-            📋 Jaa tulos
-          </button>
-        </div>
-      </div>
-
       <!-- Hints panel -->
-      <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+      <div v-if="showHints" class="mb-2 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
         <!-- Hint 1: overview — remaining words, pangrams, length range -->
         <div>
@@ -873,7 +872,7 @@ onUnmounted(() => {
         </div>
 
       </div>
-      <div v-else class="mb-4"></div>
+      <div v-else class="mb-2"></div>
 
       <!-- Current word display -->
       <div
@@ -891,7 +890,7 @@ onUnmounted(() => {
 
       <!-- Feedback message -->
       <div
-        class="text-center text-sm font-medium mb-3 min-h-[1.25rem]"
+        class="text-center text-sm font-medium mb-2 min-h-[1.25rem]"
         :style="{
           color: messageType === 'error'   ? '#ef4444'
                : messageType === 'special' ? 'var(--color-accent)'
@@ -906,7 +905,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Honeycomb -->
-      <div class="flex justify-center mb-5">
+      <div class="flex justify-center mb-3">
         <svg
           viewBox="18 18 264 264"
           width="264"
@@ -960,7 +959,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Controls -->
-      <div class="flex justify-center gap-3 mb-5">
+      <div class="flex justify-center gap-3 mb-3">
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
@@ -985,7 +984,7 @@ onUnmounted(() => {
       </div>
 
       <!-- All found celebration -->
-      <div v-if="allFound" class="text-center py-4 rounded-lg mb-4" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+      <div v-if="allFound" class="text-center py-3 rounded-lg mb-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
         <p class="text-2xl mb-1">🎉</p>
         <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ puzzle.hint_data.word_count }} sanaa löydetty!</p>
       </div>
