@@ -6,7 +6,7 @@ from flask_login import login_required, current_user
 from .models import db, Section
 from .utils import get_latest_commit_date
 from datetime import datetime
-from . import app
+from . import app, limiter
 
 
 def admin_required(f):
@@ -21,6 +21,7 @@ def admin_required(f):
 DIST_DIR = os.path.join(os.path.dirname(__file__), "static", "dist")
 
 @app.route("/")
+@limiter.exempt
 def index():
     return send_from_directory(DIST_DIR, "index.html")
 
@@ -160,6 +161,7 @@ def api_reorder_sections():
 
 
 @app.route("/sanakenno")
+@limiter.exempt
 def sanakenno_page():
     """Serve the Sanakenno game with game-specific OG meta tags for link previews."""
     index_path = os.path.join(DIST_DIR, "index.html")
@@ -179,6 +181,7 @@ def sanakenno_page():
 
 
 @app.route("/<path:path>")
+@limiter.exempt
 def catch_all(path):
     """Serve static file from dist/ if it exists, otherwise fall back to index.html for Vue Router."""
     file_path = os.path.join(DIST_DIR, path)
