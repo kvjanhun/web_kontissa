@@ -11,6 +11,7 @@ import AdminRecipes from '../components/admin/AdminRecipes.vue'
 import AdminHealth from '../components/admin/AdminHealth.vue'
 import AdminBeeStats from '../components/admin/AdminBeeStats.vue'
 import AdminBlockedWords from '../components/admin/AdminBlockedWords.vue'
+import AdminBeePuzzleTool from '../components/admin/AdminBeePuzzleTool.vue'
 
 useHead({
   meta: [
@@ -28,6 +29,7 @@ const tabs = [
   { key: 'recipes', labelKey: 'admin.tab.recipes', component: markRaw(AdminRecipes) },
   { key: 'health', labelKey: 'admin.tab.health', component: markRaw(AdminHealth) },
   { key: 'sanakenno', labelKey: 'admin.tab.sanakenno', components: [markRaw(AdminBeeStats), markRaw(AdminBlockedWords)] },
+  { key: 'kennotyokalu', labelKey: 'admin.tab.kennotyokalu', component: markRaw(AdminBeePuzzleTool) },
 ]
 
 const activeTab = ref('sections')

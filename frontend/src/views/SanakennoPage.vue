@@ -1,9 +1,6 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
-import { useAuth } from '../composables/useAuth'
 import ThemeToggle from '../components/ThemeToggle.vue'
-
-const { isAdmin } = useAuth()
 
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
@@ -20,55 +17,25 @@ const messageType = ref('ok')
 const loading = ref(true)
 const fetchError = ref('')
 const puzzleNumber = ref(null)
-const totalPuzzles = ref(null)
 const showRanks = ref(false)
-const puzzleInputDisplay = ref(1)   // 1-indexed for the admin number input
 const showHints = ref(false)
 const showRules = ref(false)
-const showRemainingWords = ref(false)
-const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution'
+const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution' | 'pairs'
 const celebration = ref(null)  // null | 'alistyttava' | 'taysikenno'
 let celebrationTimer = null
 
-// --- Center variation selector (admin) ---
-const variations = ref([])
-const variationsLoading = ref(false)
-const centerSaving = ref(false)
+// --- Hint collapse state (session-only, no persistence) ---
+const hintsCollapsed = ref(new Set())
 
-async function fetchVariations() {
-  if (!isAdmin.value || puzzleNumber.value == null) return
-  variationsLoading.value = true
-  try {
-    const res = await fetch(`/api/kenno/variations?puzzle=${puzzleNumber.value}`)
-    if (!res.ok) throw new Error()
-    const data = await res.json()
-    variations.value = data.variations
-  } catch {
-    variations.value = []
-  } finally {
-    variationsLoading.value = false
-  }
-}
+const showAllFoundWords = ref(false)
 
-async function setCenter(letter) {
-  if (centerSaving.value) return
-  centerSaving.value = true
-  try {
-    const res = await fetch('/api/kenno/center', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ puzzle: puzzleNumber.value, center: letter }),
-    })
-    if (!res.ok) throw new Error()
-    // Reload the puzzle with the new center + refresh variations
-    resetGameState()
-    await fetchPuzzle(puzzleNumber.value)
-    await fetchVariations()
-  } catch {
-    showMessage('Could not change center letter', 'error')
-  } finally {
-    centerSaving.value = false
-  }
+const recentFoundWords = computed(() => [...foundWords.value].slice(-6))
+
+function toggleHintCollapse(id) {
+  const s = new Set(hintsCollapsed.value)
+  if (s.has(id)) s.delete(id)
+  else s.add(id)
+  hintsCollapsed.value = s
 }
 
 // --- Animation state ---
@@ -88,8 +55,6 @@ let hiddenAt = null                   // non-reactive: when the tab was last hid
 const center = computed(() => puzzle.value?.center ?? '')
 const wordHashSet = computed(() => new Set(puzzle.value?.word_hashes ?? []))
 const allLetters = computed(() => new Set([center.value, ...outerLetters.value]))
-// Admin-only: full word list (only present when logged in as admin)
-const allWords = computed(() => puzzle.value?.words ?? [])
 
 async function hashWord(word) {
   const data = new TextEncoder().encode(word)
@@ -172,27 +137,6 @@ const currentWordChars = computed(() =>
   })
 )
 
-// Admin: all words not yet found, same sort as found words
-const remainingWords = computed(() =>
-  allWords.value.filter(w => !foundWords.value.has(w)).sort((a, b) => a.localeCompare(b) || a.length - b.length)
-)
-
-async function blockWord(word) {
-  if (!confirm(`Remove "${word}" from the word list permanently?`)) return
-  try {
-    const res = await fetch('/api/kenno/block', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word }),
-    })
-    if (!res.ok) throw new Error()
-    // Refetch the puzzle to get updated word_hashes and hint_data
-    await fetchPuzzle(puzzleNumber.value)
-  } catch {
-    showMessage('Could not remove word', 'error')
-  }
-}
-
 // Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
 const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
@@ -207,7 +151,6 @@ function toColumns(words) {
   return cols
 }
 const wordColumns = computed(() => toColumns(sortedFoundWords.value))
-const remainingWordColumns = computed(() => toColumns(remainingWords.value))
 
 // --- Hint computeds (using hint_data from API) ---
 
@@ -398,43 +341,13 @@ async function fetchPuzzle(overrideIndex) {
     puzzle.value = data
     outerLetters.value = [...data.letters]
     puzzleNumber.value = data.puzzle_number
-    totalPuzzles.value = data.total_puzzles
-    puzzleInputDisplay.value = data.puzzle_number + 1
     await loadState()
     if (startedAt.value === null) startedAt.value = Date.now()
-    if (isAdmin.value) fetchVariations()
   } catch {
     fetchError.value = 'Lataus epäonnistui.'
   } finally {
     loading.value = false
   }
-}
-
-// --- Admin puzzle switcher ---
-function resetGameState() {
-  currentWord.value = ''
-  foundWords.value = new Set()
-  score.value = 0
-  message.value = ''
-  showRanks.value = false
-  showRemainingWords.value = false
-  hintsUnlocked.value = new Set()
-  startedAt.value = null
-  totalPausedMs.value = 0
-  hiddenAt = null
-  celebration.value = null
-  if (celebrationTimer) { clearTimeout(celebrationTimer); celebrationTimer = null }
-}
-
-function choosePuzzle(idx) {
-  const target = ((idx % totalPuzzles.value) + totalPuzzles.value) % totalPuzzles.value
-  saveState()  // persist current puzzle progress before switching
-  resetGameState()
-  fetchPuzzle(target)
-}
-
-function randomPuzzle() {
-  choosePuzzle(Math.floor(Math.random() * totalPuzzles.value))
 }
 
 // --- Hints ---
@@ -798,50 +711,6 @@ onUnmounted(() => {
         ></div>
       </div>
 
-      <!-- Admin puzzle switcher -->
-      <div v-if="isAdmin && totalPuzzles" class="flex items-center gap-2 mb-1 text-xs" style="color: var(--color-text-tertiary);">
-        <span>Peli</span>
-        <input
-          type="number"
-          min="1"
-          :max="totalPuzzles"
-          v-model.number="puzzleInputDisplay"
-          @change="choosePuzzle(puzzleInputDisplay - 1)"
-          class="rounded text-center"
-          style="width: 3.5rem; background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border); padding: 1px 4px;"
-          aria-label="Pelin numero"
-        />
-        <span>/{{ totalPuzzles }}</span>
-        <button
-          class="px-2 py-0.5 rounded"
-          style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-          @click="randomPuzzle"
-        >Satunnainen</button>
-      </div>
-
-      <!-- Center letter variation selector (admin) -->
-      <div v-if="isAdmin && variations.length > 0" class="grid grid-cols-7 gap-1 mb-2">
-        <button
-          v-for="v in variations"
-          :key="v.center"
-          class="flex flex-col items-center py-1 px-0.5 rounded text-xs leading-tight"
-          :style="{
-            background: v.is_active ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
-            color: v.is_active ? 'white' : 'var(--color-text-secondary)',
-            border: '1px solid ' + (v.is_active ? 'var(--color-accent)' : 'var(--color-border)'),
-            cursor: centerSaving ? 'wait' : 'pointer',
-            opacity: centerSaving ? '0.6' : '1',
-          }"
-          :disabled="centerSaving"
-          @click="!v.is_active && setCenter(v.center)"
-        >
-          <span class="font-semibold text-sm">{{ v.center.toUpperCase() }}</span>
-          <span>{{ v.word_count }} w</span>
-          <span>{{ v.max_score }} p</span>
-          <span>{{ v.pangram_count }} pg</span>
-        </button>
-      </div>
-
       <!-- Rank thresholds -->
       <div v-if="showRanks" class="mb-3 p-3 rounded-lg text-sm" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
         <div
@@ -855,6 +724,155 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <div v-else class="mb-4"></div>
+
+      <!-- Avut (hints) toggle row + share button -->
+      <div class="flex items-center justify-between mb-2">
+        <button
+          class="text-sm font-medium"
+          style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
+          @click="showHints = !showHints"
+          :aria-expanded="showHints"
+        >
+          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
+        </button>
+        <div class="flex items-center gap-2">
+          <span
+            v-if="shareCopied"
+            class="text-xs"
+            style="color: var(--color-text-secondary);"
+          >Kopioitu leikepöydälle!</span>
+          <button
+            class="text-xs px-2 py-1 rounded"
+            style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
+            @click="copyStatus"
+          >
+            📋 Jaa tulos
+          </button>
+        </div>
+      </div>
+
+      <!-- Hints panel -->
+      <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+
+        <!-- Hint 1: overview — remaining words, pangrams, length range -->
+        <div>
+          <div
+            class="flex items-center justify-between mb-1"
+            :style="hintsUnlocked.has('summary') ? 'cursor:pointer' : ''"
+            @click="hintsUnlocked.has('summary') && toggleHintCollapse('summary')"
+          >
+            <span style="color: var(--color-text-secondary);">Yleiskuva <span v-html="HINT_SVG.summary" class="inline-block align-middle ml-1" /></span>
+            <button
+              v-if="!hintsUnlocked.has('summary')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click.stop="unlockHint('summary')"
+            >Aktivoi</button>
+            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
+              {{ hintsCollapsed.has('summary') ? '▼' : '▲' }}
+            </span>
+          </div>
+          <div v-if="hintsUnlocked.has('summary') && !hintsCollapsed.has('summary')" style="font-family: var(--font-mono);">
+            <div v-if="unfoundLengths">
+              <span style="color: var(--color-text-primary);">{{ puzzle.hint_data.word_count - foundWords.size }}/{{ puzzle.hint_data.word_count }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / puzzle.hint_data.word_count) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+            </div>
+            <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
+              {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
+            </div>
+            <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
+          </div>
+        </div>
+
+        <!-- Hint 2: words left per first letter -->
+        <div>
+          <div
+            class="flex items-center justify-between mb-1"
+            :style="hintsUnlocked.has('letters') ? 'cursor:pointer' : ''"
+            @click="hintsUnlocked.has('letters') && toggleHintCollapse('letters')"
+          >
+            <span style="color: var(--color-text-secondary);">Alkukirjaimet <span v-html="HINT_SVG.letters" class="inline-block align-middle ml-1" /></span>
+            <button
+              v-if="!hintsUnlocked.has('letters')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click.stop="unlockHint('letters')"
+            >Aktivoi</button>
+            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
+              {{ hintsCollapsed.has('letters') ? '▼' : '▲' }}
+            </span>
+          </div>
+          <div v-if="hintsUnlocked.has('letters') && !hintsCollapsed.has('letters')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in letterMap"
+              :key="item.letter"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >
+              {{ item.letter.toUpperCase() }}&nbsp;{{ item.remaining }}
+            </span>
+          </div>
+        </div>
+
+        <!-- Hint 3: word count per length -->
+        <div>
+          <div
+            class="flex items-center justify-between mb-1"
+            :style="hintsUnlocked.has('distribution') ? 'cursor:pointer' : ''"
+            @click="hintsUnlocked.has('distribution') && toggleHintCollapse('distribution')"
+          >
+            <span style="color: var(--color-text-secondary);">Pituusjakauma <span v-html="HINT_SVG.distribution" class="inline-block align-middle ml-1" /></span>
+            <button
+              v-if="!hintsUnlocked.has('distribution')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click.stop="unlockHint('distribution')"
+            >Aktivoi</button>
+            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
+              {{ hintsCollapsed.has('distribution') ? '▼' : '▲' }}
+            </span>
+          </div>
+          <div v-if="hintsUnlocked.has('distribution') && !hintsCollapsed.has('distribution')" class="flex flex-wrap gap-x-4 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in lengthDistribution"
+              :key="item.len"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >{{ item.len }}: {{ item.remaining }}</span>
+          </div>
+        </div>
+
+        <!-- Hint 4: remaining words per two-letter pair -->
+        <div>
+          <div
+            class="flex items-center justify-between mb-1"
+            :style="hintsUnlocked.has('pairs') ? 'cursor:pointer' : ''"
+            @click="hintsUnlocked.has('pairs') && toggleHintCollapse('pairs')"
+          >
+            <span style="color: var(--color-text-secondary);">Alkuparit <span v-html="HINT_SVG.pairs" class="inline-block align-middle ml-1" /></span>
+            <button
+              v-if="!hintsUnlocked.has('pairs')"
+              class="text-xs px-2 py-0.5 rounded"
+              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
+              @click.stop="unlockHint('pairs')"
+            >Aktivoi</button>
+            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
+              {{ hintsCollapsed.has('pairs') ? '▼' : '▲' }}
+            </span>
+          </div>
+          <div v-if="hintsUnlocked.has('pairs') && !hintsCollapsed.has('pairs')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+            <span
+              v-for="item in pairMap"
+              :key="item.pair"
+              class="text-sm"
+              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+            >
+              {{ item.pair.toUpperCase() }}&nbsp;{{ item.remaining }}
+            </span>
+          </div>
+        </div>
+
+      </div>
       <div v-else class="mb-4"></div>
 
       <!-- Current word display -->
@@ -966,127 +984,6 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <!-- Avut (hints) + copy status row -->
-      <div class="flex items-center justify-between mb-2">
-        <button
-          class="text-sm font-medium"
-          style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
-          @click="showHints = !showHints"
-          :aria-expanded="showHints"
-        >
-          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
-        </button>
-        <div class="flex items-center gap-2">
-          <span
-            v-if="shareCopied"
-            class="text-xs"
-            style="color: var(--color-text-secondary);"
-          >Kopioitu leikepöydälle!</span>
-          <button
-            class="text-xs px-2 py-1 rounded"
-            style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
-            @click="copyStatus"
-          >
-            📋 Jaa tulos
-          </button>
-        </div>
-      </div>
-
-      <!-- Hints panel -->
-      <div v-if="showHints" class="mb-4 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
-
-        <!-- Hint 1: overview — remaining words, pangrams, length range -->
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Yleiskuva <span v-html="HINT_SVG.summary" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('summary')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click="unlockHint('summary')"
-            >Aktivoi</button>
-          </div>
-          <div v-if="hintsUnlocked.has('summary')" style="font-family: var(--font-mono);">
-            <div v-if="unfoundLengths">
-              <span style="color: var(--color-text-primary);">{{ puzzle.hint_data.word_count - foundWords.size }}/{{ puzzle.hint_data.word_count }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / puzzle.hint_data.word_count) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
-            </div>
-            <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
-              {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
-            </div>
-            <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
-          </div>
-        </div>
-
-        <!-- Hint 2: words left per first letter -->
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Alkukirjaimet <span v-html="HINT_SVG.letters" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('letters')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click="unlockHint('letters')"
-            >Aktivoi</button>
-          </div>
-          <div v-if="hintsUnlocked.has('letters')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in letterMap"
-              :key="item.letter"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
-            >
-              {{ item.letter.toUpperCase() }}&nbsp;{{ item.remaining }}
-            </span>
-          </div>
-        </div>
-
-        <!-- Hint 3: word count per length -->
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Pituusjakauma <span v-html="HINT_SVG.distribution" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('distribution')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click="unlockHint('distribution')"
-            >Aktivoi</button>
-          </div>
-          <div v-if="hintsUnlocked.has('distribution')" class="flex flex-wrap gap-x-4 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in lengthDistribution"
-              :key="item.len"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
-            >{{ item.len }}: {{ item.remaining }}</span>
-          </div>
-        </div>
-
-        <!-- Hint 4: remaining words per two-letter pair -->
-        <div>
-          <div class="flex items-center justify-between mb-1">
-            <span style="color: var(--color-text-secondary);">Alkuparit <span v-html="HINT_SVG.pairs" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('pairs')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click="unlockHint('pairs')"
-            >Aktivoi</button>
-          </div>
-          <div v-if="hintsUnlocked.has('pairs')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in pairMap"
-              :key="item.pair"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
-            >
-              {{ item.pair.toUpperCase() }}&nbsp;{{ item.remaining }}
-            </span>
-          </div>
-        </div>
-
-      </div>
-      <div v-else class="mb-4"></div>
-
       <!-- All found celebration -->
       <div v-if="allFound" class="text-center py-4 rounded-lg mb-4" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
         <p class="text-2xl mb-1">🎉</p>
@@ -1095,10 +992,46 @@ onUnmounted(() => {
 
       <!-- Found words -->
       <div v-if="foundWords.size > 0">
-        <p class="text-sm mb-1" style="color: var(--color-text-secondary);">
-          Löydetyt sanat ({{ foundWords.size }}):
-        </p>
-        <div class="flex flex-wrap gap-x-6 gap-y-2">
+        <!-- header row with label + expand toggle -->
+        <div class="flex items-center justify-between mb-1">
+          <p class="text-sm" style="color: var(--color-text-secondary);">
+            Löydetyt sanat ({{ foundWords.size }}):
+          </p>
+          <button
+            v-if="foundWords.size > 6 || showAllFoundWords"
+            @click="showAllFoundWords = !showAllFoundWords"
+            class="text-xs"
+            style="color: var(--color-text-tertiary); background: none; border: none; cursor: pointer; padding: 0;"
+          >
+            {{ showAllFoundWords ? 'Vähemmän ▲' : 'Kaikki ▼' }}
+          </button>
+        </div>
+
+        <!-- compact: last 6 words, single row, overflow-clipped -->
+        <div
+          v-if="!showAllFoundWords"
+          class="flex gap-x-4"
+          :style="{
+            overflow: 'hidden',
+            flexWrap: 'nowrap',
+            cursor: foundWords.size > 6 ? 'pointer' : 'default',
+          }"
+          @click="foundWords.size > 6 && (showAllFoundWords = true)"
+        >
+          <span
+            v-for="word in recentFoundWords"
+            :key="word"
+            class="text-sm"
+            :style="{
+              color: lastResubmittedWord === word ? 'var(--color-accent)' : 'var(--color-text-primary)',
+              fontFamily: 'var(--font-mono)',
+              transition: 'color 0.3s',
+            }"
+          >{{ word }}</span>
+        </div>
+
+        <!-- expanded: full alphabetical-size multi-column (existing layout) -->
+        <div v-else class="flex flex-wrap gap-x-6 gap-y-2">
           <ul v-for="(col, ci) in wordColumns" :key="ci">
             <li
               v-for="word in col"
@@ -1109,37 +1042,7 @@ onUnmounted(() => {
                 fontFamily: 'var(--font-mono)',
                 transition: 'color 0.3s',
               }"
-            >
-              {{ word }}
-            </li>
-          </ul>
-        </div>
-      </div>
-      <!-- Admin: remaining words -->
-      <div v-if="isAdmin" class="mt-6">
-        <button
-          class="text-sm font-medium mb-2"
-          style="color: var(--color-text-tertiary); background: none; border: none; cursor: pointer; padding: 0;"
-          @click="showRemainingWords = !showRemainingWords"
-          :aria-expanded="showRemainingWords"
-        >
-          Remaining words ({{ remainingWords.length }}) {{ showRemainingWords ? '▲' : '▼' }}
-        </button>
-        <div v-if="showRemainingWords" class="flex flex-wrap gap-x-6">
-          <ul v-for="(col, ci) in remainingWordColumns" :key="ci">
-            <li
-              v-for="word in col"
-              :key="word"
-              class="flex items-center gap-1 py-0.5"
-            >
-              <span class="text-sm" style="color: var(--color-text-tertiary); font-family: var(--font-mono);">{{ word }}</span>
-              <button
-                @click="blockWord(word)"
-                class="text-xs leading-none opacity-40 hover:opacity-100"
-                style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px;"
-                aria-label="Remove word"
-              >×</button>
-            </li>
+            >{{ word }}</li>
           </ul>
         </div>
       </div>
