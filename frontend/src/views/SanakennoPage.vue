@@ -29,7 +29,7 @@ const hintsCollapsed = ref(new Set())
 
 const showAllFoundWords = ref(false)
 
-const recentFoundWords = computed(() => [...foundWords.value].slice(-6))
+const recentFoundWords = computed(() => [...foundWords.value].slice(-6).reverse())
 
 function toggleHintCollapse(id) {
   const s = new Set(hintsCollapsed.value)

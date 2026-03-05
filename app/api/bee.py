@@ -1,5 +1,6 @@
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+import zoneinfo
 from flask import jsonify, request, session
 from flask_login import current_user, login_required
 import hashlib
@@ -212,9 +213,12 @@ def _compute_variation(letters, center_letter):
     }
 
 
+_HELSINKI = zoneinfo.ZoneInfo("Europe/Helsinki")
+
+
 @app.route("/api/kenno")
 def kenno():
-    puzzle_number = _get_puzzle_for_date(date.today())
+    puzzle_number = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
 
     is_admin = (
         current_user.is_authenticated
