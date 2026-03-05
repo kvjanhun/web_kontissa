@@ -917,8 +917,7 @@ onUnmounted(() => {
             :aria-label="`Lisää kirjain ${hex.letter.toUpperCase()}`"
             tabindex="-1"
             style="cursor: pointer;"
-            @click="addLetter(hex.letter)"
-            @pointerdown="pressedHexIndex = i"
+            @pointerdown="pressedHexIndex = i; addLetter(hex.letter)"
             @pointerup="pressedHexIndex = null"
             @pointerleave="pressedHexIndex = null"
           >
