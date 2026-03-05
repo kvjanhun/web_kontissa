@@ -249,6 +249,39 @@ function _restoreFavicon() {
   if (el && _originalFavicon) el.href = _originalFavicon
 }
 
+// --- Theme-color meta (iOS Safari status bar) ---
+let _originalThemeColor = null
+let _themeColorMeta = null
+
+function _setThemeColor() {
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
+  _themeColorMeta = document.querySelector('meta[name="theme-color"]')
+  if (!_themeColorMeta) {
+    _themeColorMeta = document.createElement('meta')
+    _themeColorMeta.name = 'theme-color'
+    document.head.appendChild(_themeColorMeta)
+  }
+  _originalThemeColor = _themeColorMeta.content
+  _themeColorMeta.content = color
+}
+
+function _updateThemeColor() {
+  if (!_themeColorMeta) return
+  const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
+  _themeColorMeta.content = color
+}
+
+function _restoreThemeColor() {
+  if (!_themeColorMeta) return
+  if (_originalThemeColor != null) {
+    _themeColorMeta.content = _originalThemeColor
+  } else {
+    _themeColorMeta.remove()
+  }
+}
+
+let _themeObserver = null
+
 // --- Timer helpers ---
 function getElapsedMs() {
   if (!startedAt.value) return 0
@@ -571,6 +604,10 @@ function handleKeydown(e) {
 
 onMounted(() => {
   _swapFavicon(BEE_FAVICON)
+  _setThemeColor()
+  // Update theme-color when dark/light mode toggles (class change on <html>)
+  _themeObserver = new MutationObserver(_updateThemeColor)
+  _themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   document.addEventListener('keydown', handleKeydown)
   document.addEventListener('visibilitychange', handleVisibilityChange)
   window.addEventListener('blur', handleVisibilityChange)
@@ -580,6 +617,8 @@ onMounted(() => {
 
 onUnmounted(() => {
   _restoreFavicon()
+  _restoreThemeColor()
+  if (_themeObserver) { _themeObserver.disconnect(); _themeObserver = null }
   document.removeEventListener('keydown', handleKeydown)
   document.removeEventListener('visibilitychange', handleVisibilityChange)
   window.removeEventListener('blur', handleVisibilityChange)
@@ -686,7 +725,7 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Sticky score / hints bar — stays visible when top nav scrolls away -->
-      <div class="sticky-score-bar" style="position: sticky; top: -3rem; z-index: 10; background: var(--color-bg-primary); padding-top: 3rem; padding-bottom: 0.25rem; margin-top: -3rem;">
+      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background: var(--color-bg-primary); padding-bottom: 0.25rem;">
         <!-- Score & rank -->
         <div class="flex items-center gap-3 mb-1">
           <span class="text-base font-medium" style="color: var(--color-text-primary)">
