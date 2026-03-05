@@ -249,9 +249,10 @@ function _restoreFavicon() {
   if (el && _originalFavicon) el.href = _originalFavicon
 }
 
-// --- Theme-color meta (iOS Safari status bar) ---
+// --- Theme-color meta (iOS Safari status bar) + html background ---
 let _originalThemeColor = null
 let _themeColorMeta = null
+let _originalHtmlBg = null
 
 function _setThemeColor() {
   const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
@@ -263,12 +264,16 @@ function _setThemeColor() {
   }
   _originalThemeColor = _themeColorMeta.content
   _themeColorMeta.content = color
+  // Make html background match page bg so sides don't show --color-bg-page on wide screens
+  _originalHtmlBg = document.documentElement.style.backgroundColor
+  document.documentElement.style.backgroundColor = color
 }
 
 function _updateThemeColor() {
   if (!_themeColorMeta) return
   const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
   _themeColorMeta.content = color
+  document.documentElement.style.backgroundColor = color
 }
 
 function _restoreThemeColor() {
@@ -278,6 +283,7 @@ function _restoreThemeColor() {
   } else {
     _themeColorMeta.remove()
   }
+  document.documentElement.style.backgroundColor = _originalHtmlBg
 }
 
 let _themeObserver = null
@@ -632,18 +638,21 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- Top bar: nav + title + controls in one row -->
-  <div class="max-w-sm mx-auto flex justify-between items-center mb-2">
-    <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
-    <h1 class="text-lg font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
-    <div class="flex items-center gap-1">
-      <button
-        @click="showRules = true"
-        class="p-2 rounded-lg transition-colors duration-200 hover:bg-white/10 text-sm font-semibold"
-        style="color: var(--color-text-tertiary);"
-        aria-label="Säännöt"
-      >?</button>
-      <ThemeToggle style="color: var(--color-text-tertiary);" />
+  <!-- Fixed title bar: full viewport width, position:fixed so Safari 26 samples its background-color
+       for the liquid glass status bar. padding-top covers the safe-area-inset-top region. -->
+  <div style="position: fixed; top: 0; left: 0; right: 0; z-index: 50; background-color: var(--color-bg-primary); padding-top: env(safe-area-inset-top);">
+    <div class="max-w-sm mx-auto px-6 h-12 flex justify-between items-center">
+      <router-link to="/" class="text-sm" style="color: var(--color-text-tertiary);">← erez.ac</router-link>
+      <h1 class="text-lg font-semibold" style="color: var(--color-text-primary);">Sanakenno<span v-if="puzzleNumber != null" style="color: var(--color-text-tertiary);"> — #{{ puzzleNumber + 1 }}</span></h1>
+      <div class="flex items-center gap-1">
+        <button
+          @click="showRules = true"
+          class="p-2 rounded-lg transition-colors duration-200 hover:bg-white/10 text-sm font-semibold"
+          style="color: var(--color-text-tertiary);"
+          aria-label="Säännöt"
+        >?</button>
+        <ThemeToggle style="color: var(--color-text-tertiary);" />
+      </div>
     </div>
   </div>
 
@@ -715,6 +724,9 @@ onUnmounted(() => {
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
   <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
+    <!-- Spacer: natural position of sticky bar = stick position (env + 3rem from viewport top).
+         main has p-6 = 1.5rem padding-top, so spacer = env(safe-area-inset-top) + 1.5rem. -->
+    <div style="height: calc(env(safe-area-inset-top) + 1.5rem);" aria-hidden="true"></div>
     <!-- Loading / error -->
     <div v-if="loading" class="text-center py-16" style="color: var(--color-text-secondary)">
       Ladataan...
@@ -725,42 +737,20 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Sticky score / hints bar — stays visible when top nav scrolls away -->
-      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background-color: var(--color-bg-primary); padding-bottom: 0.25rem;">
-        <!-- Score & rank -->
-        <div class="flex items-center gap-3 mb-1">
+      <div class="sticky-score-bar" style="position: sticky; top: calc(env(safe-area-inset-top) + 3rem); z-index: 10; background-color: var(--color-bg-primary); padding-top: 0.5rem; padding-bottom: 0.25rem;">
+        <!-- Score + rank pill + share button -->
+        <div class="flex items-center gap-2 mb-1">
           <span class="text-base font-medium" style="color: var(--color-text-primary)">
             Pisteet: {{ score }}
           </span>
           <button
-            class="px-3 py-0.5 rounded-full text-sm font-medium"
+            class="px-2 py-0.5 rounded-full text-xs font-medium"
             style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
             @click="showRanks = !showRanks"
             :aria-expanded="showRanks"
             aria-label="Näytä tasorajat"
-          >
-            {{ rank }}
-          </button>
-        </div>
-
-        <!-- Progress bar toward next rank -->
-        <div class="w-full h-1 rounded-full mb-1" :style="{ background: 'var(--color-bg-secondary)' }">
-          <div
-            class="h-full rounded-full"
-            :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
-          ></div>
-        </div>
-
-        <!-- Avut (hints) toggle row + share button -->
-        <div class="flex items-center justify-between">
-          <button
-            class="text-sm font-medium"
-            style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
-            @click="showHints = !showHints"
-            :aria-expanded="showHints"
-          >
-            <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
-          </button>
-          <div class="flex items-center gap-2">
+          >{{ rank }}</button>
+          <div class="flex items-center gap-2 ml-auto">
             <span
               v-if="shareCopied"
               class="text-xs"
@@ -770,10 +760,16 @@ onUnmounted(() => {
               class="text-xs px-2 py-1 rounded"
               style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
               @click="copyStatus"
-            >
-              📋 Jaa tulos
-            </button>
+            >Jaa tulos</button>
           </div>
+        </div>
+
+        <!-- Progress bar toward next rank -->
+        <div class="w-full h-1 rounded-full mb-1" :style="{ background: 'var(--color-bg-secondary)' }">
+          <div
+            class="h-full rounded-full"
+            :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
+          ></div>
         </div>
       </div>
 
@@ -790,128 +786,88 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- Hints panel -->
-      <div v-if="showHints" class="mb-2 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+      <!-- Avut (hints) -->
+      <div class="mb-2">
+        <button
+          class="text-sm font-medium"
+          style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
+          @click="showHints = !showHints"
+          :aria-expanded="showHints"
+        >
+          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
+        </button>
+        <div v-if="showHints" class="mt-2 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
-        <!-- Hint 1: overview — remaining words, pangrams, length range -->
-        <div>
-          <div
-            class="flex items-center justify-between mb-1"
-            :style="hintsUnlocked.has('summary') ? 'cursor:pointer' : ''"
-            @click="hintsUnlocked.has('summary') && toggleHintCollapse('summary')"
-          >
-            <span style="color: var(--color-text-secondary);">Yleiskuva <span v-html="HINT_SVG.summary" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('summary')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click.stop="unlockHint('summary')"
-            >Aktivoi</button>
-            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
-              {{ hintsCollapsed.has('summary') ? '▼' : '▲' }}
-            </span>
-          </div>
-          <div v-if="hintsUnlocked.has('summary') && !hintsCollapsed.has('summary')" style="font-family: var(--font-mono);">
-            <div v-if="unfoundLengths">
-              <span style="color: var(--color-text-primary);">{{ puzzle.hint_data.word_count - foundWords.size }}/{{ puzzle.hint_data.word_count }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / puzzle.hint_data.word_count) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
-            </div>
-            <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">
-              {{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä
-            </div>
-            <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
-          </div>
-        </div>
-
-        <!-- Hint 2: words left per first letter -->
-        <div>
-          <div
-            class="flex items-center justify-between mb-1"
-            :style="hintsUnlocked.has('letters') ? 'cursor:pointer' : ''"
-            @click="hintsUnlocked.has('letters') && toggleHintCollapse('letters')"
-          >
-            <span style="color: var(--color-text-secondary);">Alkukirjaimet <span v-html="HINT_SVG.letters" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('letters')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click.stop="unlockHint('letters')"
-            >Aktivoi</button>
-            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
-              {{ hintsCollapsed.has('letters') ? '▼' : '▲' }}
-            </span>
-          </div>
-          <div v-if="hintsUnlocked.has('letters') && !hintsCollapsed.has('letters')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in letterMap"
-              :key="item.letter"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+          <!-- Hint 1: overview -->
+          <div>
+            <div
+              class="flex items-center justify-between mb-1"
+              :style="hintsUnlocked.has('summary') ? 'cursor:pointer' : ''"
+              @click="hintsUnlocked.has('summary') && toggleHintCollapse('summary')"
             >
-              {{ item.letter.toUpperCase() }}&nbsp;{{ item.remaining }}
-            </span>
+              <span style="color: var(--color-text-secondary);">Yleiskuva <span v-html="HINT_SVG.summary" class="inline-block align-middle ml-1" /></span>
+              <button v-if="!hintsUnlocked.has('summary')" class="text-xs px-2 py-0.5 rounded" style="background: var(--color-accent); color: white; border: none; cursor: pointer;" @click.stop="unlockHint('summary')">Aktivoi</button>
+              <span v-else class="text-xs" style="color: var(--color-text-tertiary);">{{ hintsCollapsed.has('summary') ? '▼' : '▲' }}</span>
+            </div>
+            <div v-if="hintsUnlocked.has('summary') && !hintsCollapsed.has('summary')" style="font-family: var(--font-mono);">
+              <div v-if="unfoundLengths">
+                <span style="color: var(--color-text-primary);">{{ puzzle.hint_data.word_count - foundWords.size }}/{{ puzzle.hint_data.word_count }} sanaa jäljellä </span><span style="color: var(--color-text-secondary);">({{ Math.round((foundWords.size / puzzle.hint_data.word_count) * 100) }}%) · {{ pangramStats.remaining }}/{{ pangramStats.total }} {{ pangramStats.total === 1 ? 'pangrammi' : 'pangrammia' }}</span>
+              </div>
+              <div v-if="unfoundLengths" style="color: var(--color-text-secondary);">{{ unfoundLengths.uniqueLengths }} eri {{ unfoundLengths.uniqueLengths === 1 ? 'sanapituus' : 'sanapituutta' }} · Pisin sana {{ unfoundLengths.longest }}&nbsp;merkkiä</div>
+              <div v-else style="color: var(--color-accent);">kaikki löydetty</div>
+            </div>
           </div>
-        </div>
 
-        <!-- Hint 3: word count per length -->
-        <div>
-          <div
-            class="flex items-center justify-between mb-1"
-            :style="hintsUnlocked.has('distribution') ? 'cursor:pointer' : ''"
-            @click="hintsUnlocked.has('distribution') && toggleHintCollapse('distribution')"
-          >
-            <span style="color: var(--color-text-secondary);">Pituusjakauma <span v-html="HINT_SVG.distribution" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('distribution')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click.stop="unlockHint('distribution')"
-            >Aktivoi</button>
-            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
-              {{ hintsCollapsed.has('distribution') ? '▼' : '▲' }}
-            </span>
-          </div>
-          <div v-if="hintsUnlocked.has('distribution') && !hintsCollapsed.has('distribution')" class="flex flex-wrap gap-x-4 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in lengthDistribution"
-              :key="item.len"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
-            >{{ item.len }}: {{ item.remaining }}</span>
-          </div>
-        </div>
-
-        <!-- Hint 4: remaining words per two-letter pair -->
-        <div>
-          <div
-            class="flex items-center justify-between mb-1"
-            :style="hintsUnlocked.has('pairs') ? 'cursor:pointer' : ''"
-            @click="hintsUnlocked.has('pairs') && toggleHintCollapse('pairs')"
-          >
-            <span style="color: var(--color-text-secondary);">Alkuparit <span v-html="HINT_SVG.pairs" class="inline-block align-middle ml-1" /></span>
-            <button
-              v-if="!hintsUnlocked.has('pairs')"
-              class="text-xs px-2 py-0.5 rounded"
-              style="background: var(--color-accent); color: white; border: none; cursor: pointer;"
-              @click.stop="unlockHint('pairs')"
-            >Aktivoi</button>
-            <span v-else class="text-xs" style="color: var(--color-text-tertiary);">
-              {{ hintsCollapsed.has('pairs') ? '▼' : '▲' }}
-            </span>
-          </div>
-          <div v-if="hintsUnlocked.has('pairs') && !hintsCollapsed.has('pairs')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
-            <span
-              v-for="item in pairMap"
-              :key="item.pair"
-              class="text-sm"
-              :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }"
+          <!-- Hint 2: words left per first letter -->
+          <div>
+            <div
+              class="flex items-center justify-between mb-1"
+              :style="hintsUnlocked.has('letters') ? 'cursor:pointer' : ''"
+              @click="hintsUnlocked.has('letters') && toggleHintCollapse('letters')"
             >
-              {{ item.pair.toUpperCase() }}&nbsp;{{ item.remaining }}
-            </span>
+              <span style="color: var(--color-text-secondary);">Alkukirjaimet <span v-html="HINT_SVG.letters" class="inline-block align-middle ml-1" /></span>
+              <button v-if="!hintsUnlocked.has('letters')" class="text-xs px-2 py-0.5 rounded" style="background: var(--color-accent); color: white; border: none; cursor: pointer;" @click.stop="unlockHint('letters')">Aktivoi</button>
+              <span v-else class="text-xs" style="color: var(--color-text-tertiary);">{{ hintsCollapsed.has('letters') ? '▼' : '▲' }}</span>
+            </div>
+            <div v-if="hintsUnlocked.has('letters') && !hintsCollapsed.has('letters')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+              <span v-for="item in letterMap" :key="item.letter" class="text-sm" :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }">{{ item.letter.toUpperCase() }}&nbsp;{{ item.remaining }}</span>
+            </div>
           </div>
-        </div>
 
+          <!-- Hint 3: word count per length -->
+          <div>
+            <div
+              class="flex items-center justify-between mb-1"
+              :style="hintsUnlocked.has('distribution') ? 'cursor:pointer' : ''"
+              @click="hintsUnlocked.has('distribution') && toggleHintCollapse('distribution')"
+            >
+              <span style="color: var(--color-text-secondary);">Pituusjakauma <span v-html="HINT_SVG.distribution" class="inline-block align-middle ml-1" /></span>
+              <button v-if="!hintsUnlocked.has('distribution')" class="text-xs px-2 py-0.5 rounded" style="background: var(--color-accent); color: white; border: none; cursor: pointer;" @click.stop="unlockHint('distribution')">Aktivoi</button>
+              <span v-else class="text-xs" style="color: var(--color-text-tertiary);">{{ hintsCollapsed.has('distribution') ? '▼' : '▲' }}</span>
+            </div>
+            <div v-if="hintsUnlocked.has('distribution') && !hintsCollapsed.has('distribution')" class="flex flex-wrap gap-x-4 gap-y-0.5" style="font-family: var(--font-mono);">
+              <span v-for="item in lengthDistribution" :key="item.len" class="text-sm" :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }">{{ item.len }}: {{ item.remaining }}</span>
+            </div>
+          </div>
+
+          <!-- Hint 4: remaining words per two-letter pair -->
+          <div>
+            <div
+              class="flex items-center justify-between mb-1"
+              :style="hintsUnlocked.has('pairs') ? 'cursor:pointer' : ''"
+              @click="hintsUnlocked.has('pairs') && toggleHintCollapse('pairs')"
+            >
+              <span style="color: var(--color-text-secondary);">Alkuparit <span v-html="HINT_SVG.pairs" class="inline-block align-middle ml-1" /></span>
+              <button v-if="!hintsUnlocked.has('pairs')" class="text-xs px-2 py-0.5 rounded" style="background: var(--color-accent); color: white; border: none; cursor: pointer;" @click.stop="unlockHint('pairs')">Aktivoi</button>
+              <span v-else class="text-xs" style="color: var(--color-text-tertiary);">{{ hintsCollapsed.has('pairs') ? '▼' : '▲' }}</span>
+            </div>
+            <div v-if="hintsUnlocked.has('pairs') && !hintsCollapsed.has('pairs')" class="flex flex-wrap gap-x-3 gap-y-0.5" style="font-family: var(--font-mono);">
+              <span v-for="item in pairMap" :key="item.pair" class="text-sm" :style="{ color: item.remaining === 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)' }">{{ item.pair.toUpperCase() }}&nbsp;{{ item.remaining }}</span>
+            </div>
+          </div>
+
+        </div>
       </div>
-      <div v-else class="mb-2"></div>
 
       <!-- Current word display -->
       <div

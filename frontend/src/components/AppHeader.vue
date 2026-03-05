@@ -36,12 +36,14 @@ function handleDropdownKeydown(e) {
 
 <template>
   <header
-    class="sticky top-0 z-50 px-6 h-16 flex justify-between items-center"
+    class="sticky top-0 z-50"
     :style="{
       backgroundColor: 'var(--color-header-bg)',
-      borderBottom: '2px solid var(--color-header-border)'
+      borderBottom: '2px solid var(--color-header-border)',
+      paddingTop: 'env(safe-area-inset-top)',
     }"
   >
+    <div class="px-6 h-16 flex justify-between items-center">
     <div class="flex gap-6 items-center">
       <router-link to="/" class="!text-white text-2xl font-normal tracking-tight">erez.ac</router-link>
     </div>
@@ -63,11 +65,12 @@ function handleDropdownKeydown(e) {
         </svg>
       </button>
     </div>
+    </div>
 
     <!-- Dropdown nav — universal (desktop + mobile) -->
     <nav
       v-if="menuOpen"
-      class="absolute top-16 right-0 flex flex-col py-2 shadow-lg rounded-bl-lg min-w-44"
+      class="absolute top-full right-0 flex flex-col py-2 shadow-lg rounded-bl-lg min-w-44"
       :style="{
         backgroundColor: 'var(--color-header-bg)',
         borderBottom: '2px solid var(--color-header-border)',

@@ -34,7 +34,10 @@ onMounted(async () => {
   <a href="#main-content" class="skip-link">Skip to content</a>
   <div class="flex flex-col min-h-screen">
     <AppHeader v-if="!route.meta.standalone" />
-    <main id="main-content" class="grow p-6" :style="{ backgroundColor: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }">
+    <main id="main-content" class="grow p-6" :style="{
+      backgroundColor: 'var(--color-bg-primary)',
+      color: 'var(--color-text-primary)',
+    }">
       <router-view />
     </main>
     <AppFooter v-if="!route.meta.standalone" :update-date="updateDate" />
