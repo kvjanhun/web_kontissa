@@ -686,7 +686,7 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Sticky score / hints bar — stays visible when top nav scrolls away -->
-      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background: var(--color-bg-primary); padding-bottom: 0.25rem;">
+      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background: var(--color-bg-primary); padding-bottom: 0.25rem; box-shadow: 0 -1rem 0 0 var(--color-bg-primary);">
         <!-- Score & rank -->
         <div class="flex items-center gap-3 mb-1">
           <span class="text-base font-medium" style="color: var(--color-text-primary)">
