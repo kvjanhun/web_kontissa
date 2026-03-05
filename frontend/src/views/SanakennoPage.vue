@@ -686,7 +686,7 @@ onUnmounted(() => {
 
     <template v-else-if="puzzle">
       <!-- Sticky score / hints bar — stays visible when top nav scrolls away -->
-      <div class="sticky-score-bar" style="position: sticky; top: 0; z-index: 10; background: var(--color-bg-primary); padding-bottom: 0.25rem;">
+      <div class="sticky-score-bar" style="position: sticky; top: -3rem; z-index: 10; background: var(--color-bg-primary); padding-top: 3rem; padding-bottom: 0.25rem; margin-top: -3rem;">
         <!-- Score & rank -->
         <div class="flex items-center gap-3 mb-1">
           <span class="text-base font-medium" style="color: var(--color-text-primary)">
@@ -1110,21 +1110,6 @@ onUnmounted(() => {
 </template>
 
 <style scoped>
-/* Cover scrolled content visible above the sticky bar (iOS safe-area / Dynamic Island gap) */
-.sticky-score-bar {
-  position: relative;
-}
-.sticky-score-bar::before {
-  content: '';
-  position: absolute;
-  bottom: 100%;
-  left: -1rem;
-  right: -1rem;
-  height: 100vh;
-  background: var(--color-bg-primary);
-  pointer-events: none;
-}
-
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20%       { transform: translateX(-8px); }
