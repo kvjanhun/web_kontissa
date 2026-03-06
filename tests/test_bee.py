@@ -1,6 +1,7 @@
 """Tests for the Sanakenno (Spelling Bee) API endpoint."""
 
 import hashlib
+from datetime import date, timedelta
 import pytest
 from unittest.mock import patch
 from app.api.bee import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzle, _get_puzzle_dict
@@ -652,3 +653,410 @@ class TestBeeAchievements:
         data = res.get_json()
         for rank in VALID_RANKS:
             assert rank in data["totals"]
+
+
+# ---------------------------------------------------------------------------
+# Preview endpoint
+# ---------------------------------------------------------------------------
+
+class TestPreviewEndpoint:
+    """POST /api/kenno/preview returns variations for arbitrary letters."""
+
+    VALID_LETTERS = ["a", "e", "k", "l", "n", "s", "ö"]
+
+    def test_returns_seven_variations(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": self.VALID_LETTERS})
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["variations"]) == 7
+        assert data["letters"] == sorted(self.VALID_LETTERS)
+
+    def test_variation_has_required_fields(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": self.VALID_LETTERS})
+        data = res.get_json()
+        for v in data["variations"]:
+            assert "center" in v
+            assert "word_count" in v
+            assert "max_score" in v
+            assert "pangram_count" in v
+
+    def test_fewer_than_7_letters_rejected(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": ["a", "b", "c"]})
+        assert res.status_code == 400
+
+    def test_duplicate_letters_rejected(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": ["a", "a", "b", "c", "d", "e", "f"]})
+        assert res.status_code == 400
+
+    def test_invalid_chars_rejected(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": ["a", "b", "c", "d", "e", "f", "1"]})
+        assert res.status_code == 400
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.post("/api/kenno/preview", json={"letters": self.VALID_LETTERS})
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.post("/api/kenno/preview", json={"letters": self.VALID_LETTERS})
+        assert res.status_code == 401
+
+    def test_more_than_7_letters_rejected(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": ["a", "b", "c", "d", "e", "f", "g", "h"]})
+        assert res.status_code == 400
+
+    def test_finnish_special_chars_accepted(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/preview", json={"letters": ["a", "b", "c", "d", "e", "ä", "ö"]})
+        assert res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Save puzzle endpoint
+# ---------------------------------------------------------------------------
+
+class TestSavePuzzleEndpoint:
+    """POST /api/kenno/puzzle creates or updates custom puzzles."""
+
+    VALID_LETTERS = ["a", "e", "k", "l", "n", "s", "ö"]
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        yield
+        _PUZZLE_CACHE.clear()
+
+    def _safe_slot(self):
+        """Return a slot that is NOT today's live puzzle."""
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        slot = 5
+        if slot == today_slot:
+            slot = 6
+        return slot
+
+    def test_saves_to_slot(self, logged_in_admin):
+        slot = self._safe_slot()
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 200
+        data = res.get_json()
+        assert data["slot"] == slot
+        assert data["center"] == "e"
+        assert data["letters"] == sorted(self.VALID_LETTERS)
+
+    def test_saved_puzzle_served_by_api(self, logged_in_admin):
+        slot = self._safe_slot()
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        data = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
+        assert data["center"] == "e"
+        all_api_letters = set(data["letters"] + [data["center"]])
+        assert all_api_letters == set(self.VALID_LETTERS)
+
+    def test_rejects_live_slot(self, logged_in_admin):
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": today_slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 409
+
+    def test_sets_center(self, logged_in_admin):
+        slot = self._safe_slot()
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "k",
+        })
+        data = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
+        assert data["center"] == "k"
+
+    def test_new_slot_extends_total_puzzles(self, logged_in_admin):
+        new_slot = 50
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": new_slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 200
+        assert res.get_json()["is_new_slot"] is True
+
+        stats = logged_in_admin.get("/api/kenno/stats").get_json()
+        assert stats["total_puzzles"] == 51
+
+    def test_overwrite_existing_slot(self, logged_in_admin):
+        slot = self._safe_slot()
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        new_letters = ["b", "d", "h", "i", "m", "o", "u"]
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": new_letters, "center": "h",
+        })
+        data = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
+        assert data["center"] == "h"
+        all_letters = set(data["letters"] + [data["center"]])
+        assert all_letters == set(new_letters)
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.post("/api/kenno/puzzle", json={
+            "slot": 5, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.post("/api/kenno/puzzle", json={
+            "slot": 5, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 401
+
+    def test_rejects_negative_slot(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": -1, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        assert res.status_code == 400
+
+    def test_rejects_invalid_center(self, logged_in_admin):
+        slot = self._safe_slot()
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "z",
+        })
+        assert res.status_code == 400
+
+    def test_returns_next_play_date(self, logged_in_admin):
+        slot = self._safe_slot()
+        res = logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        data = res.get_json()
+        assert data["next_play_date"] is not None
+
+
+# ---------------------------------------------------------------------------
+# Schedule endpoint
+# ---------------------------------------------------------------------------
+
+class TestScheduleEndpoint:
+    """GET /api/kenno/schedule returns upcoming puzzle rotation."""
+
+    def test_returns_14_days_by_default(self, logged_in_admin):
+        res = logged_in_admin.get("/api/kenno/schedule")
+        assert res.status_code == 200
+        data = res.get_json()
+        assert len(data["schedule"]) == 14
+
+    def test_first_entry_is_today(self, logged_in_admin):
+        data = logged_in_admin.get("/api/kenno/schedule").get_json()
+        assert data["schedule"][0]["is_today"] is True
+
+    def test_other_entries_are_not_today(self, logged_in_admin):
+        data = logged_in_admin.get("/api/kenno/schedule").get_json()
+        for entry in data["schedule"][1:]:
+            assert entry["is_today"] is False
+
+    def test_marks_custom_puzzles(self, logged_in_admin):
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        # Save a custom puzzle to a slot that appears in the schedule
+        data = logged_in_admin.get("/api/kenno/schedule?days=30").get_json()
+        # Find a non-today slot from the schedule
+        target = None
+        for entry in data["schedule"]:
+            if not entry["is_today"]:
+                target = entry["slot"]
+                break
+        assert target is not None
+
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": target, "letters": ["a", "e", "k", "l", "n", "s", "ö"], "center": "e",
+        })
+
+        data2 = logged_in_admin.get("/api/kenno/schedule?days=30").get_json()
+        custom_entries = [e for e in data2["schedule"] if e["slot"] == target]
+        assert any(e["is_custom"] for e in custom_entries)
+
+    def test_custom_days_param(self, logged_in_admin):
+        data = logged_in_admin.get("/api/kenno/schedule?days=7").get_json()
+        assert len(data["schedule"]) == 7
+
+    def test_days_clamped_to_max_90(self, logged_in_admin):
+        data = logged_in_admin.get("/api/kenno/schedule?days=200").get_json()
+        assert len(data["schedule"]) == 90
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.get("/api/kenno/schedule")
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.get("/api/kenno/schedule")
+        assert res.status_code == 401
+
+    def test_has_display_number(self, logged_in_admin):
+        data = logged_in_admin.get("/api/kenno/schedule").get_json()
+        for entry in data["schedule"]:
+            assert entry["display_number"] == entry["slot"] + 1
+
+
+# ---------------------------------------------------------------------------
+# Swap puzzles endpoint
+# ---------------------------------------------------------------------------
+
+class TestSwapPuzzlesEndpoint:
+    """POST /api/kenno/puzzle/swap swaps two puzzle slots."""
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        yield
+        _PUZZLE_CACHE.clear()
+
+    def _two_safe_slots(self):
+        """Return two slots that are NOT today's live puzzle."""
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        slots = [s for s in [3, 4, 5, 6] if s != today_slot]
+        return slots[0], slots[1]
+
+    def test_swaps_puzzles(self, logged_in_admin):
+        a, b = self._two_safe_slots()
+        # Read original letters
+        data_a = logged_in_admin.get(f"/api/kenno?puzzle={a}").get_json()
+        data_b = logged_in_admin.get(f"/api/kenno?puzzle={b}").get_json()
+        letters_a = set(data_a["letters"] + [data_a["center"]])
+        letters_b = set(data_b["letters"] + [data_b["center"]])
+
+        res = logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": a, "slot_b": b})
+        assert res.status_code == 200
+        assert res.get_json()["swapped"] is True
+
+        # After swap, slot a should have slot b's letters and vice versa
+        new_a = logged_in_admin.get(f"/api/kenno?puzzle={a}").get_json()
+        new_b = logged_in_admin.get(f"/api/kenno?puzzle={b}").get_json()
+        assert set(new_a["letters"] + [new_a["center"]]) == letters_b
+        assert set(new_b["letters"] + [new_b["center"]]) == letters_a
+
+    def test_rejects_live_slot(self, logged_in_admin):
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        other = 3 if today_slot != 3 else 4
+        res = logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": today_slot, "slot_b": other})
+        assert res.status_code == 409
+
+    def test_rejects_same_slot(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": 3, "slot_b": 3})
+        assert res.status_code == 400
+
+    def test_rejects_negative_slot(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": -1, "slot_b": 3})
+        assert res.status_code == 400
+
+    def test_rejects_out_of_range(self, logged_in_admin):
+        res = logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": 0, "slot_b": 999})
+        assert res.status_code == 400
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.post("/api/kenno/puzzle/swap", json={"slot_a": 0, "slot_b": 1})
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.post("/api/kenno/puzzle/swap", json={"slot_a": 0, "slot_b": 1})
+        assert res.status_code == 401
+
+    def test_swaps_centers_too(self, logged_in_admin):
+        a, b = self._two_safe_slots()
+        data_a = logged_in_admin.get(f"/api/kenno?puzzle={a}").get_json()
+        data_b = logged_in_admin.get(f"/api/kenno?puzzle={b}").get_json()
+        center_a = data_a["center"]
+        center_b = data_b["center"]
+
+        logged_in_admin.post("/api/kenno/puzzle/swap", json={"slot_a": a, "slot_b": b})
+
+        new_a = logged_in_admin.get(f"/api/kenno?puzzle={a}").get_json()
+        new_b = logged_in_admin.get(f"/api/kenno?puzzle={b}").get_json()
+        assert new_a["center"] == center_b
+        assert new_b["center"] == center_a
+
+
+# ---------------------------------------------------------------------------
+# Delete puzzle endpoint
+# ---------------------------------------------------------------------------
+
+class TestDeletePuzzleEndpoint:
+    """DELETE /api/kenno/puzzle/<slot> removes a custom puzzle."""
+
+    VALID_LETTERS = ["a", "e", "k", "l", "n", "s", "ö"]
+
+    @pytest.fixture(autouse=True)
+    def clear_cache(self):
+        from app.api.bee import _PUZZLE_CACHE
+        _PUZZLE_CACHE.clear()
+        yield
+        _PUZZLE_CACHE.clear()
+
+    def _safe_slot(self):
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        slot = 5
+        if slot == today_slot:
+            slot = 6
+        return slot
+
+    def test_deletes_custom_puzzle(self, logged_in_admin):
+        slot = self._safe_slot()
+        # First save a custom puzzle
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        # Verify it's there
+        data = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
+        assert data["center"] == "e"
+
+        # Delete it
+        res = logged_in_admin.delete(f"/api/kenno/puzzle/{slot}")
+        assert res.status_code == 200
+        assert res.get_json()["deleted"] is True
+        assert res.get_json()["reverted_to_hardcoded"] is True
+
+        # Verify it reverted to hardcoded
+        data2 = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
+        all_letters = set(data2["letters"] + [data2["center"]])
+        assert all_letters == set(PUZZLES[slot]["letters"])
+
+    def test_rejects_non_custom_slot(self, logged_in_admin):
+        """Cannot delete a slot that has no custom override."""
+        slot = self._safe_slot()
+        res = logged_in_admin.delete(f"/api/kenno/puzzle/{slot}")
+        assert res.status_code == 404
+
+    def test_rejects_live_slot(self, logged_in_admin):
+        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from datetime import datetime
+        today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+        res = logged_in_admin.delete(f"/api/kenno/puzzle/{today_slot}")
+        assert res.status_code == 409
+
+    def test_requires_admin(self, logged_in_user):
+        res = logged_in_user.delete("/api/kenno/puzzle/5")
+        assert res.status_code == 403
+
+    def test_requires_auth(self, client):
+        res = client.delete("/api/kenno/puzzle/5")
+        assert res.status_code == 401
+
+    def test_delete_extended_slot_shrinks_total(self, logged_in_admin):
+        """Deleting a slot beyond 41 that was the highest should shrink total_puzzles."""
+        # Save to slot 50
+        logged_in_admin.post("/api/kenno/puzzle", json={
+            "slot": 50, "letters": self.VALID_LETTERS, "center": "e",
+        })
+        stats = logged_in_admin.get("/api/kenno/stats").get_json()
+        assert stats["total_puzzles"] == 51
+
+        # Delete it
+        logged_in_admin.delete("/api/kenno/puzzle/50")
+        stats2 = logged_in_admin.get("/api/kenno/stats").get_json()
+        assert stats2["total_puzzles"] == 41

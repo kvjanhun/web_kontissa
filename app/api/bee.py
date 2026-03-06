@@ -7,7 +7,7 @@ import hashlib
 import os
 
 from app import app, limiter
-from app.models import db, BlockedWord, BeeConfig, BeeAchievement, PageView
+from app.models import db, BlockedWord, BeeConfig, BeeAchievement, BeePuzzle, PageView
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -83,18 +83,41 @@ def _seed_centers():
     db.session.commit()
 
 
+def _get_puzzle_letters(idx):
+    """Return the 7 letters for puzzle *idx*, checking DB first, then PUZZLES."""
+    row = BeePuzzle.query.filter_by(slot=idx).first()
+    if row:
+        return row.letters.split(",")
+    if 0 <= idx < len(PUZZLES):
+        return PUZZLES[idx]["letters"]
+    return None
+
+
+def _total_puzzles():
+    """Return the total number of puzzle slots (hardcoded + any DB extensions)."""
+    highest_db = db.session.query(db.func.max(BeePuzzle.slot)).scalar()
+    if highest_db is not None:
+        return max(len(PUZZLES), highest_db + 1)
+    return len(PUZZLES)
+
+
 def _get_center(idx):
     """Read the chosen center letter for puzzle *idx* from BeeConfig."""
     row = BeeConfig.query.filter_by(key=f"center_{idx}").first()
     if row:
         return row.value
     # Fallback: first letter alphabetically
+    letters = _get_puzzle_letters(idx)
+    if letters:
+        return sorted(letters)[0]
     return sorted(PUZZLES[idx]["letters"])[0]
 
 
 def _get_puzzle_dict(idx):
     """Build a classic {center, outer} dict for puzzle *idx*."""
-    letters = PUZZLES[idx]["letters"]
+    letters = _get_puzzle_letters(idx)
+    if letters is None:
+        return None
     center = _get_center(idx)
     outer = [l for l in letters if l != center]
     return {"center": center, "outer": outer}
@@ -175,7 +198,7 @@ def _get_puzzle_for_date(date_obj):
     ROTATION_START = date(2026, 2, 24)
     START_INDEX = 1  # Display: Peli 2/41 today, Peli 3/41 tomorrow, etc.
     days_since_start = (date_obj - ROTATION_START).days
-    return (START_INDEX + days_since_start) % len(PUZZLES)
+    return (START_INDEX + days_since_start) % _total_puzzles()
 
 
 def _compute_variation(letters, center_letter):
@@ -227,7 +250,7 @@ def kenno():
 
     override = request.args.get("puzzle", type=int)
     if override is not None and is_admin:
-        puzzle_number = override % len(PUZZLES)
+        puzzle_number = override % _total_puzzles()
 
     puzzle = _get_puzzle_dict(puzzle_number)
     words, max_score, word_hashes, hint_data = _get_puzzle_data(puzzle_number)
@@ -239,7 +262,7 @@ def kenno():
         "hint_data": hint_data,
         "max_score": max_score,
         "puzzle_number": puzzle_number,
-        "total_puzzles": len(PUZZLES),
+        "total_puzzles": _total_puzzles(),
     }
 
     if is_admin:
@@ -277,9 +300,11 @@ def bee_variations():
     puzzle_idx = request.args.get("puzzle", type=int)
     if puzzle_idx is None:
         return jsonify({"error": "puzzle parameter required"}), 400
-    puzzle_idx = puzzle_idx % len(PUZZLES)
+    puzzle_idx = puzzle_idx % _total_puzzles()
 
-    letters = PUZZLES[puzzle_idx]["letters"]
+    letters = _get_puzzle_letters(puzzle_idx)
+    if letters is None:
+        return jsonify({"error": "Puzzle not found"}), 404
     active_center = _get_center(puzzle_idx)
 
     variations = []
@@ -307,9 +332,11 @@ def bee_set_center():
 
     if puzzle_idx is None or not isinstance(puzzle_idx, int):
         return jsonify({"error": "puzzle (int) required"}), 400
-    puzzle_idx = puzzle_idx % len(PUZZLES)
+    puzzle_idx = puzzle_idx % _total_puzzles()
 
-    letters = PUZZLES[puzzle_idx]["letters"]
+    letters = _get_puzzle_letters(puzzle_idx)
+    if letters is None:
+        return jsonify({"error": "Puzzle not found"}), 404
     if center not in letters:
         return jsonify({"error": f"'{center}' is not one of the 7 letters"}), 400
 
@@ -337,7 +364,7 @@ def bee_stats():
     sanakenno_pv = db.session.query(PageView).filter_by(path="/sanakenno").first()
     page_views = sanakenno_pv.count if sanakenno_pv else 0
     blocked_words_count = db.session.query(BlockedWord).count()
-    total_puzzles = len(PUZZLES)
+    total_puzzles = _total_puzzles()
 
     return jsonify({
         "page_views": page_views,
@@ -381,7 +408,7 @@ def bee_achievement():
         return jsonify({"error": "Invalid rank"}), 400
 
     puzzle_number = data.get("puzzle_number")
-    if not isinstance(puzzle_number, int) or puzzle_number < 0 or puzzle_number >= len(PUZZLES):
+    if not isinstance(puzzle_number, int) or puzzle_number < 0 or puzzle_number >= _total_puzzles():
         return jsonify({"error": "Invalid puzzle_number"}), 400
 
     score_val = data.get("score")
@@ -481,3 +508,254 @@ def bee_unblock_word(word_id):
     _PUZZLE_CACHE.clear()
 
     return jsonify({"word": word, "unblocked": True})
+
+
+# Valid Finnish alphabet letters for puzzle creation
+_FINNISH_LETTERS = frozenset("abcdefghijklmnopqrstuvwxyzäö")
+
+
+def _validate_puzzle_letters(letters):
+    """Validate a list of 7 puzzle letters. Returns (cleaned list, error string or None)."""
+    if not isinstance(letters, list) or len(letters) != 7:
+        return None, "Exactly 7 letters required"
+    cleaned = [l.strip().lower() for l in letters if isinstance(l, str)]
+    if len(cleaned) != 7:
+        return None, "All letters must be strings"
+    if len(set(cleaned)) != 7:
+        return None, "All 7 letters must be distinct"
+    for l in cleaned:
+        if len(l) != 1 or l not in _FINNISH_LETTERS:
+            return None, f"Invalid letter: '{l}'"
+    return sorted(cleaned), None
+
+
+@app.route("/api/kenno/preview", methods=["POST"])
+@login_required
+@limiter.limit("5/minute")
+def bee_preview():
+    """Preview all 7 center-letter variations for arbitrary letters (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json() or {}
+    letters, err = _validate_puzzle_letters(data.get("letters", []))
+    if err:
+        return jsonify({"error": err}), 400
+
+    variations = []
+    for letter in letters:
+        stats = _compute_variation(letters, letter)
+        variations.append(stats)
+
+    return jsonify({"letters": letters, "variations": variations})
+
+
+@app.route("/api/kenno/puzzle", methods=["POST"])
+@login_required
+def bee_save_puzzle():
+    """Create or update a custom puzzle in a slot (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json() or {}
+
+    slot = data.get("slot")
+    if not isinstance(slot, int) or slot < 0:
+        return jsonify({"error": "slot must be a non-negative integer"}), 400
+
+    letters, err = _validate_puzzle_letters(data.get("letters", []))
+    if err:
+        return jsonify({"error": err}), 400
+
+    center = data.get("center", "").strip().lower()
+    if center not in letters:
+        return jsonify({"error": f"center '{center}' must be one of the 7 letters"}), 400
+
+    # Safety: reject writes to today's live slot
+    today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+    if slot == today_slot:
+        return jsonify({"error": "Cannot modify today's live puzzle"}), 409
+
+    # Upsert BeePuzzle row
+    now = datetime.now(timezone.utc)
+    row = db.session.get(BeePuzzle, slot)
+    is_new_slot = row is None and slot >= len(PUZZLES)
+    if row:
+        row.letters = ",".join(letters)
+        row.updated_at = now
+    else:
+        row = BeePuzzle(slot=slot, letters=",".join(letters), created_at=now, updated_at=now)
+        db.session.add(row)
+
+    # Upsert BeeConfig center entry
+    key = f"center_{slot}"
+    config_row = BeeConfig.query.filter_by(key=key).first()
+    if config_row:
+        config_row.value = center
+    else:
+        db.session.add(BeeConfig(key=key, value=center))
+
+    db.session.commit()
+    _PUZZLE_CACHE.pop(slot, None)
+
+    # Compute next play date for this slot
+    next_play_date = _next_play_date_for_slot(slot)
+
+    return jsonify({
+        "slot": slot,
+        "letters": letters,
+        "center": center,
+        "is_new_slot": is_new_slot,
+        "next_play_date": next_play_date.isoformat() if next_play_date else None,
+    })
+
+
+def _next_play_date_for_slot(slot):
+    """Find the next date (from tomorrow onward) when the given slot will be live."""
+    today = datetime.now(_HELSINKI).date()
+    total = _total_puzzles()
+    if total == 0:
+        return None
+    for day_offset in range(1, total + 1):
+        d = today + timedelta(days=day_offset)
+        if _get_puzzle_for_date(d) == slot:
+            return d
+    return None
+
+
+@app.route("/api/kenno/schedule")
+@login_required
+def bee_schedule():
+    """Return upcoming puzzle rotation schedule (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    days = request.args.get("days", 14, type=int)
+    days = max(1, min(90, days))
+
+    today = datetime.now(_HELSINKI).date()
+    today_slot = _get_puzzle_for_date(today)
+    total = _total_puzzles()
+
+    schedule = []
+    for i in range(days):
+        d = today + timedelta(days=i)
+        slot = _get_puzzle_for_date(d)
+        is_custom = BeePuzzle.query.filter_by(slot=slot).first() is not None
+        schedule.append({
+            "date": d.isoformat(),
+            "slot": slot,
+            "display_number": slot + 1,
+            "is_custom": is_custom,
+            "is_today": (i == 0),
+        })
+
+    return jsonify({
+        "schedule": schedule,
+        "total_puzzles": total,
+    })
+
+
+@app.route("/api/kenno/puzzle/swap", methods=["POST"])
+@login_required
+def bee_swap_puzzles():
+    """Swap two puzzle slots (admin only). Swaps both letters and center."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    data = request.get_json() or {}
+    slot_a = data.get("slot_a")
+    slot_b = data.get("slot_b")
+
+    if not isinstance(slot_a, int) or not isinstance(slot_b, int):
+        return jsonify({"error": "slot_a and slot_b must be integers"}), 400
+    if slot_a < 0 or slot_b < 0:
+        return jsonify({"error": "Slots must be non-negative"}), 400
+    if slot_a == slot_b:
+        return jsonify({"error": "Slots must be different"}), 400
+
+    total = _total_puzzles()
+    if slot_a >= total or slot_b >= total:
+        return jsonify({"error": "Slot out of range"}), 400
+
+    today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+    if slot_a == today_slot or slot_b == today_slot:
+        return jsonify({"error": "Cannot swap today's live puzzle"}), 409
+
+    # Read current state for both slots
+    letters_a = _get_puzzle_letters(slot_a)
+    letters_b = _get_puzzle_letters(slot_b)
+    center_a = _get_center(slot_a)
+    center_b = _get_center(slot_b)
+
+    now = datetime.now(timezone.utc)
+
+    # Write slot_a ← old slot_b data
+    _upsert_puzzle_slot(slot_a, letters_b, center_b, now)
+    # Write slot_b ← old slot_a data
+    _upsert_puzzle_slot(slot_b, letters_a, center_a, now)
+
+    db.session.commit()
+    _PUZZLE_CACHE.pop(slot_a, None)
+    _PUZZLE_CACHE.pop(slot_b, None)
+
+    return jsonify({"slot_a": slot_a, "slot_b": slot_b, "swapped": True})
+
+
+def _upsert_puzzle_slot(slot, letters, center, now):
+    """Write letters and center for a slot (BeePuzzle + BeeConfig)."""
+    row = db.session.get(BeePuzzle, slot)
+    letters_csv = ",".join(letters)
+    if row:
+        row.letters = letters_csv
+        row.updated_at = now
+    else:
+        db.session.add(BeePuzzle(slot=slot, letters=letters_csv, created_at=now, updated_at=now))
+
+    key = f"center_{slot}"
+    config_row = BeeConfig.query.filter_by(key=key).first()
+    if config_row:
+        config_row.value = center
+    else:
+        db.session.add(BeeConfig(key=key, value=center))
+
+
+@app.route("/api/kenno/puzzle/<int:slot>", methods=["DELETE"])
+@login_required
+def bee_delete_puzzle(slot):
+    """Delete a custom puzzle, reverting to hardcoded if available (admin only)."""
+    if getattr(current_user, "role", None) != "admin":
+        return jsonify({"error": "Admin access required"}), 403
+
+    today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
+    if slot == today_slot:
+        return jsonify({"error": "Cannot delete today's live puzzle"}), 409
+
+    row = db.session.get(BeePuzzle, slot)
+    if not row:
+        return jsonify({"error": "No custom puzzle in this slot"}), 404
+
+    has_hardcoded = 0 <= slot < len(PUZZLES)
+    db.session.delete(row)
+
+    config_row = BeeConfig.query.filter_by(key=f"center_{slot}").first()
+    if has_hardcoded:
+        # Reset center to the seeded default for the hardcoded puzzle
+        default_center = _DEFAULT_CENTERS[slot] if slot < len(_DEFAULT_CENTERS) else sorted(PUZZLES[slot]["letters"])[0]
+        if config_row:
+            config_row.value = default_center
+        else:
+            db.session.add(BeeConfig(key=f"center_{slot}", value=default_center))
+    else:
+        # Beyond hardcoded range — clean up the center config entirely
+        if config_row:
+            db.session.delete(config_row)
+
+    db.session.commit()
+    _PUZZLE_CACHE.pop(slot, None)
+
+    return jsonify({
+        "slot": slot,
+        "deleted": True,
+        "reverted_to_hardcoded": has_hardcoded,
+    })

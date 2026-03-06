@@ -145,6 +145,15 @@ class BeeConfig(db.Model):
     value = db.Column(db.Text, nullable=False)
 
 
+class BeePuzzle(db.Model):
+    """Admin-created custom puzzles that override hardcoded PUZZLES entries."""
+    __tablename__ = 'bee_puzzles'
+    slot = db.Column(db.Integer, primary_key=True)
+    letters = db.Column(db.String(50), nullable=False)  # comma-separated: "a,e,k,l,n,s,ö"
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+
 class BeeAchievement(db.Model):
     """Records when anonymous players reach rank milestones in Sanakenno."""
     __tablename__ = 'bee_achievements'
