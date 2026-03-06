@@ -531,7 +531,7 @@ def _validate_puzzle_letters(letters):
 
 @app.route("/api/kenno/preview", methods=["POST"])
 @login_required
-@limiter.limit("5/minute")
+@limiter.limit("20/minute")
 def bee_preview():
     """Preview all 7 center-letter variations for arbitrary letters (admin only)."""
     if getattr(current_user, "role", None) != "admin":
@@ -547,7 +547,17 @@ def bee_preview():
         stats = _compute_variation(letters, letter)
         variations.append(stats)
 
-    return jsonify({"letters": letters, "variations": variations})
+    result = {"letters": letters, "variations": variations}
+
+    # If a center letter is specified, also return the word list for that variation
+    center = data.get("center", "").strip().lower()
+    if center and center in letters:
+        puzzle = {"center": center, "outer": [l for l in letters if l != center]}
+        words, max_score, _hashes, _hints = _compute_puzzle(puzzle)
+        result["words"] = words
+        result["center"] = center
+
+    return jsonify(result)
 
 
 @app.route("/api/kenno/puzzle", methods=["POST"])
