@@ -594,7 +594,7 @@ onMounted(async () => {
           class="flex items-center gap-1 px-0.5 py-0.5 text-xs cursor-pointer hover:opacity-80"
           :style="{
             background: row.slot === currentSlot
-              ? 'var(--color-bg-secondary)'
+              ? 'rgba(255, 100, 62, 0.15)'
               : row.isToday
                 ? 'rgba(239, 68, 68, 0.1)'
                 : 'transparent',
