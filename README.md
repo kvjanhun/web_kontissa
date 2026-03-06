@@ -19,7 +19,7 @@ Personal portfolio website by Konsta Janhunen.
 - Interactive terminal animation on the home page (cowsay, weather, etc.)
 - Admin panel for managing content sections (tab-based dashboard)
 - Shared recipe book with search, categories, cooking mode with wake lock
-- [Sanakenno](https://erez.ac/sanakenno) — Finnish Spelling Bee word game with 41 curated puzzles
+- [Sanakenno](https://erez.ac/sanakenno) — Finnish Spelling Bee word game with admin-managed puzzle rotation
 - Real-time weather from the Finnish Meteorological Institute (FMI) API
 - Accessibility: skip links, ARIA attributes, focus indicators, reduced-motion support
 

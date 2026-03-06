@@ -60,7 +60,7 @@ web_kontissa/
 │       │   ├── AppFooter.vue   # Full auth-aware nav links + last updated date from /api/meta
 │       │   ├── ThemeToggle.vue # Sun/moon toggle button
 │       │   ├── LangToggle.vue  # EN/FI language toggle button
-│       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, uptime, date, time, whoami, clear
+│       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, echo, date, clear; fuzzy "Did you mean:" suggestions via Levenshtein distance ≤ 2
 │       │   ├── weatherIcons.js    # Inline SVG weather icons + wawaToIcon(code) mapper
 │       │   ├── SectionBlock.vue    # Section renderer with 4 types: 'quote' (decorative centered blockquote, no card), 'currently' (card with accent-bordered label:value items), 'pills' (card with 3-col grid of flat accent-bordered items), 'text' (card with v-html content). All card types have orange accent bar under title.
 │       │   └── admin/
@@ -69,7 +69,7 @@ web_kontissa/
 │       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
 │       │       ├── AdminHealth.vue       # System health key-value display
 │       │       ├── AdminBeeStats.vue     # Sanakenno stats (page views, blocked words, puzzles) + daily achievements table (7d/30d/90d period selector, all 7 rank columns, totals row)
-│       │       ├── AdminBeePuzzleTool.vue # Kennotyökalu tab: puzzle number input (1-indexed), 7-column variations grid (letter, word_count, max_score, pangram_count; active center highlighted), click to switch center via POST /api/kenno/center, full word list (multi-column, alphabetical + length sort, 10 per column) with per-word block button (×) and confirm dialog
+│       │       ├── AdminBeePuzzleTool.vue # Kennotyökalu tab: unified single-editor. Left column: scrollable all-puzzles slot list with dates + custom/today badges. Right column: compact toolbar (slot number, letters input, swap, delete/revert) + 7-column variations grid (word_count, max_score, pangram_count per letter; active highlighted) + full word list with block buttons. Clean state: view/switch center. Dirty state: preview letters → select center → save.
 │       │       └── AdminBlockedWords.vue # Blocked words table with unblock
 │       └── views/
 │           ├── HomePage.vue    # Hero with terminal animation
@@ -84,14 +84,14 @@ web_kontissa/
 │           └── NotFound.vue    # 404
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
-│   ├── models.py               # User, Section (with section_type), Recipe, Ingredient, Step, BlockedWord, BeeConfig, BeeAchievement, PageView models
+│   ├── models.py               # User, Section (with section_type), Recipe, Ingredient, Step, BlockedWord, BeeConfig, BeePuzzle, BeeAchievement, PageView models
 │   ├── routes.py               # Static file serving, /api/sections CRUD (admin_required), /api/meta, sitemap.xml
 │   ├── auth.py                 # /api/login, /api/logout, /api/me
 │   ├── recipes.py              # /api/recipes CRUD (login_required), search, category filter, slug generation
 │   ├── utils.py                # GitHub API commit date with 6-hour cache
 │   ├── create_admin.py         # One-time utility: create admin user with db.create_all()
 │   ├── api/
-│   │   ├── bee.py              # GET /api/kenno + POST /api/kenno/block + GET /api/kenno/stats + GET /api/kenno/blocked + DELETE /api/kenno/block/<id> + POST /api/kenno/achievement + GET /api/kenno/achievements; defines VALID_RANKS constant
+│   │   ├── bee.py              # GET /api/kenno + POST /api/kenno/block + GET /api/kenno/stats + GET /api/kenno/blocked + DELETE /api/kenno/block/<id> + POST /api/kenno/achievement + GET /api/kenno/achievements + POST /api/kenno/preview + POST /api/kenno/puzzle + GET /api/kenno/schedule + POST /api/kenno/puzzle/swap + DELETE /api/kenno/puzzle/<slot>; defines VALID_RANKS constant
 │   │   ├── cowsay.py           # GET /api/cowsay (character, think params) + GET /api/cowsay/characters
 │   │   ├── health.py           # GET /api/admin/health (system health stats)
 │   │   ├── pageviews.py        # POST /api/pageview (public) + GET /api/pageviews (admin, with timestamps)
@@ -107,7 +107,7 @@ web_kontissa/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
     ├── test_admin_health.py    # Admin health endpoint tests
     ├── test_auth.py            # Auth endpoint tests
-    ├── test_bee.py             # Sanakenno endpoint + scoring + variations + achievement tests (87 tests)
+    ├── test_bee.py             # Sanakenno endpoint + scoring + variations + achievement + custom puzzle tests (130 tests)
     ├── test_bee_stats.py       # Sanakenno stats endpoint tests
     ├── test_blocked_words.py   # Blocked words list + unblock endpoint tests
     ├── test_cowsay.py           # Cowsay endpoint tests (default, custom message, truncation, special chars, character, think, characters list)
@@ -143,6 +143,11 @@ web_kontissa/
 | GET | `/api/kenno/stats` | Admin | Sanakenno stats (page views, blocked count, total puzzles) |
 | GET | `/api/kenno/variations?puzzle=N` | Admin | All 7 center-letter variations with stats (word_count, max_score, pangram_count, is_active) |
 | POST | `/api/kenno/center` | Admin | Set center letter for a puzzle (`{puzzle: int, center: str}`) |
+| POST | `/api/kenno/preview` | Admin | Preview 7 center-letter variations for arbitrary letters (rate-limited 20/min); optionally include `center` in body to also return word list |
+| POST | `/api/kenno/puzzle` | Admin | Create or update a custom puzzle in a slot (`{slot, letters, center}`); rejects today's live slot (409) |
+| GET | `/api/kenno/schedule?days=N` | Admin | Upcoming rotation schedule (default 14 days, clamped 1–90); returns dates, slots, display numbers, custom/today flags |
+| POST | `/api/kenno/puzzle/swap` | Admin | Swap two puzzle slots (`{slot_a, slot_b}`); swaps both letters and center; rejects today's live slot (409) |
+| DELETE | `/api/kenno/puzzle/<slot>` | Admin | Remove custom puzzle from slot; reverts hardcoded slots to original, clears extension slots entirely; rejects today's live slot (409) |
 | POST | `/api/kenno/achievement` | Public | Record anonymous rank achievement (session-deduped; validates rank against `VALID_RANKS`, puzzle_number, and numeric fields) |
 | GET | `/api/kenno/achievements` | Admin | Daily achievement counts grouped by rank; query param `days` (default 30, clamped 1–90); returns `{days, daily: [{date, counts: {rank: N}, total}], totals: {rank: N}}` |
 | POST | `/api/pageview` | Public | Increment page view counter for a path (`{"path": "/sanakenno"}`) |
@@ -247,14 +252,14 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling Bee rules with a Finnish word list. Nav shows "Sanakenno" in both languages. Backend API at `GET /api/kenno`.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
-- **Puzzles**: 41 curated letter sets in `app/api/bee.py` (`PUZZLES` list, each entry is `{"letters": [7 sorted letters]}`). The center letter for each puzzle is stored in the `BeeConfig` table (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup. Admins can view all 7 center-letter variations via `GET /api/kenno/variations` and switch the active center via `POST /api/kenno/center`. Rotates on a 41-day cycle via a deterministic sequential formula: `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily on first access and cached in `_PUZZLE_CACHE`.
+- **Puzzles**: 41 hardcoded letter sets in `app/api/bee.py` (`PUZZLES` list, each entry is `{"letters": [7 sorted letters]}`). Custom puzzles created via the admin tool are stored in the `BeePuzzle` table and override hardcoded entries for their slot; slots beyond 41 extend the rotation automatically. The total puzzle count (`_total_puzzles()`) equals 41 or the highest `BeePuzzle.slot + 1`, whichever is larger. Center letters are stored in `BeeConfig` (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup. Rotation is deterministic: `(START_INDEX + days_since_ROTATION_START) % total_puzzles`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily and cached in `_PUZZLE_CACHE`. All mutating endpoints enforce live-slot protection (409) so today's puzzle can never be edited.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 7 Finnish rank levels based on % of max_score: Etsi sanoja! (0%), Hyvä alku (2%), Nyt mennään! (10%), Onnistuja (20%), Sanavalmis (40%), Ällistyttävä (70%), Täysi kenno (100%).
 - **Word hiding**: The API sends SHA-256 hashes of valid words (`word_hashes`) instead of plaintext. The frontend hashes user input via `crypto.subtle.digest` and checks against the hash set. Admin requests also receive the plaintext `words` array, used by `AdminBeePuzzleTool.vue` for the word list display and blocking feature. Pre-computed `hint_data` (word_count, pangram_count, by_letter, by_length, by_pair) powers all four hint panels without exposing the word list.
 - **Frontend**: `SanakennoPage.vue` — SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side validation via SHA-256 hash comparison. All game UI strings are Finnish-only regardless of site language setting. The browser tab title shows `"Sanakenno — #N"` where N is the current puzzle number. The title is displayed inline in the top bar row alongside the back link, "?" help button, and theme toggle — there is no separate title section. Score, progress bar, and the hints-toggle/share button row are in a `position: sticky; top: 0` section that remains visible while scrolling. Rank thresholds and the hints panel are outside the sticky section (they expand/collapse). All admin controls (puzzle switcher, center variations, remaining words, block word) have been removed from `SanakennoPage.vue`; they live in `AdminBeePuzzleTool.vue`.
 - **Touch zoom prevention**: `touch-action: manipulation` on the root game div prevents double-tap zoom on iOS Safari. The honeycomb SVG element has `touch-action: none` scoped to prevent mobile browsers from interpreting hexagon taps as scroll gestures — the rest of the page scrolls normally.
 - **State persistence**: Found words and score are saved to `localStorage` under key `sanakenno_state` as `{puzzleNumber, foundWords[], score, hintsUnlocked[], startedAt}`. Restored on page load when the stored puzzle number matches the current puzzle. On restore, `foundWords` is filtered against the current puzzle's word list to discard any stale entries (e.g. from a blocked word). Prevents progress loss on refresh or navigation.
-- **Admin puzzle tool** (`AdminBeePuzzleTool.vue`, "Kennotyökalu" tab): Puzzle number input (1-indexed, 1–totalPuzzles), defaulting to today's puzzle number (fetched from `GET /api/kenno`). Shows a 7-column variations grid per puzzle (letter, word_count, max_score, pangram_count; active center highlighted with accent color). Clicking a non-active letter switches the center via `POST /api/kenno/center`. Full word list displayed in a multi-column layout (alphabetical + length sort, 10 per column) with a per-word block button (×) and a confirm dialog. `localStorage` key `sanakenno_admin_puzzle` is no longer used (admin puzzle selection is session-local to the tool, not persisted). Regular users always see the daily rotation.
+- **Admin puzzle tool** (`AdminBeePuzzleTool.vue`, "Kennotyökalu" tab): Unified single-editor layout. Left column: scrollable slot list for all puzzles (1–N), auto-scrolls to today's slot on load, shows play dates, "today" badge, and "custom" badge for DB-overridden puzzles. Right column top: compact toolbar with slot number display, letters text input (dirty state), swap-slot input, and delete/revert button. Right column main: 7-column variations grid (word_count, max_score, pangram_count per letter; active center highlighted). Below grid: word list (multi-column, 10 per column) with per-word block button. Clean state: view current puzzle, click a variation column to switch center via `POST /api/kenno/center`. Dirty state: edit letters → Enter to preview via `POST /api/kenno/preview` → select center from results → save via `POST /api/kenno/puzzle`. Reset button discards unsaved letter changes. Puzzle selection is session-local (not persisted to localStorage). Regular users always see the daily rotation.
 - **Found words**: Compact view shows the last 6 found words in a single no-wrap overflow-hidden row. "Kaikki ▼" expands to a full alphabetical multi-column list; "Vähemmän ▲" collapses back. Sort order: alphabetical with word length (shortest first) as a tiebreaker.
 - **Animations**: Invalid submission triggers a shake animation (`word-shake`, 0.4s) on the input row. Honeycomb hexagons scale down on `pointerdown` for press feedback. A rank-up notification ("Uusi taso: …!") is shown for 3 seconds when score crosses a rank threshold (except for the two celebration milestones).
 - **Level system**: Täysi kenno (100%) is hidden from the rank threshold display — players see Ällistyttävä (70%) as the visible goal. Täysi kenno appears as a surprise reveal when reached.
@@ -272,12 +277,12 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: puzzle number, current rank, score/max_score, and hint icons (📊🔤📏🔠) for any activated hints. After copying, a brief "Kopioitu leikepöydälle!" confirmation is shown.
 - **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, and `og:url` for link preview cards (Finnish game description).
 - **Favicon swap**: `SanakennoPage.vue` swaps the favicon to an orange pointy-top hexagon SVG on `onMounted` and restores the original on `onUnmounted`.
-- **Word blocking**: Admins can permanently remove a word via `POST /api/kenno/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. After blocking, `AdminBeePuzzleTool.vue` refetches the word list to reflect the removal. `BeeConfig` model also exists in `models.py` as a key-value store for future scheduling state.
+- **Word blocking**: Admins can permanently remove a word via `POST /api/kenno/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. After blocking, `AdminBeePuzzleTool.vue` refetches the word list to reflect the removal.
 - **Timer**: Elapsed play time is tracked from `startedAt` (epoch ms). Tab visibility is monitored via `visibilitychange`, `blur`, and `pagehide` events to accumulate paused time in `totalPausedMs`.
 - **No auth required**: Public endpoint, no database usage for normal play.
 - **Achievement tracking**: On each rank transition (when `rankAfter !== rankBefore`), `SanakennoPage.vue` fires a fire-and-forget `POST /api/kenno/achievement` with `{puzzle_number, rank, score, max_score, words_found, elapsed_ms}`. The server deduplicates per session via `session["achieved_ranks"]` (a list of `"puzzle:rank"` strings) so each rank is recorded at most once per browser session. Achievements are stored in the `BeeAchievement` model. The admin `GET /api/kenno/achievements` endpoint returns daily counts by rank for the chosen period. Default period is 7 days in `AdminBeeStats.vue`.
-- **Center variation selector**: The 7-column grid (word count, max score, pangram count per center letter; active center highlighted) lives in `AdminBeePuzzleTool.vue`, not in `SanakennoPage.vue`. Clicking a non-active letter calls `POST /api/kenno/center` and refreshes the display.
-- **Adding puzzles**: Add entries to `PUZZLES` in `app/api/bee.py` with `{"letters": [7 sorted letters]}` and append the desired default center to `_DEFAULT_CENTERS`. Word filtering and scoring are automatic on first access. Cycle length equals `len(PUZZLES)`, currently 41.
+- **Center variation selector**: The 7-column grid (word count, max score, pangram count per center letter; active center highlighted) lives in `AdminBeePuzzleTool.vue`. Clicking a non-active letter in clean state calls `POST /api/kenno/center` and refreshes the display.
+- **Adding puzzles**: Via admin UI: use the Kennotyökalu editor (enter letters, preview, select center, save to any non-live slot). Via code: add an entry to `PUZZLES` in `app/api/bee.py` with `{"letters": [7 sorted letters]}` and append the desired default center to `_DEFAULT_CENTERS`. Word filtering and scoring are automatic on first access. Cycle length equals `_total_puzzles()` (currently at minimum 41).
 
 ## Security Considerations
 
