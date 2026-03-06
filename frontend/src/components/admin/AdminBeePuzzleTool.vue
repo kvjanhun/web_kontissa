@@ -320,7 +320,14 @@ async function blockWord(word) {
       body: JSON.stringify({ word }),
     })
     if (!res.ok) throw new Error()
-    await loadSlot(currentSlot.value)
+    if (isDirty.value && selectedCenter.value) {
+      // Re-fetch preview to preserve dirty editing state
+      const center = selectedCenter.value
+      await fetchPreview()
+      await selectPreviewCenter(center)
+    } else {
+      await loadSlot(currentSlot.value)
+    }
   } catch {
     wordsError.value = 'Sanan poisto epäonnistui.'
   }
