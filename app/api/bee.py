@@ -6,7 +6,7 @@ from flask_login import current_user, login_required
 import hashlib
 import os
 
-from app import app
+from app import app, limiter
 from app.models import db, BlockedWord, BeeConfig, BeeAchievement, PageView
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
@@ -371,6 +371,7 @@ VALID_RANKS = [
 
 
 @app.route("/api/kenno/achievement", methods=["POST"])
+@limiter.limit("10/minute")
 def bee_achievement():
     """Record an anonymous rank achievement (session-deduped)."""
     data = request.get_json() or {}

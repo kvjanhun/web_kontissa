@@ -19,3 +19,6 @@ frontend/node_modules/
 
 # Internal planning docs
 ROADMAP.md
+GEMINI.md
+gemini_review.md
+claude_feedback.md
