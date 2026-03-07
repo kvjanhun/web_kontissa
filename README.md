@@ -23,6 +23,10 @@ Personal portfolio website by Konsta Janhunen.
 - Real-time weather from the Finnish Meteorological Institute (FMI) API
 - Accessibility: skip links, ARIA attributes, focus indicators, reduced-motion support
 
+## Documentation
+
+- [ADMIN_TOOLS.md](./ADMIN_TOOLS.md) — Admin dashboard guide: Kennotyökalu puzzle editor (with screenshot), Sanakenno stats, and security notes
+
 ## Background
 
 Originally built with Flask + Jinja2 templates and vanilla JavaScript. In February 2026, the frontend was migrated to Vue 3 SFCs with Vite, the Jinja2 templates replaced by Vue components, and Flask routes converted to a JSON API. The site has since grown to include recipes, Sanakenno, i18n, and SSG — all developed with Claude (Anthropic), orchestrated by Konsta.

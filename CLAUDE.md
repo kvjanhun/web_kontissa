@@ -35,6 +35,7 @@ web_kontissa/
 ├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80
 ├── run.py                      # Flask dev entry point (port 5001, debug=True)
 ├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, flask-limiter, gunicorn, cowsay, requests)
+├── ADMIN_TOOLS.md              # Admin tool documentation with screenshots (Kennotyökalu, Bee Stats)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
@@ -103,6 +104,8 @@ web_kontissa/
 ├── scripts/
 │   ├── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
 │   └── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
+├── docs/
+│   └── kenno-tool-screenshot.png  # Kennotyökalu screenshot for ADMIN_TOOLS.md
 └── tests/
     ├── conftest.py             # pytest fixtures (app, client, admin_user, regular_user, logged_in_*)
     ├── test_admin_health.py    # Admin health endpoint tests
