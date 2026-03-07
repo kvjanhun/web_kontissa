@@ -25,7 +25,10 @@ Personal portfolio website by Konsta Janhunen.
 
 ## Documentation
 
-- [ADMIN_TOOLS.md](./ADMIN_TOOLS.md) — Admin dashboard guide: Kennotyökalu puzzle editor (with screenshot), Sanakenno stats, and security notes
+### Admin tools
+Site has many self-made admin tools that require authentication on the live site. Some of them are documented below.
+
+- [ADMIN_TOOLS.md](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
 
 ## Background
 
