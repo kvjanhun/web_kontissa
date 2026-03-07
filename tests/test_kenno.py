@@ -4,7 +4,7 @@ import hashlib
 from datetime import date, timedelta
 import pytest
 from unittest.mock import patch
-from app.api.bee import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzle, _get_puzzle_dict
+from app.api.kenno import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzle, _get_puzzle_dict
 
 
 # ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ class TestPuzzleCatalogue:
 # ---------------------------------------------------------------------------
 
 class TestScoringFunction:
-    """Test the _score_word function from bee.py directly."""
+    """Test the _score_word function from kenno.py directly."""
 
     def test_four_letter_word_scores_one(self):
         all_letters = frozenset("aklsunt")
@@ -362,7 +362,7 @@ class TestBlockWord:
     @pytest.fixture(autouse=True)
     def clear_cache(self):
         """Ensure a clean puzzle cache for each test."""
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         yield
         _PUZZLE_CACHE.clear()
@@ -470,7 +470,7 @@ class TestSetCenter:
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         yield
         _PUZZLE_CACHE.clear()
@@ -505,7 +505,7 @@ class TestSetCenter:
         assert res.status_code == 400
 
     def test_persists_across_cache_clear(self, logged_in_admin):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         letters = PUZZLES[0]["letters"]
         new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
 
@@ -530,7 +530,7 @@ class TestSetCenter:
 # Rank achievement tracking
 # ---------------------------------------------------------------------------
 
-class TestBeeAchievements:
+class TestKennoAchievements:
     """POST /api/kenno/achievement and GET /api/kenno/achievements."""
 
     VALID_ACHIEVEMENT = {
@@ -648,7 +648,7 @@ class TestBeeAchievements:
         assert data["days"] == 1
 
     def test_get_all_ranks_present_in_totals(self, logged_in_admin):
-        from app.api.bee import VALID_RANKS
+        from app.api.kenno import VALID_RANKS
         res = logged_in_admin.get("/api/kenno/achievements")
         data = res.get_json()
         for rank in VALID_RANKS:
@@ -720,14 +720,14 @@ class TestSavePuzzleEndpoint:
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         yield
         _PUZZLE_CACHE.clear()
 
     def _safe_slot(self):
         """Return a slot that is NOT today's live puzzle."""
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         slot = 5
@@ -757,7 +757,7 @@ class TestSavePuzzleEndpoint:
         assert all_api_letters == set(self.VALID_LETTERS)
 
     def test_rejects_live_slot(self, logged_in_admin):
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         res = logged_in_admin.post("/api/kenno/puzzle", json={
@@ -855,7 +855,7 @@ class TestScheduleEndpoint:
             assert entry["is_today"] is False
 
     def test_marks_custom_puzzles(self, logged_in_admin):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         # Save a custom puzzle to a slot that appears in the schedule
         data = logged_in_admin.get("/api/kenno/schedule?days=30").get_json()
@@ -906,14 +906,14 @@ class TestSwapPuzzlesEndpoint:
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         yield
         _PUZZLE_CACHE.clear()
 
     def _two_safe_slots(self):
         """Return two slots that are NOT today's live puzzle."""
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         slots = [s for s in [3, 4, 5, 6] if s != today_slot]
@@ -938,7 +938,7 @@ class TestSwapPuzzlesEndpoint:
         assert set(new_b["letters"] + [new_b["center"]]) == letters_a
 
     def test_rejects_live_slot(self, logged_in_admin):
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         other = 3 if today_slot != 3 else 4
@@ -991,13 +991,13 @@ class TestDeletePuzzleEndpoint:
 
     @pytest.fixture(autouse=True)
     def clear_cache(self):
-        from app.api.bee import _PUZZLE_CACHE
+        from app.api.kenno import _PUZZLE_CACHE
         _PUZZLE_CACHE.clear()
         yield
         _PUZZLE_CACHE.clear()
 
     def _safe_slot(self):
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         slot = 5
@@ -1033,7 +1033,7 @@ class TestDeletePuzzleEndpoint:
         assert res.status_code == 404
 
     def test_rejects_live_slot(self, logged_in_admin):
-        from app.api.bee import _get_puzzle_for_date, _HELSINKI
+        from app.api.kenno import _get_puzzle_for_date, _HELSINKI
         from datetime import datetime
         today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
         res = logged_in_admin.delete(f"/api/kenno/puzzle/{today_slot}")

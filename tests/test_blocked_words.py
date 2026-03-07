@@ -1,7 +1,7 @@
 """Tests for blocked words list and unblock endpoints."""
 
 from app.models import db, BlockedWord
-from app.api.bee import _PUZZLE_CACHE
+from app.api.kenno import _PUZZLE_CACHE
 
 
 class TestBlockedWordsList:

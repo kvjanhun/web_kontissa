@@ -7,7 +7,7 @@ os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 
 from app import app as flask_app, limiter
 from app.models import db, User, Section, Recipe, Ingredient, Step
-from app.api.bee import _seed_centers, _PUZZLE_CACHE
+from app.api.kenno import _seed_centers, _PUZZLE_CACHE
 from werkzeug.security import generate_password_hash
 
 

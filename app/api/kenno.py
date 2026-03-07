@@ -7,7 +7,7 @@ import hashlib
 import os
 
 from app import app, limiter
-from app.models import db, BlockedWord, BeeConfig, BeeAchievement, BeePuzzle, PageView
+from app.models import db, BlockedWord, KennoConfig, KennoAchievement, KennoPuzzle, PageView
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -19,7 +19,7 @@ except FileNotFoundError:
     _ALL_WORDS = frozenset()
 
 # Each puzzle is a flat set of 7 letters (sorted).  The center letter for each
-# puzzle is stored in the BeeConfig table (key = "center_{idx}").
+# puzzle is stored in the KennoConfig table (key = "center_{idx}").
 PUZZLES = [
     {"letters": ["e", "n", "p", "r", "s", "y", "ä"]},       # 1
     {"letters": ["d", "e", "h", "l", "r", "s", "ä"]},       # 2
@@ -64,7 +64,7 @@ PUZZLES = [
     {"letters": ["e", "i", "l", "n", "v", "y", "ö"]},       # 41
 ]
 
-# Original center letters from the old format — used to seed BeeConfig on first run.
+# Original center letters from the old format — used to seed KennoConfig on first run.
 _DEFAULT_CENTERS = [
     "r", "ä", "n", "n", "l", "y", "h", "h", "p", "v",
     "s", "h", "p", "d", "j", "y", "u", "d", "n", "o",
@@ -75,17 +75,17 @@ _DEFAULT_CENTERS = [
 
 
 def _seed_centers():
-    """Seed BeeConfig with default center letters if not yet migrated."""
-    if BeeConfig.query.filter_by(key="center_0").first():
+    """Seed KennoConfig with default center letters if not yet migrated."""
+    if KennoConfig.query.filter_by(key="center_0").first():
         return  # already seeded
     for idx, center in enumerate(_DEFAULT_CENTERS):
-        db.session.add(BeeConfig(key=f"center_{idx}", value=center))
+        db.session.add(KennoConfig(key=f"center_{idx}", value=center))
     db.session.commit()
 
 
 def _get_puzzle_letters(idx):
     """Return the 7 letters for puzzle *idx*, checking DB first, then PUZZLES."""
-    row = BeePuzzle.query.filter_by(slot=idx).first()
+    row = KennoPuzzle.query.filter_by(slot=idx).first()
     if row:
         return row.letters.split(",")
     if 0 <= idx < len(PUZZLES):
@@ -95,15 +95,15 @@ def _get_puzzle_letters(idx):
 
 def _total_puzzles():
     """Return the total number of puzzle slots (hardcoded + any DB extensions)."""
-    highest_db = db.session.query(db.func.max(BeePuzzle.slot)).scalar()
+    highest_db = db.session.query(db.func.max(KennoPuzzle.slot)).scalar()
     if highest_db is not None:
         return max(len(PUZZLES), highest_db + 1)
     return len(PUZZLES)
 
 
 def _get_center(idx):
-    """Read the chosen center letter for puzzle *idx* from BeeConfig."""
-    row = BeeConfig.query.filter_by(key=f"center_{idx}").first()
+    """Read the chosen center letter for puzzle *idx* from KennoConfig."""
+    row = KennoConfig.query.filter_by(key=f"center_{idx}").first()
     if row:
         return row.value
     # Fallback: first letter alphabetically
@@ -273,7 +273,7 @@ def kenno():
 
 @app.route("/api/kenno/block", methods=["POST"])
 @login_required
-def bee_block_word():
+def kenno_block_word():
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
 
@@ -292,7 +292,7 @@ def bee_block_word():
 
 @app.route("/api/kenno/variations")
 @login_required
-def bee_variations():
+def kenno_variations():
     """Return all 7 center-letter variations for a puzzle (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -321,7 +321,7 @@ def bee_variations():
 
 @app.route("/api/kenno/center", methods=["POST"])
 @login_required
-def bee_set_center():
+def kenno_set_center():
     """Set the center letter for a puzzle (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -341,11 +341,11 @@ def bee_set_center():
         return jsonify({"error": f"'{center}' is not one of the 7 letters"}), 400
 
     key = f"center_{puzzle_idx}"
-    row = BeeConfig.query.filter_by(key=key).first()
+    row = KennoConfig.query.filter_by(key=key).first()
     if row:
         row.value = center
     else:
-        db.session.add(BeeConfig(key=key, value=center))
+        db.session.add(KennoConfig(key=key, value=center))
     db.session.commit()
 
     # Clear cached data for this puzzle so the next request uses the new center
@@ -356,7 +356,7 @@ def bee_set_center():
 
 @app.route("/api/kenno/stats")
 @login_required
-def bee_stats():
+def kenno_stats():
     """Sanakenno overview stats (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -375,7 +375,7 @@ def bee_stats():
 
 @app.route("/api/kenno/blocked")
 @login_required
-def bee_blocked_list():
+def kenno_blocked_list():
     """List all blocked words with timestamps (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -399,7 +399,7 @@ VALID_RANKS = [
 
 @app.route("/api/kenno/achievement", methods=["POST"])
 @limiter.limit("10/minute")
-def bee_achievement():
+def kenno_achievement():
     """Record an anonymous rank achievement (session-deduped)."""
     data = request.get_json() or {}
 
@@ -431,7 +431,7 @@ def bee_achievement():
     if achieved_key in achieved_ranks:
         return jsonify({"status": "already_recorded"}), 200
 
-    achievement = BeeAchievement(
+    achievement = KennoAchievement(
         puzzle_number=puzzle_number,
         rank=rank,
         score=score_val,
@@ -450,7 +450,7 @@ def bee_achievement():
 
 @app.route("/api/kenno/achievements")
 @login_required
-def bee_achievements():
+def kenno_achievements():
     """Daily achievement summary (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -463,12 +463,12 @@ def bee_achievements():
 
     rows = (
         db.session.query(
-            db.func.date(BeeAchievement.achieved_at),
-            BeeAchievement.rank,
+            db.func.date(KennoAchievement.achieved_at),
+            KennoAchievement.rank,
             db.func.count(),
         )
-        .filter(BeeAchievement.achieved_at >= start)
-        .group_by(db.func.date(BeeAchievement.achieved_at), BeeAchievement.rank)
+        .filter(KennoAchievement.achieved_at >= start)
+        .group_by(db.func.date(KennoAchievement.achieved_at), KennoAchievement.rank)
         .all()
     )
 
@@ -493,7 +493,7 @@ def bee_achievements():
 
 @app.route("/api/kenno/block/<int:word_id>", methods=["DELETE"])
 @login_required
-def bee_unblock_word(word_id):
+def kenno_unblock_word(word_id):
     """Unblock a word by ID (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -532,7 +532,7 @@ def _validate_puzzle_letters(letters):
 @app.route("/api/kenno/preview", methods=["POST"])
 @login_required
 @limiter.limit("20/minute")
-def bee_preview():
+def kenno_preview():
     """Preview all 7 center-letter variations for arbitrary letters (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -562,7 +562,7 @@ def bee_preview():
 
 @app.route("/api/kenno/puzzle", methods=["POST"])
 @login_required
-def bee_save_puzzle():
+def kenno_save_puzzle():
     """Create or update a custom puzzle in a slot (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -586,24 +586,24 @@ def bee_save_puzzle():
     if slot == today_slot:
         return jsonify({"error": "Cannot modify today's live puzzle"}), 409
 
-    # Upsert BeePuzzle row
+    # Upsert KennoPuzzle row
     now = datetime.now(timezone.utc)
-    row = db.session.get(BeePuzzle, slot)
+    row = db.session.get(KennoPuzzle, slot)
     is_new_slot = row is None and slot >= len(PUZZLES)
     if row:
         row.letters = ",".join(letters)
         row.updated_at = now
     else:
-        row = BeePuzzle(slot=slot, letters=",".join(letters), created_at=now, updated_at=now)
+        row = KennoPuzzle(slot=slot, letters=",".join(letters), created_at=now, updated_at=now)
         db.session.add(row)
 
-    # Upsert BeeConfig center entry
+    # Upsert KennoConfig center entry
     key = f"center_{slot}"
-    config_row = BeeConfig.query.filter_by(key=key).first()
+    config_row = KennoConfig.query.filter_by(key=key).first()
     if config_row:
         config_row.value = center
     else:
-        db.session.add(BeeConfig(key=key, value=center))
+        db.session.add(KennoConfig(key=key, value=center))
 
     db.session.commit()
     _PUZZLE_CACHE.pop(slot, None)
@@ -635,7 +635,7 @@ def _next_play_date_for_slot(slot):
 
 @app.route("/api/kenno/schedule")
 @login_required
-def bee_schedule():
+def kenno_schedule():
     """Return upcoming puzzle rotation schedule (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -651,7 +651,7 @@ def bee_schedule():
     for i in range(days):
         d = today + timedelta(days=i)
         slot = _get_puzzle_for_date(d)
-        is_custom = BeePuzzle.query.filter_by(slot=slot).first() is not None
+        is_custom = KennoPuzzle.query.filter_by(slot=slot).first() is not None
         schedule.append({
             "date": d.isoformat(),
             "slot": slot,
@@ -668,7 +668,7 @@ def bee_schedule():
 
 @app.route("/api/kenno/puzzle/swap", methods=["POST"])
 @login_required
-def bee_swap_puzzles():
+def kenno_swap_puzzles():
     """Swap two puzzle slots (admin only). Swaps both letters and center."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -713,26 +713,26 @@ def bee_swap_puzzles():
 
 
 def _upsert_puzzle_slot(slot, letters, center, now):
-    """Write letters and center for a slot (BeePuzzle + BeeConfig)."""
-    row = db.session.get(BeePuzzle, slot)
+    """Write letters and center for a slot (KennoPuzzle + KennoConfig)."""
+    row = db.session.get(KennoPuzzle, slot)
     letters_csv = ",".join(letters)
     if row:
         row.letters = letters_csv
         row.updated_at = now
     else:
-        db.session.add(BeePuzzle(slot=slot, letters=letters_csv, created_at=now, updated_at=now))
+        db.session.add(KennoPuzzle(slot=slot, letters=letters_csv, created_at=now, updated_at=now))
 
     key = f"center_{slot}"
-    config_row = BeeConfig.query.filter_by(key=key).first()
+    config_row = KennoConfig.query.filter_by(key=key).first()
     if config_row:
         config_row.value = center
     else:
-        db.session.add(BeeConfig(key=key, value=center))
+        db.session.add(KennoConfig(key=key, value=center))
 
 
 @app.route("/api/kenno/puzzle/<int:slot>", methods=["DELETE"])
 @login_required
-def bee_delete_puzzle(slot):
+def kenno_delete_puzzle(slot):
     """Delete a custom puzzle, reverting to hardcoded if available (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
@@ -741,21 +741,21 @@ def bee_delete_puzzle(slot):
     if slot == today_slot:
         return jsonify({"error": "Cannot delete today's live puzzle"}), 409
 
-    row = db.session.get(BeePuzzle, slot)
+    row = db.session.get(KennoPuzzle, slot)
     if not row:
         return jsonify({"error": "No custom puzzle in this slot"}), 404
 
     has_hardcoded = 0 <= slot < len(PUZZLES)
     db.session.delete(row)
 
-    config_row = BeeConfig.query.filter_by(key=f"center_{slot}").first()
+    config_row = KennoConfig.query.filter_by(key=f"center_{slot}").first()
     if has_hardcoded:
         # Reset center to the seeded default for the hardcoded puzzle
         default_center = _DEFAULT_CENTERS[slot] if slot < len(_DEFAULT_CENTERS) else sorted(PUZZLES[slot]["letters"])[0]
         if config_row:
             config_row.value = default_center
         else:
-            db.session.add(BeeConfig(key=f"center_{slot}", value=default_center))
+            db.session.add(KennoConfig(key=f"center_{slot}", value=default_center))
     else:
         # Beyond hardcoded range — clean up the center config entirely
         if config_row:

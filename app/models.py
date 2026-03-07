@@ -138,14 +138,14 @@ class PageViewEvent(db.Model):
     timestamp = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
-class BeeConfig(db.Model):
+class KennoConfig(db.Model):
     """Key-value store for Sanakenno puzzle scheduling state."""
     __tablename__ = 'bee_config'
     key = db.Column(db.String(50), primary_key=True)
     value = db.Column(db.Text, nullable=False)
 
 
-class BeePuzzle(db.Model):
+class KennoPuzzle(db.Model):
     """Admin-created custom puzzles that override hardcoded PUZZLES entries."""
     __tablename__ = 'bee_puzzles'
     slot = db.Column(db.Integer, primary_key=True)
@@ -154,7 +154,7 @@ class BeePuzzle(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
 
-class BeeAchievement(db.Model):
+class KennoAchievement(db.Model):
     """Records when anonymous players reach rank milestones in Sanakenno."""
     __tablename__ = 'bee_achievements'
     id = db.Column(db.Integer, primary_key=True)

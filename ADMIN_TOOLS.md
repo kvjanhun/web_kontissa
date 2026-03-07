@@ -31,7 +31,7 @@ Kenno Tool in light mode, showing puzzle #9 (`adegiop`) with center letter **P**
 
 ---
 
-## Sanakenno Stats (Bee Stats)
+## Sanakenno Stats (Kenno Stats)
 
 Separate admin tab providing a high-level overview of game engagement and player achievements.
 

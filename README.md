@@ -63,9 +63,14 @@ Vite proxies `/api/*` requests to Flask on port 5001.
 
 A `.env` file is required with at least `SECRET_KEY` for session signing. The SQLite database lives at `/app/data/site.db` (container path). For local development, set `DATABASE_URI` to point to the local database.
 
-To create an admin user:
+To create a user:
 ```bash
-docker compose exec web python3 -c "from app.create_admin import create; create('username', 'email', 'password', 'admin')"
+docker compose exec web python3 -c "from app.create_user import create; create('username', 'email', 'password', role='admin')"
+```
+
+Or a regular user:
+```bash
+docker compose exec web python3 -c "from app.create_user import create; create('username', 'email', 'password', role='user')"
 ```
 
 ## Production Notes
