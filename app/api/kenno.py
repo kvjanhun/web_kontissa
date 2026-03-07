@@ -1,6 +1,5 @@
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
-import json
 import zoneinfo
 from flask import jsonify, request, session
 from flask_login import current_user, login_required
@@ -18,34 +17,6 @@ try:
         _ALL_WORDS = frozenset(line.strip().replace('-', '') for line in _f if line.strip())
 except FileNotFoundError:
     _ALL_WORDS = frozenset()
-
-_SEED_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'initial_puzzles.json')
-
-
-def _seed_base_puzzles():
-    """Populate missing puzzle slots from initial_puzzles.json.
-
-    Skips slots that already exist in the DB, so existing puzzles
-    (including admin-created ones) are never overwritten.
-    """
-    with open(_SEED_PATH, encoding='utf-8') as f:
-        seed_data = json.load(f)
-
-    now = datetime.now(timezone.utc)
-    changed = False
-    for idx, puzzle in enumerate(seed_data):
-        if not db.session.get(KennoPuzzle, idx):
-            letters_csv = ",".join(puzzle["letters"])
-            db.session.add(KennoPuzzle(slot=idx, letters=letters_csv,
-                                       created_at=now, updated_at=now))
-            changed = True
-        if not KennoConfig.query.filter_by(key=f"center_{idx}").first():
-            db.session.add(KennoConfig(key=f"center_{idx}",
-                                       value=puzzle["center"]))
-            changed = True
-    if changed:
-        db.session.commit()
-
 
 def _get_puzzle_letters(idx):
     """Return the 7 letters for puzzle *idx* from the DB."""

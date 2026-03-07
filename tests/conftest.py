@@ -1,3 +1,4 @@
+import json
 import os
 import pytest
 
@@ -6,9 +7,12 @@ os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 
 
 from app import app as flask_app, limiter
-from app.models import db, User, Section, Recipe, Ingredient, Step
-from app.api.kenno import _seed_base_puzzles, _PUZZLE_CACHE
+from app.models import db, User, Section, Recipe, Ingredient, Step, KennoPuzzle, KennoConfig
+from app.api.kenno import _PUZZLE_CACHE
 from werkzeug.security import generate_password_hash
+from datetime import datetime, timezone
+
+_SEED_PATH = os.path.join(os.path.dirname(__file__), '..', 'scripts', 'initial_puzzles.json')
 
 
 @pytest.fixture()
@@ -22,7 +26,15 @@ def app(tmp_path):
     limiter.enabled = False
     with flask_app.app_context():
         db.create_all()
-        _seed_base_puzzles()
+        # Seed puzzles from JSON for tests (production DB is already populated)
+        with open(_SEED_PATH, encoding='utf-8') as f:
+            seed_data = json.load(f)
+        now = datetime.now(timezone.utc)
+        for idx, puzzle in enumerate(seed_data):
+            db.session.add(KennoPuzzle(slot=idx, letters=",".join(puzzle["letters"]),
+                                       created_at=now, updated_at=now))
+            db.session.add(KennoConfig(key=f"center_{idx}", value=puzzle["center"]))
+        db.session.commit()
         _PUZZLE_CACHE.clear()
         yield flask_app
         db.session.remove()
