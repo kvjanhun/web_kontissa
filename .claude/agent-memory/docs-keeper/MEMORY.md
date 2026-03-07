@@ -5,7 +5,7 @@
 - Vue 3 SPA + Flask JSON API + SQLite, Docker-deployed on RHEL/Intel NUC
 
 ## Key Files to Watch
-- `app/api/kenno.py` — Sanakenno game API; all puzzles in KennoPuzzle DB table, seeded from `app/data/initial_puzzles.json` on first run
+- `app/api/kenno.py` — Sanakenno game API; all puzzles in KennoPuzzle DB table (no hardcoded data in app code)
 - `app/__init__.py` — Flask app factory: LoginManager + Flask-Limiter (30 req/min)
 - `frontend/src/router.js` — authoritative route list (currently 11 routes)
 - `requirements.txt` — authoritative Python dep list

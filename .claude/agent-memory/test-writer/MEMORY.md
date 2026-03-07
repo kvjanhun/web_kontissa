@@ -38,13 +38,13 @@
 
 ## Import Paths for Internal Functions
 - `from app.api.kenno import _score_word, _compute_puzzle` — all importable
-- Seed data loaded from `app/data/initial_puzzles.json` in tests as `_SEED_DATA`
+- Seed data loaded from `scripts/initial_puzzles.json` in tests as `_SEED_DATA`
 - `from app import app as flask_app, limiter` — app and limiter importable directly
 
 ## Known Patterns / Pitfalls
 - `_PUZZLE_CACHE` in kenno.py is module-level; tests may see cached results across
   test runs within the same process — this is fine because compute is deterministic
-- Puzzles are DB-backed; `_seed_base_puzzles()` seeds from JSON on empty DB
+- Puzzles are DB-backed; conftest seeds from `scripts/initial_puzzles.json` for tests
 - Rotation formula: `(START_INDEX + days_since_ROTATION_START) % _total_puzzles()`
 - The `_score_word` function signature is `_score_word(word, all_letters_frozenset)`;
   pass a `frozenset`, not a `set`

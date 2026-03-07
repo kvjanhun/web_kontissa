@@ -103,7 +103,9 @@ web_kontissa/
 │       └── site.db             # SQLite database (Docker volume mounted)
 ├── scripts/
 │   ├── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
-│   └── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
+│   ├── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
+│   ├── seed_puzzles.py         # One-time: populate KennoPuzzle DB from initial_puzzles.json
+│   └── initial_puzzles.json    # Seed data: 41 puzzles with letters and centers
 ├── docs/
 │   └── kenno-tool-screenshot.png  # Kennotyökalu screenshot for ADMIN_TOOLS.md
 └── tests/
@@ -255,7 +257,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling Bee rules with a Finnish word list. Nav shows "Sanakenno" in both languages. Backend API at `GET /api/kenno`.
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k words from Kotus (Institute for the Languages of Finland), filtered to ≥4 chars, lowercase, Finnish alphabet only. Generated one-time by `scripts/process_kotus.py`.
-- **Puzzles**: All puzzles are stored in the `KennoPuzzle` database table. Center letters are stored in `KennoConfig` (key `center_{idx}`). On first startup (empty DB), `_seed_base_puzzles()` populates 41 puzzles from `app/data/initial_puzzles.json`. The total puzzle count (`_total_puzzles()`) equals the highest `KennoPuzzle.slot + 1`. Rotation is deterministic: `(START_INDEX + days_since_ROTATION_START) % total_puzzles`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily and cached in `_PUZZLE_CACHE`. All mutating endpoints enforce live-slot protection (409) so today's puzzle can never be edited.
+- **Puzzles**: All puzzles are stored in the `KennoPuzzle` database table. Center letters are stored in `KennoConfig` (key `center_{idx}`). The total puzzle count (`_total_puzzles()`) equals the highest `KennoPuzzle.slot + 1`. Rotation is deterministic: `(START_INDEX + days_since_ROTATION_START) % total_puzzles`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`. Valid words and max_score are computed lazily and cached in `_PUZZLE_CACHE`. All mutating endpoints enforce live-slot protection (409) so today's puzzle can never be edited. A one-time seed script (`scripts/seed_puzzles.py` + `scripts/initial_puzzles.json`) exists for fresh deployments.
 - **Scoring**: 4-letter word = 1pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Ranks**: 7 Finnish rank levels based on % of max_score: Etsi sanoja! (0%), Hyvä alku (2%), Nyt mennään! (10%), Onnistuja (20%), Sanavalmis (40%), Ällistyttävä (70%), Täysi kenno (100%).
 - **Word hiding**: The API sends SHA-256 hashes of valid words (`word_hashes`) instead of plaintext. The frontend hashes user input via `crypto.subtle.digest` and checks against the hash set. Admin requests also receive the plaintext `words` array, used by `AdminKennoPuzzleTool.vue` for the word list display and blocking feature. Pre-computed `hint_data` (word_count, pangram_count, by_letter, by_length, by_pair) powers all four hint panels without exposing the word list.
@@ -285,7 +287,7 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
 - **No auth required**: Public endpoint, no database usage for normal play.
 - **Achievement tracking**: On each rank transition (when `rankAfter !== rankBefore`), `SanakennoPage.vue` fires a fire-and-forget `POST /api/kenno/achievement` with `{puzzle_number, rank, score, max_score, words_found, elapsed_ms}`. The server deduplicates per session via `session["achieved_ranks"]` (a list of `"puzzle:rank"` strings) so each rank is recorded at most once per browser session. Achievements are stored in the `KennoAchievement` model. The admin `GET /api/kenno/achievements` endpoint returns daily counts by rank for the chosen period. Default period is 7 days in `AdminKennoStats.vue`.
 - **Center variation selector**: The 7-column grid (word count, max score, pangram count per center letter; active center highlighted) lives in `AdminKennoPuzzleTool.vue`. Clicking a non-active letter in clean state calls `POST /api/kenno/center` and refreshes the display.
-- **Adding puzzles**: Via admin UI: use the Kennotyökalu editor (enter letters, preview, select center, save to any non-live slot). All puzzles live in the `KennoPuzzle` DB table. The initial 41 puzzles are seeded from `app/data/initial_puzzles.json` on first startup (empty DB). Word filtering and scoring are automatic on first access. Cycle length equals `_total_puzzles()` (currently at minimum 41).
+- **Adding puzzles**: Via admin UI: use the Kennotyökalu editor (enter letters, preview, select center, save to any non-live slot). All puzzles live in the `KennoPuzzle` DB table. Word filtering and scoring are automatic on first access. Cycle length equals `_total_puzzles()` (currently at minimum 41). For a fresh DB, run `scripts/seed_puzzles.py` to populate the initial 41 puzzles.
 
 ## Security Considerations
 
