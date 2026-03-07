@@ -3,7 +3,7 @@
 from app.models import db, BlockedWord, PageView
 
 
-class TestBeeStats:
+class TestKennoStats:
     """GET /api/kenno/stats"""
 
     def test_requires_auth(self, client):

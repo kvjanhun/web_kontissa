@@ -9,9 +9,9 @@ import AdminSections from '../components/admin/AdminSections.vue'
 import AdminPageViews from '../components/admin/AdminPageViews.vue'
 import AdminRecipes from '../components/admin/AdminRecipes.vue'
 import AdminHealth from '../components/admin/AdminHealth.vue'
-import AdminBeeStats from '../components/admin/AdminBeeStats.vue'
+import AdminKennoStats from '../components/admin/AdminKennoStats.vue'
 import AdminBlockedWords from '../components/admin/AdminBlockedWords.vue'
-import AdminBeePuzzleTool from '../components/admin/AdminBeePuzzleTool.vue'
+import AdminKennoPuzzleTool from '../components/admin/AdminKennoPuzzleTool.vue'
 
 useHead({
   meta: [
@@ -28,8 +28,8 @@ const tabs = [
   { key: 'analytics', labelKey: 'admin.tab.analytics', component: markRaw(AdminPageViews) },
   { key: 'recipes', labelKey: 'admin.tab.recipes', component: markRaw(AdminRecipes) },
   { key: 'health', labelKey: 'admin.tab.health', component: markRaw(AdminHealth) },
-  { key: 'sanakenno', labelKey: 'admin.tab.sanakenno', components: [markRaw(AdminBeeStats), markRaw(AdminBlockedWords)] },
-  { key: 'kennotyokalu', labelKey: 'admin.tab.kennotyokalu', component: markRaw(AdminBeePuzzleTool) },
+  { key: 'sanakenno', labelKey: 'admin.tab.sanakenno', components: [markRaw(AdminKennoStats), markRaw(AdminBlockedWords)] },
+  { key: 'kennotyokalu', labelKey: 'admin.tab.kennotyokalu', component: markRaw(AdminKennoPuzzleTool) },
 ]
 
 const activeTab = ref('sections')

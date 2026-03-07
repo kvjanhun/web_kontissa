@@ -59,9 +59,9 @@ from . import auth
 from . import recipes
 from .api import cowsay
 from .api import weather
-from .api import bee
+from .api import kenno
 from .api import pageviews
 from .api import health
 
 with app.app_context():
-    bee._seed_centers()
+    kenno._seed_centers()

@@ -82,8 +82,8 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 - Sets up Flask-Login (session management) and Flask-Limiter (30 req/min default, in-memory storage)
 - `SECRET_KEY` comes from the `.env` file; falls back to a fixed dev string so sessions survive Flask restarts locally
 - Runs `db.create_all()` and `_run_migrations()` on startup (adds columns to existing SQLite tables that `create_all` won't add)
-- Imports `routes`, `auth`, `recipes`, `api.cowsay`, `api.weather`, `api.bee`, `api.pageviews`, and `api.health` at the bottom, which registers all URL routes
-- After registering routes, calls `bee._seed_centers()` to populate default puzzle center letters if the `BeeConfig` table is empty
+- Imports `routes`, `auth`, `recipes`, `api.cowsay`, `api.weather`, `api.kenno`, `api.pageviews`, and `api.health` at the bottom, which registers all URL routes
+- After registering routes, calls `kenno._seed_centers()` to populate default puzzle center letters if the `KennoConfig` table is empty
 
 ### `app/models.py` — Database Models
 
@@ -97,10 +97,10 @@ class Ingredient(db.Model):  # recipe_id, name, amount, unit, position
 class Step(db.Model):        # recipe_id, content, position
 class BlockedWord(db.Model): # word, blocked_at — admin-curated exclusion list for Sanakenno
 class PageView(db.Model):    # path, count, created_at, updated_at — one row per path, upserted
-class BeeConfig(db.Model):   # key, value — key-value store; currently holds center_{idx} entries
+class KennoConfig(db.Model):   # key, value — key-value store; currently holds center_{idx} entries
 ```
 
-Each model (except `BeeConfig`) has a `to_dict()` method for JSON serialization. `Recipe.to_dict()` accepts `include_children=True` to nest ingredients and steps. `Section.to_dict()` includes `section_type` in its output.
+Each model (except `KennoConfig`) has a `to_dict()` method for JSON serialization. `Recipe.to_dict()` accepts `include_children=True` to nest ingredients and steps. `Section.to_dict()` includes `section_type` in its output.
 
 ### `app/routes.py` — Core Routes
 
@@ -172,7 +172,7 @@ Fetches real-time weather observations from the Finnish Meteorological Institute
 - **Condition mapping**: WMO code table 4680 (automatic weather station present weather codes) mapped to human-readable strings in both English and Finnish
 - **Caching**: Results cached for 10 minutes (matching FMI's update interval). Falls back to cached data if the API is down
 
-### `app/api/bee.py` — Sanakenno Game API
+### `app/api/kenno.py` — Sanakenno Game API
 
 ```
 GET  /api/kenno                      → {center, letters, word_hashes[], hint_data, max_score, puzzle_number, total_puzzles} (admin also gets words[])
@@ -188,7 +188,7 @@ Key implementation details:
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k Finnish words, loaded at startup into `_ALL_WORDS` (a `frozenset`). Hyphenated compounds are normalised by stripping the hyphen.
 - **Word hiding**: The public API returns SHA-256 hashes of valid words (`word_hashes`) instead of plaintext, plus pre-computed `hint_data` for the hint panels. Admin requests also receive the plaintext `words` array.
-- **Puzzles**: 41 curated letter sets in `PUZZLES`. Each entry is `{"letters": [7 sorted letters]}`. The center letter for each puzzle is stored in `BeeConfig` (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup by `_seed_centers()`.
+- **Puzzles**: 41 curated letter sets in `PUZZLES`. Each entry is `{"letters": [7 sorted letters]}`. The center letter for each puzzle is stored in `KennoConfig` (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup by `_seed_centers()`.
 - **Rotation**: Today's puzzle index = `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`.
 - **Scoring**: 4-letter word = 1 pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Cache**: Valid words, max_score, word_hashes, and hint_data are computed lazily on first access and stored in `_PUZZLE_CACHE` (dict keyed by puzzle index). Blocking or unblocking a word clears the entire cache. Admin override (`?puzzle=N`) is accepted when the request comes from an authenticated admin.
@@ -256,7 +256,7 @@ frontend/
     │       ├── AdminPageViews.vue    Page views table with timestamps
     │       ├── AdminRecipes.vue      Recipe table with edit/delete links
     │       ├── AdminHealth.vue       System health key-value display
-    │       ├── AdminBeeStats.vue     Sanakenno overview stats (page views, blocked words, puzzles)
+    │       ├── AdminKennoStats.vue     Sanakenno overview stats (page views, blocked words, puzzles)
     │       └── AdminBlockedWords.vue Blocked words table with unblock button
     └── views/
         ├── HomePage.vue          Hero layout: name, subtitle, terminal, CTA buttons
@@ -322,7 +322,7 @@ Routes that require auth or are dynamic (`/admin`, `/recipes/*`, `/sanakenno`) a
    - **AboutPage** — fetches `/api/sections`, shows loading skeleton or error state, then renders SectionBlocks. Adjacent compact section types (`currently`, `pills`) are grouped into side-by-side two-column pairs on `md+` screens. No `<h1>` heading — the quote section serves as the page intro.
    - **ContactPage** — static links to email, GitHub, LinkedIn
    - **LoginPage** — email/password form wired to `/api/login`, or logged-in state with logout button
-   - **AdminPage** — two-level collapsible dashboard: "Site Admin" (AdminSections, AdminPageViews, AdminRecipes, AdminHealth) and "Sanakenno Admin" (AdminBeeStats, AdminBlockedWords)
+   - **AdminPage** — two-level collapsible dashboard: "Site Admin" (AdminSections, AdminPageViews, AdminRecipes, AdminHealth) and "Sanakenno Admin" (AdminKennoStats, AdminBlockedWords)
    - **RecipeListPage** — recipe cards with debounced search and category filter
    - **RecipeDetailPage** — single recipe with ingredients, interactive step checkboxes, screen wake lock
    - **RecipeFormPage** — create/edit form with dynamic ingredient and step rows
@@ -458,7 +458,7 @@ Button next to the Avut toggle. Copies a plain-text summary to the clipboard: pu
 
 - **Puzzle switcher**: Admins see a 1-indexed number input and "Satunnainen" (random) button. Selected puzzle persists in `localStorage` under `sanakenno_admin_puzzle`. Confirmation requested only if there is existing progress to lose.
 - **Center variation selector**: 7-column grid showing word count, max score, and pangram count for each possible center letter. Active center highlighted with accent color. Clicking a letter calls `POST /api/kenno/center`.
-- **Word blocking**: `AdminBlockedWords.vue` shows blocked words with timestamps and an unblock button. New words blocked via `AdminBeeStats.vue` form which calls `POST /api/kenno/block`.
+- **Word blocking**: `AdminBlockedWords.vue` shows blocked words with timestamps and an unblock button. New words blocked via `AdminKennoStats.vue` form which calls `POST /api/kenno/block`.
 
 ### OG Meta Tags
 

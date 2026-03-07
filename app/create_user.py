@@ -1,19 +1,19 @@
 """Utility script to create a user.
 
 Usage:
-    python -c "from app.create_admin import create; create('konsta', 'konsta@erez.ac', 'PASSWORD')"
-    python -c "from app.create_admin import create; create('someone', 'someone@erez.ac', 'PASSWORD', role='user')"
+    python -c "from app.create_user import create; create('konsta', 'konsta@erez.ac', 'PASSWORD')"
+    python -c "from app.create_user import create; create('someone', 'someone@erez.ac', 'PASSWORD', role='user')"
 
 Or via docker:
-    docker compose exec web python3 -c "from app.create_admin import create; create('konsta', 'konsta@erez.ac', 'PASSWORD')"
-    docker compose exec web python3 -c "from app.create_admin import create; create('someone', 'someone@erez.ac', 'PASSWORD', role='user')"
+    docker compose exec web python3 -c "from app.create_user import create; create('konsta', 'konsta@erez.ac', 'PASSWORD')"
+    docker compose exec web python3 -c "from app.create_user import create; create('someone', 'someone@erez.ac', 'PASSWORD', role='user')"
 """
 
 from app import app
 from app.models import db, User
 
 
-def create(username, email, password, role="admin"):
+def create(username, email, password, role="user"):
     with app.app_context():
         db.create_all()
         if User.query.filter_by(email=email).first():

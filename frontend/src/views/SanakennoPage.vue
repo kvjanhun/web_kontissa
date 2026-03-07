@@ -237,7 +237,7 @@ const pairMap = computed(() => {
 
 // --- Favicon swap ---
 // Pointy-top hexagon matching the game's honeycomb geometry, orange accent color
-const BEE_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='90.7,26.5 90.7,73.5 50,97 9.3,73.5 9.3,26.5 50,3' fill='%23ff643e'/></svg>"
+const KENNO_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='90.7,26.5 90.7,73.5 50,97 9.3,73.5 9.3,26.5 50,3' fill='%23ff643e'/></svg>"
 let _originalFavicon = null
 
 function _swapFavicon(href) {
@@ -609,7 +609,7 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
-  _swapFavicon(BEE_FAVICON)
+  _swapFavicon(KENNO_FAVICON)
   _setThemeColor()
   // Update theme-color when dark/light mode toggles (class change on <html>)
   _themeObserver = new MutationObserver(_updateThemeColor)

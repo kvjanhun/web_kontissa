@@ -9,7 +9,7 @@
 ## Test File Locations
 - `tests/conftest.py` — shared fixtures
 - `tests/test_auth.py` — auth endpoint tests
-- `tests/test_bee.py` — Sanakenno spelling bee tests (39 tests)
+- `tests/test_kenno.py` — Sanakenno spelling bee tests (39 tests)
 - `tests/test_recipes.py` — recipe CRUD tests
 - `tests/test_sections.py` — sections CRUD tests
 - `tests/test_weather.py` — weather endpoint + helper function tests
@@ -33,15 +33,15 @@
 
 ## Mocking Patterns
 - Use `unittest.mock.patch` as context manager for time-based tests
-- `patch("app.api.bee.date")` to control `date.today()` for puzzle rotation tests
+- `patch("app.api.kenno.date")` to control `date.today()` for puzzle rotation tests
 - Prefer narrow patches (module path, not stdlib path) to avoid leaking into other tests
 
 ## Import Paths for Internal Functions
-- `from app.api.bee import PUZZLES, _score_word, _compute_puzzle` — all importable
+- `from app.api.kenno import PUZZLES, _score_word, _compute_puzzle` — all importable
 - `from app import app as flask_app, limiter` — app and limiter importable directly
 
 ## Known Patterns / Pitfalls
-- `_PUZZLE_CACHE` in bee.py is module-level; tests may see cached results across
+- `_PUZZLE_CACHE` in kenno.py is module-level; tests may see cached results across
   test runs within the same process — this is fine because compute is deterministic
 - `date.today().toordinal() % len(PUZZLES)` is the rotation formula; `len(PUZZLES) == 50`
 - To pin puzzle index N: use `date.fromordinal(N)` since `N % 50 == N` for N < 50,
@@ -51,4 +51,4 @@
 
 ## Test Count Baseline
 - Total: 142 tests, all passing (as of 2026-02-22)
-- Bee tests: 39 (up from 17 in the original file)
+- Kenno tests: 39 (up from 17 in the original file)

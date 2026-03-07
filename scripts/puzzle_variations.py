@@ -15,7 +15,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(os.path.dirname(__file__), '..', 'app', 'data', 'site.db')}")
 
 from app import app
-from app.api.bee import PUZZLES, _get_center, _compute_variation
+from app.api.kenno import PUZZLES, _get_center, _compute_variation
 
 
 def show_puzzle(idx):
