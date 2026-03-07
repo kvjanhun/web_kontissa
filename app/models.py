@@ -146,7 +146,7 @@ class KennoConfig(db.Model):
 
 
 class KennoPuzzle(db.Model):
-    """Admin-created custom puzzles that override hardcoded PUZZLES entries."""
+    """Sanakenno puzzle slots with 7 letters each."""
     __tablename__ = 'bee_puzzles'
     slot = db.Column(db.Integer, primary_key=True)
     letters = db.Column(db.String(50), nullable=False)  # comma-separated: "a,e,k,l,n,s,ö"

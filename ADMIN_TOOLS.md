@@ -19,7 +19,6 @@ Kenno Tool in light mode, showing puzzle #9 (`adegiop`) with center letter **P**
 1. **Puzzle List (Left Sidebar):**
     * Scrollable list of all puzzle slots with upcoming play dates.
     * `tänään` (red badge) marks today's live puzzle, which is protected from editing.
-    * `muk.` (mukautettu) badge marks puzzles that have been manually overridden from their defaults.
     * The currently selected slot is highlighted with a contrasting background.
 2. **Toolbar:**
     * Slot number, letters input field, and "Tyhjennä" (clear/revert) button.

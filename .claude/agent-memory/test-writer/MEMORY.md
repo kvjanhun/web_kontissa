@@ -37,18 +37,18 @@
 - Prefer narrow patches (module path, not stdlib path) to avoid leaking into other tests
 
 ## Import Paths for Internal Functions
-- `from app.api.kenno import PUZZLES, _score_word, _compute_puzzle` — all importable
+- `from app.api.kenno import _score_word, _compute_puzzle` — all importable
+- Seed data loaded from `app/data/initial_puzzles.json` in tests as `_SEED_DATA`
 - `from app import app as flask_app, limiter` — app and limiter importable directly
 
 ## Known Patterns / Pitfalls
 - `_PUZZLE_CACHE` in kenno.py is module-level; tests may see cached results across
   test runs within the same process — this is fine because compute is deterministic
-- `date.today().toordinal() % len(PUZZLES)` is the rotation formula; `len(PUZZLES) == 50`
-- To pin puzzle index N: use `date.fromordinal(N)` since `N % 50 == N` for N < 50,
-  or use `date.fromordinal(50)` for index 0 (50 % 50 == 0)
+- Puzzles are DB-backed; `_seed_base_puzzles()` seeds from JSON on empty DB
+- Rotation formula: `(START_INDEX + days_since_ROTATION_START) % _total_puzzles()`
 - The `_score_word` function signature is `_score_word(word, all_letters_frozenset)`;
   pass a `frozenset`, not a `set`
 
 ## Test Count Baseline
-- Total: 142 tests, all passing (as of 2026-02-22)
-- Kenno tests: 39 (up from 17 in the original file)
+- Total: 304 tests, all passing (as of 2026-03-07)
+- Kenno tests: 128

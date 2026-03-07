@@ -1,5 +1,6 @@
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
+import json
 import zoneinfo
 from flask import jsonify, request, session
 from flask_login import current_user, login_required
@@ -18,87 +19,46 @@ try:
 except FileNotFoundError:
     _ALL_WORDS = frozenset()
 
-# Each puzzle is a flat set of 7 letters (sorted).  The center letter for each
-# puzzle is stored in the KennoConfig table (key = "center_{idx}").
-PUZZLES = [
-    {"letters": ["e", "n", "p", "r", "s", "y", "ä"]},       # 1
-    {"letters": ["d", "e", "h", "l", "r", "s", "ä"]},       # 2
-    {"letters": ["j", "k", "n", "o", "p", "r", "u"]},       # 3
-    {"letters": ["e", "h", "i", "m", "n", "y", "ä"]},       # 4
-    {"letters": ["e", "l", "m", "n", "o", "s", "u"]},       # 5
-    {"letters": ["k", "l", "o", "s", "u", "y", "ä"]},       # 6
-    {"letters": ["d", "e", "h", "p", "s", "u", "ä"]},       # 7
-    {"letters": ["a", "h", "k", "l", "m", "n", "s"]},       # 8
-    {"letters": ["a", "d", "e", "g", "i", "o", "p"]},       # 9
-    {"letters": ["e", "i", "l", "m", "n", "r", "v"]},       # 10
-    {"letters": ["e", "h", "k", "r", "s", "t", "u"]},       # 11
-    {"letters": ["d", "e", "h", "k", "l", "t", "ä"]},       # 12
-    {"letters": ["a", "p", "r", "u", "y", "ä", "ö"]},       # 13
-    {"letters": ["a", "d", "i", "n", "o", "t", "u"]},       # 14
-    {"letters": ["j", "k", "n", "s", "t", "ä", "ö"]},       # 15
-    {"letters": ["e", "h", "i", "l", "m", "s", "y"]},       # 16
-    {"letters": ["a", "e", "h", "i", "r", "u", "v"]},       # 17
-    {"letters": ["d", "e", "i", "l", "n", "s", "v"]},       # 18
-    {"letters": ["e", "h", "i", "n", "t", "y", "ö"]},       # 19
-    {"letters": ["a", "d", "h", "i", "m", "o", "u"]},       # 20
-    {"letters": ["a", "d", "e", "i", "l", "n", "u"]},       # 21
-    {"letters": ["d", "h", "j", "r", "s", "y", "ä"]},       # 22
-    {"letters": ["a", "e", "h", "l", "s", "t", "v"]},       # 23
-    {"letters": ["e", "i", "k", "l", "t", "v", "y"]},       # 24
-    {"letters": ["e", "h", "m", "n", "o", "p", "r"]},       # 25
-    {"letters": ["a", "e", "j", "o", "t", "u", "ä"]},       # 26
-    {"letters": ["a", "e", "j", "l", "n", "o", "u"]},       # 27
-    {"letters": ["e", "k", "l", "n", "s", "ä", "ö"]},       # 28
-    {"letters": ["e", "i", "l", "m", "p", "u", "ä"]},       # 29
-    {"letters": ["i", "l", "p", "s", "v", "y", "ä"]},       # 30
-    {"letters": ["h", "i", "r", "s", "t", "v", "ä"]},       # 31
-    {"letters": ["i", "k", "t", "v", "y", "ä", "ö"]},       # 32
-    {"letters": ["i", "m", "n", "t", "y", "ä", "ö"]},       # 33
-    {"letters": ["a", "d", "h", "m", "n", "o", "t"]},       # 34
-    {"letters": ["a", "h", "i", "n", "r", "u", "ä"]},       # 35
-    {"letters": ["m", "n", "o", "s", "t", "u", "ä"]},       # 36
-    {"letters": ["a", "b", "d", "i", "k", "o", "r"]},       # 37
-    {"letters": ["h", "i", "k", "m", "s", "v", "y"]},       # 38
-    {"letters": ["a", "e", "g", "h", "r", "t", "y"]},       # 39
-    {"letters": ["a", "d", "h", "i", "j", "o", "p"]},       # 40
-    {"letters": ["e", "i", "l", "n", "v", "y", "ö"]},       # 41
-]
-
-# Original center letters from the old format — used to seed KennoConfig on first run.
-_DEFAULT_CENTERS = [
-    "r", "ä", "n", "n", "l", "y", "h", "h", "p", "v",
-    "s", "h", "p", "d", "j", "y", "u", "d", "n", "o",
-    "d", "y", "h", "y", "e", "e", "u", "s", "u", "p",
-    "v", "i", "m", "t", "i", "s", "o", "i", "t", "o",
-    "n",
-]
+_SEED_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'initial_puzzles.json')
 
 
-def _seed_centers():
-    """Seed KennoConfig with default center letters if not yet migrated."""
-    if KennoConfig.query.filter_by(key="center_0").first():
-        return  # already seeded
-    for idx, center in enumerate(_DEFAULT_CENTERS):
-        db.session.add(KennoConfig(key=f"center_{idx}", value=center))
-    db.session.commit()
+def _seed_base_puzzles():
+    """Populate missing puzzle slots from initial_puzzles.json.
+
+    Skips slots that already exist in the DB, so existing puzzles
+    (including admin-created ones) are never overwritten.
+    """
+    with open(_SEED_PATH, encoding='utf-8') as f:
+        seed_data = json.load(f)
+
+    now = datetime.now(timezone.utc)
+    changed = False
+    for idx, puzzle in enumerate(seed_data):
+        if not db.session.get(KennoPuzzle, idx):
+            letters_csv = ",".join(puzzle["letters"])
+            db.session.add(KennoPuzzle(slot=idx, letters=letters_csv,
+                                       created_at=now, updated_at=now))
+            changed = True
+        if not KennoConfig.query.filter_by(key=f"center_{idx}").first():
+            db.session.add(KennoConfig(key=f"center_{idx}",
+                                       value=puzzle["center"]))
+            changed = True
+    if changed:
+        db.session.commit()
 
 
 def _get_puzzle_letters(idx):
-    """Return the 7 letters for puzzle *idx*, checking DB first, then PUZZLES."""
+    """Return the 7 letters for puzzle *idx* from the DB."""
     row = KennoPuzzle.query.filter_by(slot=idx).first()
     if row:
         return row.letters.split(",")
-    if 0 <= idx < len(PUZZLES):
-        return PUZZLES[idx]["letters"]
     return None
 
 
 def _total_puzzles():
-    """Return the total number of puzzle slots (hardcoded + any DB extensions)."""
-    highest_db = db.session.query(db.func.max(KennoPuzzle.slot)).scalar()
-    if highest_db is not None:
-        return max(len(PUZZLES), highest_db + 1)
-    return len(PUZZLES)
+    """Return the total number of puzzle slots in the DB."""
+    highest = db.session.query(db.func.max(KennoPuzzle.slot)).scalar()
+    return (highest + 1) if highest is not None else 0
 
 
 def _get_center(idx):
@@ -110,7 +70,7 @@ def _get_center(idx):
     letters = _get_puzzle_letters(idx)
     if letters:
         return sorted(letters)[0]
-    return sorted(PUZZLES[idx]["letters"])[0]
+    return None
 
 
 def _get_puzzle_dict(idx):
@@ -458,30 +418,37 @@ def kenno_achievements():
     days = request.args.get("days", 30, type=int)
     days = max(1, min(90, days))
 
-    now = datetime.now(timezone.utc)
-    start = now - timedelta(days=days)
+    now = datetime.now(_HELSINKI)
+    today = now.date()
+    # Convert Helsinki date range to UTC for the DB query
+    start_date = today - timedelta(days=days - 1)
+    # Helsinki midnight → UTC for query boundary
+    start_utc = datetime(start_date.year, start_date.month, start_date.day,
+                         tzinfo=_HELSINKI).astimezone(timezone.utc)
 
-    rows = (
-        db.session.query(
-            db.func.date(KennoAchievement.achieved_at),
-            KennoAchievement.rank,
-            db.func.count(),
-        )
-        .filter(KennoAchievement.achieved_at >= start)
-        .group_by(db.func.date(KennoAchievement.achieved_at), KennoAchievement.rank)
+    achievements = (
+        KennoAchievement.query
+        .filter(KennoAchievement.achieved_at >= start_utc)
         .all()
     )
 
-    # Build lookup: date_str -> rank -> count
+    # Group by Helsinki date (not UTC date)
     lookup = {}
-    for date_str, rank, count in rows:
-        lookup.setdefault(str(date_str), {})[rank] = count
+    for a in achievements:
+        # achieved_at is stored as UTC — convert to Helsinki for grouping
+        if a.achieved_at.tzinfo is None:
+            helsinki_dt = a.achieved_at.replace(tzinfo=timezone.utc).astimezone(_HELSINKI)
+        else:
+            helsinki_dt = a.achieved_at.astimezone(_HELSINKI)
+        d = helsinki_dt.date().isoformat()
+        lookup.setdefault(d, {})
+        lookup[d][a.rank] = lookup[d].get(a.rank, 0) + 1
 
     # Fill all dates in range
     daily = []
     totals = {r: 0 for r in VALID_RANKS}
     for i in range(days):
-        d = (now - timedelta(days=days - 1 - i)).strftime("%Y-%m-%d")
+        d = (start_date + timedelta(days=i)).isoformat()
         day_counts = {r: lookup.get(d, {}).get(r, 0) for r in VALID_RANKS}
         day_total = sum(day_counts.values())
         daily.append({"date": d, "counts": day_counts, "total": day_total})
@@ -589,7 +556,7 @@ def kenno_save_puzzle():
     # Upsert KennoPuzzle row
     now = datetime.now(timezone.utc)
     row = db.session.get(KennoPuzzle, slot)
-    is_new_slot = row is None and slot >= len(PUZZLES)
+    is_new_slot = row is None
     if row:
         row.letters = ",".join(letters)
         row.updated_at = now
@@ -651,12 +618,10 @@ def kenno_schedule():
     for i in range(days):
         d = today + timedelta(days=i)
         slot = _get_puzzle_for_date(d)
-        is_custom = KennoPuzzle.query.filter_by(slot=slot).first() is not None
         schedule.append({
             "date": d.isoformat(),
             "slot": slot,
             "display_number": slot + 1,
-            "is_custom": is_custom,
             "is_today": (i == 0),
         })
 
@@ -733,39 +698,22 @@ def _upsert_puzzle_slot(slot, letters, center, now):
 @app.route("/api/kenno/puzzle/<int:slot>", methods=["DELETE"])
 @login_required
 def kenno_delete_puzzle(slot):
-    """Delete a custom puzzle, reverting to hardcoded if available (admin only)."""
+    """Delete a puzzle slot (admin only)."""
     if getattr(current_user, "role", None) != "admin":
         return jsonify({"error": "Admin access required"}), 403
 
     today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
     if slot == today_slot:
-        return jsonify({"error": "Cannot delete today's live puzzle"}), 409
+        return jsonify({"error": "Cannot modify today's live puzzle"}), 409
 
     row = db.session.get(KennoPuzzle, slot)
     if not row:
-        return jsonify({"error": "No custom puzzle in this slot"}), 404
+        return jsonify({"error": "No puzzle in this slot"}), 404
 
-    has_hardcoded = 0 <= slot < len(PUZZLES)
     db.session.delete(row)
-
     config_row = KennoConfig.query.filter_by(key=f"center_{slot}").first()
-    if has_hardcoded:
-        # Reset center to the seeded default for the hardcoded puzzle
-        default_center = _DEFAULT_CENTERS[slot] if slot < len(_DEFAULT_CENTERS) else sorted(PUZZLES[slot]["letters"])[0]
-        if config_row:
-            config_row.value = default_center
-        else:
-            db.session.add(KennoConfig(key=f"center_{slot}", value=default_center))
-    else:
-        # Beyond hardcoded range — clean up the center config entirely
-        if config_row:
-            db.session.delete(config_row)
-
+    if config_row:
+        db.session.delete(config_row)
     db.session.commit()
     _PUZZLE_CACHE.pop(slot, None)
-
-    return jsonify({
-        "slot": slot,
-        "deleted": True,
-        "reverted_to_hardcoded": has_hardcoded,
-    })
+    return jsonify({"slot": slot, "deleted": True})

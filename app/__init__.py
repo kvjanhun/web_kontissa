@@ -64,4 +64,4 @@ from .api import pageviews
 from .api import health
 
 with app.app_context():
-    kenno._seed_centers()
+    kenno._seed_base_puzzles()

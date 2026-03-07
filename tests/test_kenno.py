@@ -1,10 +1,16 @@
 """Tests for the Sanakenno (Spelling Bee) API endpoint."""
 
 import hashlib
+import json
+import os
 from datetime import date, timedelta
 import pytest
 from unittest.mock import patch
-from app.api.kenno import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzle, _get_puzzle_dict
+from app.api.kenno import _score_word, _compute_puzzle, _get_puzzle_dict
+
+_SEED_PATH = os.path.join(os.path.dirname(__file__), '..', 'app', 'data', 'initial_puzzles.json')
+with open(_SEED_PATH, encoding='utf-8') as _f:
+    _SEED_DATA = json.load(_f)
 
 
 # ---------------------------------------------------------------------------
@@ -13,7 +19,7 @@ from app.api.kenno import PUZZLES, _DEFAULT_CENTERS, _score_word, _compute_puzzl
 
 def _all_letters_for(puzzle_idx):
     """Return the full frozenset of 7 letters for a puzzle index."""
-    return frozenset(PUZZLES[puzzle_idx]["letters"])
+    return frozenset(_SEED_DATA[puzzle_idx]["letters"])
 
 
 # ---------------------------------------------------------------------------
@@ -21,17 +27,18 @@ def _all_letters_for(puzzle_idx):
 # ---------------------------------------------------------------------------
 
 class TestPuzzleCatalogue:
-    """Validate the PUZZLES list itself — catches misconfigured entries before
+    """Validate the _SEED_DATA list itself — catches misconfigured entries before
     they ever reach a player."""
 
     def test_has_41_puzzles(self):
-        assert len(PUZZLES) == 41
+        assert len(_SEED_DATA) == 41
 
-    def test_default_centers_matches_puzzles_count(self):
-        assert len(_DEFAULT_CENTERS) == len(PUZZLES)
+    def test_every_puzzle_has_center(self):
+        for i, p in enumerate(_SEED_DATA):
+            assert "center" in p, f"Puzzle {i} missing 'center'"
 
     def test_every_puzzle_has_seven_letters(self):
-        for i, p in enumerate(PUZZLES):
+        for i, p in enumerate(_SEED_DATA):
             assert "letters" in p, f"Puzzle {i} missing 'letters'"
             assert len(p["letters"]) == 7, (
                 f"Puzzle {i} must have exactly 7 letters, got {len(p['letters'])}"
@@ -40,13 +47,13 @@ class TestPuzzleCatalogue:
     def test_no_puzzle_has_duplicate_letters(self):
         """All 7 letters must be distinct — duplicates would confuse the
         pangram check and break the honeycomb display."""
-        for i, p in enumerate(PUZZLES):
+        for i, p in enumerate(_SEED_DATA):
             assert len(set(p["letters"])) == 7, (
                 f"Puzzle {i} has duplicate letters: {p['letters']}"
             )
 
     def test_all_letters_are_lowercase_strings(self):
-        for i, p in enumerate(PUZZLES):
+        for i, p in enumerate(_SEED_DATA):
             for letter in p["letters"]:
                 assert letter == letter.lower(), (
                     f"Puzzle {i} letter {letter!r} is not lowercase"
@@ -56,18 +63,18 @@ class TestPuzzleCatalogue:
                 )
 
     def test_default_center_is_one_of_the_letters(self):
-        for i, center in enumerate(_DEFAULT_CENTERS):
-            assert center in PUZZLES[i]["letters"], (
-                f"Puzzle {i} default center '{center}' not in letters {PUZZLES[i]['letters']}"
+        for i, p in enumerate(_SEED_DATA):
+            assert p["center"] in p["letters"], (
+                f"Puzzle {i} default center '{p['center']}' not in letters {p['letters']}"
             )
 
     def test_every_puzzle_has_at_least_one_word(self, app):
         """A puzzle with zero valid words in the word list is unplayable."""
-        for i in range(len(PUZZLES)):
+        for i in range(len(_SEED_DATA)):
             puzzle_dict = _get_puzzle_dict(i)
             words, _, _, _ = _compute_puzzle(puzzle_dict)
             assert len(words) > 0, (
-                f"Puzzle {i} (letters={PUZZLES[i]['letters']}) "
+                f"Puzzle {i} (letters={_SEED_DATA[i]['letters']}) "
                 f"yielded no valid words — word list may be missing or puzzle "
                 f"letters may be wrong"
             )
@@ -227,8 +234,8 @@ class TestKennoEndpoint:
     def test_puzzle_number_is_non_negative_int_within_range(self, client):
         data = client.get("/api/kenno").get_json()
         assert isinstance(data["puzzle_number"], int)
-        assert 0 <= data["puzzle_number"] < len(PUZZLES), (
-            f"puzzle_number {data['puzzle_number']} is out of range [0, {len(PUZZLES)})"
+        assert 0 <= data["puzzle_number"] < len(_SEED_DATA), (
+            f"puzzle_number {data['puzzle_number']} is out of range [0, {len(_SEED_DATA)})"
         )
 
     def test_no_auth_required(self, client):
@@ -259,7 +266,7 @@ class TestPuzzleSchedule:
 
     def test_puzzle_number_in_valid_range(self, client):
         data = client.get("/api/kenno").get_json()
-        assert 0 <= data["puzzle_number"] < len(PUZZLES)
+        assert 0 <= data["puzzle_number"] < len(_SEED_DATA)
 
 
 # ---------------------------------------------------------------------------
@@ -274,12 +281,12 @@ class TestKnownPuzzle:
 
     def test_known_puzzle_center(self, logged_in_admin):
         data = logged_in_admin.get(f"/api/kenno?puzzle={self.PUZZLE_IDX}").get_json()
-        assert data["center"] == _DEFAULT_CENTERS[self.PUZZLE_IDX]
+        assert data["center"] == _SEED_DATA[self.PUZZLE_IDX]["center"]
 
     def test_known_puzzle_letters(self, logged_in_admin):
         data = logged_in_admin.get(f"/api/kenno?puzzle={self.PUZZLE_IDX}").get_json()
-        expected_outer = [l for l in PUZZLES[self.PUZZLE_IDX]["letters"]
-                          if l != _DEFAULT_CENTERS[self.PUZZLE_IDX]]
+        expected_outer = [l for l in _SEED_DATA[self.PUZZLE_IDX]["letters"]
+                          if l != _SEED_DATA[self.PUZZLE_IDX]["center"]]
         assert set(data["letters"]) == set(expected_outer)
 
     def test_known_puzzle_words_contain_center(self, logged_in_admin):
@@ -309,7 +316,7 @@ class TestTotalPuzzlesField:
     def test_total_puzzles_present_and_correct(self, client):
         data = client.get("/api/kenno").get_json()
         assert "total_puzzles" in data
-        assert data["total_puzzles"] == len(PUZZLES)
+        assert data["total_puzzles"] == len(_SEED_DATA)
 
 
 # ---------------------------------------------------------------------------
@@ -323,11 +330,11 @@ class TestPuzzleOverride:
         target = 7
         data = logged_in_admin.get(f"/api/kenno?puzzle={target}").get_json()
         assert data["puzzle_number"] == target
-        assert data["center"] == _DEFAULT_CENTERS[target]
+        assert data["center"] == _SEED_DATA[target]["center"]
 
     def test_admin_override_wraps_around(self, logged_in_admin):
         # Requesting puzzle index beyond range wraps via modulo
-        target = len(PUZZLES) + 3
+        target = len(_SEED_DATA) + 3
         data = logged_in_admin.get(f"/api/kenno?puzzle={target}").get_json()
         assert data["puzzle_number"] == 3
 
@@ -439,7 +446,7 @@ class TestVariationsEndpoint:
     def test_active_matches_default_center(self, logged_in_admin):
         data = logged_in_admin.get("/api/kenno/variations?puzzle=0").get_json()
         active = [v for v in data["variations"] if v["is_active"]][0]
-        assert active["center"] == _DEFAULT_CENTERS[0]
+        assert active["center"] == _SEED_DATA[0]["center"]
 
     def test_requires_admin(self, logged_in_user):
         res = logged_in_user.get("/api/kenno/variations?puzzle=0")
@@ -477,8 +484,8 @@ class TestSetCenter:
 
     def test_changes_center(self, logged_in_admin):
         # Pick a letter that is NOT the default center for puzzle 0
-        letters = PUZZLES[0]["letters"]
-        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+        letters = _SEED_DATA[0]["letters"]
+        new_center = [l for l in letters if l != _SEED_DATA[0]["center"]][0]
 
         res = logged_in_admin.post("/api/kenno/center", json={"puzzle": 0, "center": new_center})
         assert res.status_code == 200
@@ -506,8 +513,8 @@ class TestSetCenter:
 
     def test_persists_across_cache_clear(self, logged_in_admin):
         from app.api.kenno import _PUZZLE_CACHE
-        letters = PUZZLES[0]["letters"]
-        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+        letters = _SEED_DATA[0]["letters"]
+        new_center = [l for l in letters if l != _SEED_DATA[0]["center"]][0]
 
         logged_in_admin.post("/api/kenno/center", json={"puzzle": 0, "center": new_center})
         _PUZZLE_CACHE.clear()
@@ -516,8 +523,8 @@ class TestSetCenter:
         assert data["center"] == new_center
 
     def test_variations_reflect_new_active(self, logged_in_admin):
-        letters = PUZZLES[0]["letters"]
-        new_center = [l for l in letters if l != _DEFAULT_CENTERS[0]][0]
+        letters = _SEED_DATA[0]["letters"]
+        new_center = [l for l in letters if l != _SEED_DATA[0]["center"]][0]
 
         logged_in_admin.post("/api/kenno/center", json={"puzzle": 0, "center": new_center})
 
@@ -854,27 +861,6 @@ class TestScheduleEndpoint:
         for entry in data["schedule"][1:]:
             assert entry["is_today"] is False
 
-    def test_marks_custom_puzzles(self, logged_in_admin):
-        from app.api.kenno import _PUZZLE_CACHE
-        _PUZZLE_CACHE.clear()
-        # Save a custom puzzle to a slot that appears in the schedule
-        data = logged_in_admin.get("/api/kenno/schedule?days=30").get_json()
-        # Find a non-today slot from the schedule
-        target = None
-        for entry in data["schedule"]:
-            if not entry["is_today"]:
-                target = entry["slot"]
-                break
-        assert target is not None
-
-        logged_in_admin.post("/api/kenno/puzzle", json={
-            "slot": target, "letters": ["a", "e", "k", "l", "n", "s", "ö"], "center": "e",
-        })
-
-        data2 = logged_in_admin.get("/api/kenno/schedule?days=30").get_json()
-        custom_entries = [e for e in data2["schedule"] if e["slot"] == target]
-        assert any(e["is_custom"] for e in custom_entries)
-
     def test_custom_days_param(self, logged_in_admin):
         data = logged_in_admin.get("/api/kenno/schedule?days=7").get_json()
         assert len(data["schedule"]) == 7
@@ -1005,32 +991,16 @@ class TestDeletePuzzleEndpoint:
             slot = 6
         return slot
 
-    def test_deletes_custom_puzzle(self, logged_in_admin):
+    def test_deletes_puzzle(self, logged_in_admin):
         slot = self._safe_slot()
-        # First save a custom puzzle
-        logged_in_admin.post("/api/kenno/puzzle", json={
-            "slot": slot, "letters": self.VALID_LETTERS, "center": "e",
-        })
-        # Verify it's there
+        # Verify it exists
         data = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
-        assert data["center"] == "e"
+        assert "center" in data
 
         # Delete it
         res = logged_in_admin.delete(f"/api/kenno/puzzle/{slot}")
         assert res.status_code == 200
         assert res.get_json()["deleted"] is True
-        assert res.get_json()["reverted_to_hardcoded"] is True
-
-        # Verify it reverted to hardcoded
-        data2 = logged_in_admin.get(f"/api/kenno?puzzle={slot}").get_json()
-        all_letters = set(data2["letters"] + [data2["center"]])
-        assert all_letters == set(PUZZLES[slot]["letters"])
-
-    def test_rejects_non_custom_slot(self, logged_in_admin):
-        """Cannot delete a slot that has no custom override."""
-        slot = self._safe_slot()
-        res = logged_in_admin.delete(f"/api/kenno/puzzle/{slot}")
-        assert res.status_code == 404
 
     def test_rejects_live_slot(self, logged_in_admin):
         from app.api.kenno import _get_puzzle_for_date, _HELSINKI
