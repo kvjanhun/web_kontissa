@@ -28,7 +28,7 @@ Personal portfolio website by Konsta Janhunen.
 ### Admin tools
 Site has many self-made admin tools that require authentication on the live site. Some of them are documented below.
 
-- [ADMIN_TOOLS.md](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
+- [Sanakenno puzzle editor](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
 
 ## Background
 
