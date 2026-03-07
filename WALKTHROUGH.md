@@ -83,7 +83,7 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
 - `SECRET_KEY` comes from the `.env` file; falls back to a fixed dev string so sessions survive Flask restarts locally
 - Runs `db.create_all()` and `_run_migrations()` on startup (adds columns to existing SQLite tables that `create_all` won't add)
 - Imports `routes`, `auth`, `recipes`, `api.cowsay`, `api.weather`, `api.kenno`, `api.pageviews`, and `api.health` at the bottom, which registers all URL routes
-- After registering routes, calls `kenno._seed_centers()` to populate default puzzle center letters if the `KennoConfig` table is empty
+- After registering routes, calls `kenno._seed_base_puzzles()` to populate 41 puzzles from `app/data/initial_puzzles.json` if the DB is empty
 
 ### `app/models.py` — Database Models
 
@@ -188,7 +188,7 @@ Key implementation details:
 
 - **Word list**: `app/wordlists/kotus_words.txt` — 101k Finnish words, loaded at startup into `_ALL_WORDS` (a `frozenset`). Hyphenated compounds are normalised by stripping the hyphen.
 - **Word hiding**: The public API returns SHA-256 hashes of valid words (`word_hashes`) instead of plaintext, plus pre-computed `hint_data` for the hint panels. Admin requests also receive the plaintext `words` array.
-- **Puzzles**: 41 curated letter sets in `PUZZLES`. Each entry is `{"letters": [7 sorted letters]}`. The center letter for each puzzle is stored in `KennoConfig` (key `center_{idx}`), seeded from `_DEFAULT_CENTERS` on first startup by `_seed_centers()`.
+- **Puzzles**: All puzzles are DB-backed in the `KennoPuzzle` table. On first startup (empty DB), `_seed_base_puzzles()` loads 41 puzzles from `app/data/initial_puzzles.json`. Center letters are stored in `KennoConfig` (key `center_{idx}`).
 - **Rotation**: Today's puzzle index = `(START_INDEX + days_since_ROTATION_START) % 41`. `ROTATION_START = date(2026, 2, 24)`, `START_INDEX = 1`.
 - **Scoring**: 4-letter word = 1 pt; 5+ letters = length in pts; pangram (uses all 7 letters) = +7 bonus.
 - **Cache**: Valid words, max_score, word_hashes, and hint_data are computed lazily on first access and stored in `_PUZZLE_CACHE` (dict keyed by puzzle index). Blocking or unblocking a word clears the entire cache. Admin override (`?puzzle=N`) is accepted when the request comes from an authenticated admin.

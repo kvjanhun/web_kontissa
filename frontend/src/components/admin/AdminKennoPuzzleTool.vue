@@ -14,8 +14,6 @@ const savedLetters = ref(null)    // array of 7 sorted letters, or null for new
 const savedCenter = ref(null)
 const lettersInput = ref('')
 const selectedCenter = ref('')    // used in dirty mode only
-const isCustom = ref(false)
-
 const schedule = ref([])
 const scheduleLoading = ref(false)
 const slotListEl = ref(null)
@@ -124,23 +122,7 @@ const canSwap = computed(() => {
   return true
 })
 
-const canDelete = computed(() => {
-  if (!isCustom.value) return false
-  if (isToday.value) return false
-  return true
-})
-
-const deleteLabel = computed(() =>
-  currentSlot.value < 41 ? 'Palauta alkuperäinen' : 'Poista'
-)
-
-const customSlots = computed(() => {
-  const set = new Set()
-  for (const entry of schedule.value) {
-    if (entry.is_custom) set.add(entry.slot)
-  }
-  return set
-})
+const canDelete = computed(() => !isToday.value)
 
 // Map slot → nearest upcoming date string (for showing dates in the list)
 const slotNextDate = computed(() => {
@@ -167,7 +149,6 @@ const allSlotRows = computed(() => {
       slot: i,
       displayNumber: i + 1,
       isToday: todaySlot.value === i,
-      isCustom: customSlots.value.has(i),
       date: dateStr ? formatDateShort(dateStr) : null,
     })
   }
@@ -270,7 +251,6 @@ async function fetchStats() {
 async function fetchSchedule() {
   scheduleLoading.value = true
   try {
-    // Fetch a full cycle to detect custom overrides for all slots
     const days = Math.min(totalPuzzles.value ?? 42, 90)
     const res = await fetch(`/api/kenno/schedule?days=${days}`)
     if (res.ok) {
@@ -468,10 +448,7 @@ async function executeSwap() {
 async function executeDelete() {
   if (!canDelete.value || deleteLoading.value) return
 
-  const msg = currentSlot.value < 41
-    ? `Palauta peli ${displayNumber.value} alkuperäiseksi?`
-    : `Poista peli ${displayNumber.value}?`
-  if (!confirm(msg)) return
+  if (!confirm(`Poista peli ${displayNumber.value}?`)) return
 
   deleteLoading.value = true
   deleteError.value = ''
@@ -484,10 +461,8 @@ async function executeDelete() {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.error || 'Poisto epäonnistui')
     }
-    const data = await res.json()
-    deleteSuccess.value = data.reverted_to_hardcoded
-      ? `Peli ${displayNumber.value} palautettu alkuperäiseksi.`
-      : `Peli ${displayNumber.value} poistettu.`
+    await res.json()
+    deleteSuccess.value = `Peli ${displayNumber.value} poistettu.`
     await Promise.all([
       loadSlot(currentSlot.value),
       fetchSchedule(),
@@ -528,13 +503,6 @@ function newPuzzle() {
   deleteError.value = ''
   deleteSuccess.value = ''
 }
-
-function updateIsCustom() {
-  isCustom.value = customSlots.value.has(currentSlot.value)
-}
-
-watch(schedule, updateIsCustom)
-watch(currentSlot, updateIsCustom)
 
 // ---------------------------------------------------------------------------
 // Init
@@ -603,7 +571,6 @@ onMounted(async () => {
           <span :style="{ color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', minWidth: '1.25rem', textAlign: 'right' }">{{ row.displayNumber }}</span>
           <span v-if="row.date" class="truncate" :style="{ color: 'var(--color-text-tertiary)' }">{{ row.date }}</span>
           <span v-if="row.isToday" class="px-1 rounded shrink-0" style="background: #ef4444; color: white; font-size: 0.625rem; line-height: 1.4;">tänään</span>
-          <span v-else-if="row.isCustom" class="px-1 rounded shrink-0" :style="{ background: 'var(--color-accent)', color: 'white', fontSize: '0.625rem', lineHeight: '1.4' }">muk.</span>
           <span v-if="row.slot === currentSlot" class="shrink-0" :style="{ color: 'var(--color-accent)' }">&#9679;</span>
         </div>
       </div>
@@ -696,7 +663,7 @@ onMounted(async () => {
           opacity: deleteLoading ? '0.6' : '1',
         }"
       >
-        {{ deleteLoading ? '…' : deleteLabel }}
+        {{ deleteLoading ? '…' : 'Poista' }}
       </button>
     </div>
 

@@ -7,7 +7,7 @@ os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 
 from app import app as flask_app, limiter
 from app.models import db, User, Section, Recipe, Ingredient, Step
-from app.api.kenno import _seed_centers, _PUZZLE_CACHE
+from app.api.kenno import _seed_base_puzzles, _PUZZLE_CACHE
 from werkzeug.security import generate_password_hash
 
 
@@ -22,7 +22,7 @@ def app(tmp_path):
     limiter.enabled = False
     with flask_app.app_context():
         db.create_all()
-        _seed_centers()
+        _seed_base_puzzles()
         _PUZZLE_CACHE.clear()
         yield flask_app
         db.session.remove()
