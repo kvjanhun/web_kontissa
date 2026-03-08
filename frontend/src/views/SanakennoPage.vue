@@ -21,7 +21,7 @@ const showRanks = ref(false)
 const showHints = ref(false)
 const showRules = ref(false)
 const hintsUnlocked = ref(new Set())  // 'summary' | 'letters' | 'distribution' | 'pairs'
-const celebration = ref(null)  // null | 'alistyttava' | 'taysikenno'
+const celebration = ref(null)  // null | 'allistyttava' | 'taysikenno'
 let celebrationTimer = null
 
 // --- Hint collapse state (session-only, no persistence) ---
@@ -406,11 +406,11 @@ async function copyStatus() {
   const hintEmojis = [...hintsUnlocked.value].map(id => HINT_ICONS[id] || '').join('') || '–'
 
   const max = puzzle.value?.max_score ?? 0
-  const alistyttavaTarget = Math.ceil(0.7 * max)
+  const allistyttavaTarget = Math.ceil(0.7 * max)
   const isTaysiKenno = rank.value === 'Täysi kenno'
   const scoreDisplay = isTaysiKenno
     ? `${max}/${max}`
-    : `${score.value}/${alistyttavaTarget}`
+    : `${score.value}/${allistyttavaTarget}`
 
   const lines = [
     `Sanakenno — Peli ${(puzzleNumber.value ?? 0) + 1}`,
@@ -564,7 +564,7 @@ async function submitWord() {
     }).catch(() => {})
 
     if (rankAfter === 'Ällistyttävä') {
-      celebration.value = 'alistyttava'
+      celebration.value = 'allistyttava'
       if (celebrationTimer) clearTimeout(celebrationTimer)
       celebrationTimer = setTimeout(() => { celebration.value = null }, 5000)
     } else if (rankAfter === 'Täysi kenno') {
@@ -755,7 +755,7 @@ onUnmounted(() => {
               v-if="shareCopied"
               class="text-xs"
               style="color: var(--color-text-secondary);"
-            >Kopioitu leikepöydälle!</span>
+            >Kopioitu!</span>
             <button
               class="text-xs px-2 py-1 rounded"
               style="background: var(--color-bg-secondary); color: var(--color-text-secondary); border: 1px solid var(--color-border); cursor: pointer;"
