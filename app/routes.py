@@ -178,6 +178,7 @@ def sanakenno_page():
     html = re.sub(r'<meta property="og:title"[^>]*>', '<meta property="og:title" content="Sanakenno \u2014 sanapeli">', html)
     html = re.sub(r'<meta property="og:description"[^>]*>', f'<meta property="og:description" content="{DESC}">', html)
     html = re.sub(r'<meta property="og:url"[^>]*>', '<meta property="og:url" content="https://erez.ac/sanakenno">', html)
+    html = re.sub(r'<link rel="icon"[^>]*>', '<link rel="icon" type="image/png" href="/sanakenno-favicon.png">', html)
     return Response(html, mimetype="text/html")
 
 
