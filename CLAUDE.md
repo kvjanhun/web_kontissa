@@ -32,13 +32,27 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Vue 3 SPA frontend, Flask
 ```
 web_kontissa/
 ├── Dockerfile                  # Multi-stage: node:22-alpine builds frontend, python:3.13-alpine runs backend
-├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80
+├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80, healthcheck on /api/meta every 30s
+├── .github/
+│   └── workflows/
+│       └── test.yml            # CI: runs pytest + Playwright on push/PR to main; uploads playwright-report on failure
 ├── run.py                      # Flask dev entry point (port 5001, debug=True)
 ├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, flask-limiter, gunicorn, cowsay, requests)
 ├── ADMIN_TOOLS.md              # Admin tool documentation with screenshots (Kennotyökalu, Kenno Stats)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
-│   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
+│   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4; devDeps include @playwright/test; scripts: test:e2e, test:e2e:ui
+│   ├── playwright.config.js    # Playwright config: dual webServer (Flask :5001, Vite :5173), Chromium only
+│   ├── e2e/
+│   │   ├── fixtures/
+│   │   │   └── auth.js         # Playwright fixtures: authenticatedPage (regular user), adminPage (admin user); login via form
+│   │   ├── homepage.spec.js    # 3 tests: heading, nav links, title
+│   │   ├── navigation.spec.js  # 3 tests: route transitions, auth redirects
+│   │   ├── auth.spec.js        # 4 tests: form, invalid creds, login redirect, logout
+│   │   ├── sanakenno.spec.js   # 7 tests: game load, keyboard input, hints, share, rules modal
+│   │   ├── recipes.spec.js     # 4 tests: auth redirect, list, detail, new form
+│   │   ├── admin.spec.js       # 5 tests: non-admin blocked, admin access, tabs, sections, tab switching
+│   │   └── not-found.spec.js   # 2 tests: 404 page, home link
 │   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
 │   ├── public/
@@ -114,6 +128,7 @@ web_kontissa/
 │   ├── process_kotus.py        # One-time script: downloads and filters Kotus word list → kotus_words.txt
 │   ├── puzzle_variations.py    # CLI: show all 7 center-letter variations for a puzzle (python3 scripts/puzzle_variations.py [N])
 │   ├── seed_puzzles.py         # One-time: populate KennoPuzzle DB from initial_puzzles.json
+│   ├── seed_e2e.py             # E2E seed: creates app/data/ if missing, populates test-e2e.db with admin + regular users, 3 sections, 1 recipe, 41 puzzles
 │   └── initial_puzzles.json    # Seed data: 41 puzzles with letters and centers
 ├── docs/
 │   └── kenno-tool-screenshot.png  # Kennotyökalu screenshot for ADMIN_TOOLS.md
@@ -199,11 +214,22 @@ Site accessible at http://localhost:8080.
 
 ### Tests
 
+**Backend (pytest)**
+
 ```bash
 pytest tests/
 ```
 
-Uses an in-memory SQLite database. No server running required. Rate limiting is disabled in tests via `limiter.enabled = False`.
+Uses an in-memory SQLite database. No server running required. Rate limiting is disabled in tests via the `TESTING` env var (`limiter.enabled = not os.environ.get("TESTING")`).
+
+**E2E (Playwright)**
+
+```bash
+cd frontend && npm run test:e2e          # Headless Chromium
+cd frontend && npm run test:e2e:ui       # Interactive UI mode
+```
+
+Playwright spins up both servers automatically (Flask on :5001, Vite on :5173). Uses a file-based SQLite DB at `app/data/test-e2e.db` seeded by `scripts/seed_e2e.py`. Rate limiting is disabled via `TESTING=1`. Test credentials: `admin@test.com` / `adminpass123` and `user@test.com` / `userpass123`. 28 tests across 7 spec files; runs in ~7s locally, ~55s in CI.
 
 ### Frontend build only
 
@@ -222,6 +248,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 - **Firewall (iptables)**: Default deny inbound. Only ports 80, 443 open publicly. SSH restricted to two LAN IPs. Container port 8080 blocked from external access.
 - **TLS**: Let's Encrypt with certbot, ECDSA certificates, TLSv1.2+1.3 only. Auto-renewal via systemd timer with nginx reload hook.
+- **CI**: GitHub Actions (`.github/workflows/test.yml`) runs pytest and Playwright on every push and PR to main. Playwright report is uploaded as an artifact on failure.
 - **Deployment**: Push to GitHub main → webhook (token-authenticated) → `deploy-site.sh` (git pull, docker compose up --build, systemctl restart).
 - **Services**: `web-kontissa.service` (Docker Compose app, runs as kvjanhun), `webhook.service` (deploy listener, runs as kvjanhun). The old `site-container.service` (static HTML site) has been disabled.
 
@@ -250,7 +277,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - `SectionBlock.vue` renders 4 section types: `'quote'` (decorative centered blockquote with large opening quote mark, no card wrapper), `'currently'` (card with line-separated `label: value` items rendered as accent-bordered rows), `'pills'` (card with comma-separated items in a 3-column grid of accent-bordered flat items), `'text'` (card with `v-html` content). All card types (currently, pills, text) have an orange accent bar under the title. Paragraph spacing (`p + p` margin) is applied via a scoped deep selector on `.section-content`. Supports a `compact` prop to suppress bottom margin when used in paired grid layout.
 - `AboutPage.vue` groups adjacent compact section types (`currently`, `pills`) into side-by-side two-column grid pairs on `md+` screens. The "About" h1 heading is removed — the quote section serves as the page intro.
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
-- `requiresAuth` route meta guard redirects unauthenticated users to `/login`
+- `requiresAuth` route meta guard redirects unauthenticated users to `/login`. The `router.beforeEach` hook is `async` and `await`s `checkAuth()` before evaluating guards — this ensures auth state is populated on direct URL navigation to protected routes (e.g. `/admin`, `/recipes`). Omitting the `await` causes a race condition where the guard fires before the `/api/me` response arrives.
 - Logout (`useAuth.js`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the router guard.
 - i18n via custom `useI18n` composable — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` meta resolved in `main.js` afterEach. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
 - Accessibility: skip-to-content link, `:focus-visible` ring on all interactive elements, `aria-expanded` on mobile menu with Escape-to-close, `aria-live` route announcer in App.vue, `role="alert"` on error messages, `role="status"` on loading/success states, `aria-hidden="true"` on decorative SVGs, `aria-label` on icon-only buttons, `prefers-reduced-motion` respected via CSS. Sanakenno honeycomb SVG hexagons have `role="button"` and `aria-label` (letter name) for screen reader access.
