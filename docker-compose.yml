@@ -7,5 +7,11 @@ services:
       - "127.0.0.1:8080:80"
     volumes:
       - ./app/data:/app/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:80/api/meta')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
     restart: unless-stopped
     
