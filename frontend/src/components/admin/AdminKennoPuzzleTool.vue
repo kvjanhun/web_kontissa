@@ -1,7 +1,8 @@
 <script setup>
 import { ref, computed, watch, onMounted, nextTick } from 'vue'
+import KennoVariationsGrid from './KennoVariationsGrid.vue'
+import KennoWordList from './KennoWordList.vue'
 
-const WORDS_PER_COLUMN = 10
 const FINNISH_LETTERS = new Set('abcdefghijklmnopqrstuvwxyzäö')
 
 // ---------------------------------------------------------------------------
@@ -155,21 +156,6 @@ const allSlotRows = computed(() => {
   return rows
 })
 
-const sortedWords = computed(() =>
-  [...words.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
-)
-
-const wordColumns = computed(() => {
-  const cols = []
-  for (let i = 0; i < sortedWords.value.length; i += WORDS_PER_COLUMN) {
-    cols.push(sortedWords.value.slice(i, i + WORDS_PER_COLUMN))
-  }
-  return cols
-})
-
-function isPangram(word) {
-  return parsedLetters.value.every(l => word.includes(l))
-}
 
 // ---------------------------------------------------------------------------
 // Slot loading
@@ -727,26 +713,12 @@ onMounted(async () => {
         <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
           Valitse keskuskirjain klikkaamalla.
         </p>
-        <div class="grid grid-cols-7 gap-1">
-          <button
-            v-for="v in variations"
-            :key="v.center"
-            class="flex flex-col items-center py-1.5 px-0.5 rounded text-xs leading-tight"
-            :style="{
-              background: selectedCenter === v.center ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
-              color: selectedCenter === v.center ? 'white' : 'var(--color-text-secondary)',
-              border: '1px solid ' + (selectedCenter === v.center ? 'var(--color-accent)' : 'var(--color-border)'),
-              cursor: 'pointer',
-            }"
-            @click="selectPreviewCenter(v.center)"
-          >
-            <span class="font-semibold text-sm">{{ v.center.toUpperCase() }}</span>
-            <span>{{ v.word_count }}w</span>
-            <span>{{ v.max_score }}p</span>
-            <span class="text-xs" :style="{ color: selectedCenter === v.center ? 'rgba(255,255,255,0.8)' : 'var(--color-text-tertiary)' }">70%: {{ Math.ceil(v.max_score * 0.7) }}</span>
-            <span>{{ v.pangram_count }}pg</span>
-          </button>
-        </div>
+        <KennoVariationsGrid
+          :variations="variations"
+          :active-center="selectedCenter"
+          :show-target="true"
+          @select="selectPreviewCenter"
+        />
       </div>
 
       <!-- Save button -->
@@ -770,39 +742,14 @@ onMounted(async () => {
       <p v-if="saveError" class="text-xs mb-3" style="color: #ef4444;">{{ saveError }}</p>
 
       <!-- Word list (preview mode — fetched when center is selected) -->
-      <div v-if="selectedCenter">
-        <div v-if="wordsLoading" class="text-sm py-2" :style="{ color: 'var(--color-text-secondary)' }">
-          Ladataan sanoja…
-        </div>
-        <div v-else-if="wordsError" class="text-sm py-2" :style="{ color: '#ef4444' }">
-          {{ wordsError }}
-        </div>
-        <div v-else-if="sortedWords.length > 0">
-          <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
-            {{ sortedWords.length }} sanaa — klikkaa × poistaaksesi sanan pysyvästi
-          </p>
-          <div class="flex flex-wrap gap-x-6 gap-y-2">
-            <ul v-for="(col, ci) in wordColumns" :key="ci">
-              <li
-                v-for="word in col"
-                :key="word"
-                class="flex items-center gap-1 text-sm py-0.5"
-              >
-                <span :style="{ color: isPangram(word) ? 'var(--color-accent)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: isPangram(word) ? '600' : 'normal' }">{{ word }}</span>
-                <button
-                  @click="blockWord(word)"
-                  class="text-xs leading-none opacity-40 hover:opacity-100"
-                  style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px;"
-                  aria-label="Block word"
-                >×</button>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div v-else-if="!wordsLoading" class="text-sm py-2" :style="{ color: 'var(--color-text-tertiary)' }">
-          Ei sanoja tälle pelille.
-        </div>
-      </div>
+      <KennoWordList
+        v-if="selectedCenter"
+        :words="words"
+        :letters="parsedLetters"
+        :loading="wordsLoading"
+        :error="wordsError"
+        @block="blockWord"
+      />
     </template>
 
     <!-- ── Clean state: live variations + words ────────────────────────── -->
@@ -818,63 +765,23 @@ onMounted(async () => {
         <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
           Keskuskirjain — klikkaa vaihtaaksesi.
         </p>
-        <div class="grid grid-cols-7 gap-1">
-          <button
-            v-for="v in variations"
-            :key="v.center"
-            class="flex flex-col items-center py-1.5 px-0.5 rounded text-xs leading-tight"
-            :style="{
-              background: v.is_active ? 'var(--color-accent)' : 'var(--color-bg-secondary)',
-              color: v.is_active ? 'white' : 'var(--color-text-secondary)',
-              border: '1px solid ' + (v.is_active ? 'var(--color-accent)' : 'var(--color-border)'),
-              cursor: v.is_active ? 'default' : centerSaving ? 'wait' : 'pointer',
-              opacity: centerSaving && !v.is_active ? '0.6' : '1',
-            }"
-            :disabled="v.is_active || centerSaving"
-            @click="!v.is_active && setCenter(v.center)"
-          >
-            <span class="font-semibold text-sm">{{ v.center.toUpperCase() }}</span>
-            <span>{{ v.word_count }}w</span>
-            <span>{{ v.max_score }}p</span>
-            <span>{{ v.pangram_count }}pg</span>
-          </button>
-        </div>
+        <KennoVariationsGrid
+          :variations="variations"
+          :active-center="savedCenter ?? ''"
+          :disabled="centerSaving"
+          @select="setCenter"
+        />
       </div>
 
       <!-- Word list -->
-      <div v-if="variations.length > 0">
-        <div v-if="wordsLoading" class="text-sm py-2" :style="{ color: 'var(--color-text-secondary)' }">
-          Ladataan sanoja…
-        </div>
-        <div v-else-if="wordsError" class="text-sm py-2" :style="{ color: '#ef4444' }">
-          {{ wordsError }}
-        </div>
-        <div v-else-if="sortedWords.length > 0">
-          <p class="text-xs mb-2" :style="{ color: 'var(--color-text-tertiary)' }">
-            {{ sortedWords.length }} sanaa — klikkaa × poistaaksesi sanan pysyvästi
-          </p>
-          <div class="flex flex-wrap gap-x-6 gap-y-2">
-            <ul v-for="(col, ci) in wordColumns" :key="ci">
-              <li
-                v-for="word in col"
-                :key="word"
-                class="flex items-center gap-1 text-sm py-0.5"
-              >
-                <span :style="{ color: isPangram(word) ? 'var(--color-accent)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: isPangram(word) ? '600' : 'normal' }">{{ word }}</span>
-                <button
-                  @click="blockWord(word)"
-                  class="text-xs leading-none opacity-40 hover:opacity-100"
-                  style="color: #ef4444; background: none; border: none; cursor: pointer; padding: 0 2px;"
-                  aria-label="Block word"
-                >×</button>
-              </li>
-            </ul>
-          </div>
-        </div>
-        <div v-else class="text-sm py-2" :style="{ color: 'var(--color-text-tertiary)' }">
-          Ei sanoja tälle pelille.
-        </div>
-      </div>
+      <KennoWordList
+        v-if="variations.length > 0"
+        :words="words"
+        :letters="parsedLetters"
+        :loading="wordsLoading"
+        :error="wordsError"
+        @block="blockWord"
+      />
     </template>
 
     </div><!-- /editor right column -->

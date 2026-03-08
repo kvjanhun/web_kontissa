@@ -41,6 +41,9 @@ web_kontissa/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4
 │   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
+│   ├── public/
+│   │   ├── favicon.ico             # Default site favicon
+│   │   └── sanakenno-favicon.png   # 64x64 orange pointy-top hexagon PNG; swapped in by useFaviconSwap on /sanakenno
 │   └── src/
 │       ├── main.js             # ViteSSG entry: createApp with SSG, router guards, i18n title updates
 │       ├── router.js           # 11 routes, lazy loading, admin + auth guards via beforeEach
@@ -49,10 +52,14 @@ web_kontissa/
 │       ├── composables/
 │       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
 │       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
+│       │   ├── useFaviconSwap.js  # Swaps page favicon on mount (URL string), restores on unmount. Uses element replacement. Safari covered server-side via routes.py.
+│       │   ├── useGameTimer.js    # Sanakenno elapsed-time tracking with pause/resume on tab visibility. Exposes startedAt, totalPausedMs, start(), getElapsedMs(), reset().
+│       │   ├── useHintData.js     # Pure computed derivations for Sanakenno hint panels (letterMap, unfoundLengths, pangramStats, lengthDistribution, pairMap). Takes puzzle, foundWords, outerLetters, center refs.
 │       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
 │       │   ├── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
 │       │   ├── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
-│       │   └── useTerminal.js  # Interactive shell logic: boot sequence (skip on re-mount), command handlers, history navigation
+│       │   ├── useTerminal.js  # Interactive shell logic: boot sequence (skip on re-mount), command handlers, history navigation
+│       │   └── useThemeColor.js   # Manages <meta name="theme-color"> and html background to match --color-bg-primary. Observes dark/light class changes via MutationObserver. Restores on unmount.
 │       ├── locales/
 │       │   ├── en.json         # English translations (~90 keys); includes admin.tab.kennotyokalu = "Kenno Tool"
 │       │   └── fi.json         # Finnish translations; includes admin.tab.kennotyokalu = "Kennotyökalu"
@@ -70,8 +77,10 @@ web_kontissa/
 │       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
 │       │       ├── AdminHealth.vue       # System health key-value display
 │       │       ├── AdminKennoStats.vue     # Sanakenno stats (page views, blocked words, puzzles) + daily achievements table (7d/30d/90d period selector, all 7 rank columns, totals row)
-│       │       ├── AdminKennoPuzzleTool.vue # Kennotyökalu tab: unified single-editor. Left column: scrollable all-puzzles slot list with dates + custom/today badges. Right column: compact toolbar (slot number, letters input, swap, delete/revert) + 7-column variations grid (word_count, max_score, pangram_count per letter; active highlighted) + full word list with block buttons. Clean state: view/switch center. Dirty state: preview letters → select center → save.
-│       │       └── AdminBlockedWords.vue # Blocked words table with unblock
+│       │       ├── AdminKennoPuzzleTool.vue # Kennotyökalu tab: unified single-editor. Left column: scrollable all-puzzles slot list with dates + custom/today badges. Right column: compact toolbar (slot number, letters input, swap, delete/revert) + KennoVariationsGrid + KennoWordList. Clean state: view/switch center. Dirty state: preview letters → select center → save.
+│       │       ├── AdminBlockedWords.vue # Blocked words table with unblock
+│       │       ├── KennoVariationsGrid.vue # 7-column center letter selector grid. Props: variations, activeCenter, disabled, showTarget. Emits: select.
+│       │       └── KennoWordList.vue    # Sorted multi-column word list with pangram highlighting (orange accent + semibold) and per-word block buttons. Props: words, letters, loading, error, emptyMessage. Emits: block.
 │       └── views/
 │           ├── HomePage.vue    # Hero with terminal animation
 │           ├── AboutPage.vue   # Fetches and renders /api/sections; groups compact types (currently, pills) into side-by-side pairs on md+ screens; no h1 heading (quote section serves as intro)
@@ -280,10 +289,10 @@ Public word game at `/sanakenno` (component `SanakennoPage.vue`). NYT Spelling B
   - UI icons use a `HINT_SVG` object with inline SVG paths (lightbulb for toggle, magnifying glass, A, ruler, Aa), each sized ~1em and styled with `currentColor` to inherit theme colors. Share text uses the emoji from `HINT_ICONS` object.
   - Admin puzzle switches reset hint state together with game progress.
 - **Jaa tulos (share)**: Button rendered next to the Avut toggle. Uses `navigator.clipboard.writeText` to copy a plain-text summary: puzzle number, current rank, score/max_score, and hint icons (📊🔤📏🔠) for any activated hints. After copying, a brief "Kopioitu leikepöydälle!" confirmation is shown.
-- **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, and `og:url` for link preview cards (Finnish game description).
-- **Favicon swap**: `SanakennoPage.vue` swaps the favicon to an orange pointy-top hexagon SVG on `onMounted` and restores the original on `onUnmounted`.
+- **OG meta tags**: The `/sanakenno` Flask route in `routes.py` reads `index.html` and patches `<title>`, `description`, `og:title`, `og:description`, `og:url`, and `<link rel="icon">` (to `/sanakenno-favicon.png`) for link preview cards and Safari favicon on hard navigation.
+- **Favicon swap**: `useFaviconSwap.js` (called by `SanakennoPage.vue`) swaps the favicon to `frontend/public/sanakenno-favicon.png` on mount via element replacement, and restores the original on unmount. Safari does not reliably support dynamic favicon changes; `routes.py` patches `<link rel="icon">` in the served HTML to cover Safari on hard navigation.
 - **Word blocking**: Admins can permanently remove a word via `POST /api/kenno/block`. Blocked words are stored in the `blocked_words` table (`BlockedWord` model). Blocking clears `_PUZZLE_CACHE` so the next request recomputes. After blocking, `AdminKennoPuzzleTool.vue` refetches the word list to reflect the removal.
-- **Timer**: Elapsed play time is tracked from `startedAt` (epoch ms). Tab visibility is monitored via `visibilitychange`, `blur`, and `pagehide` events to accumulate paused time in `totalPausedMs`.
+- **Timer**: Elapsed play time is managed by `useGameTimer.js`. Tab visibility is monitored via `visibilitychange`, `blur`, and `pagehide` events to accumulate paused time. Exposes `startedAt`, `totalPausedMs`, `start()`, `getElapsedMs()`, `reset()`.
 - **No auth required**: Public endpoint, no database usage for normal play.
 - **Achievement tracking**: On each rank transition (when `rankAfter !== rankBefore`), `SanakennoPage.vue` fires a fire-and-forget `POST /api/kenno/achievement` with `{puzzle_number, rank, score, max_score, words_found, elapsed_ms}`. The server deduplicates per session via `session["achieved_ranks"]` (a list of `"puzzle:rank"` strings) so each rank is recorded at most once per browser session. Achievements are stored in the `KennoAchievement` model. The admin `GET /api/kenno/achievements` endpoint returns daily counts by rank for the chosen period. Default period is 7 days in `AdminKennoStats.vue`.
 - **Center variation selector**: The 7-column grid (word count, max score, pangram count per center letter; active center highlighted) lives in `AdminKennoPuzzleTool.vue`. Clicking a non-active letter in clean state calls `POST /api/kenno/center` and refreshes the display.

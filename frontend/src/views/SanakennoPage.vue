@@ -1,6 +1,10 @@
 <script setup>
 import { ref, computed, nextTick, onMounted, onUnmounted } from 'vue'
 import ThemeToggle from '../components/ThemeToggle.vue'
+import { useFaviconSwap } from '../composables/useFaviconSwap.js'
+import { useThemeColor } from '../composables/useThemeColor.js'
+import { useGameTimer } from '../composables/useGameTimer.js'
+import { useHintData } from '../composables/useHintData.js'
 
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
@@ -47,9 +51,11 @@ let resubTimer = null
 let rejectTimer = null
 const shareCopied = ref(false)
 let shareCopiedTimer = null
-const startedAt = ref(null)           // epoch ms, set on first load of each puzzle
-const totalPausedMs = ref(0)          // accumulated ms the tab was hidden
-let hiddenAt = null                   // non-reactive: when the tab was last hidden
+
+// --- Composables ---
+useFaviconSwap('/sanakenno-favicon.png')
+useThemeColor()
+const { startedAt, totalPausedMs, start: startTimer, getElapsedMs } = useGameTimer()
 
 // --- Computed ---
 const center = computed(() => puzzle.value?.center ?? '')
@@ -152,165 +158,9 @@ function toColumns(words) {
 }
 const wordColumns = computed(() => toColumns(sortedFoundWords.value))
 
-// --- Hint computeds (using hint_data from API) ---
+// --- Hint computeds (extracted to composable) ---
+const { letterMap, unfoundLengths, pangramStats, lengthDistribution, pairMap } = useHintData(puzzle, foundWords, outerLetters, center)
 
-// Track found word stats for subtracting from hint_data totals
-const foundByLetter = computed(() => {
-  const map = {}
-  for (const word of foundWords.value) {
-    const l = word[0]
-    map[l] = (map[l] || 0) + 1
-  }
-  return map
-})
-
-const foundByLength = computed(() => {
-  const map = {}
-  for (const word of foundWords.value) {
-    const k = String(word.length)
-    map[k] = (map[k] || 0) + 1
-  }
-  return map
-})
-
-const foundByPair = computed(() => {
-  const map = {}
-  for (const word of foundWords.value) {
-    const pair = word.slice(0, 2)
-    map[pair] = (map[pair] || 0) + 1
-  }
-  return map
-})
-
-// Hint 2: remaining words per starting letter
-const letterMap = computed(() => {
-  const hd = puzzle.value?.hint_data
-  if (!hd) return []
-  return Object.entries(hd.by_letter)
-    .map(([letter, total]) => ({ letter, remaining: total - (foundByLetter.value[letter] || 0) }))
-    .sort((a, b) => a.letter.localeCompare(b.letter))
-})
-
-// Hint 1 (summary): remaining word stats
-const unfoundLengths = computed(() => {
-  const hd = puzzle.value?.hint_data
-  if (!hd) return null
-  const remaining = hd.word_count - foundWords.value.size
-  if (remaining === 0) return null
-  let longest = 0
-  const uniqueLengths = new Set()
-  for (const [len, total] of Object.entries(hd.by_length)) {
-    const found = foundByLength.value[len] || 0
-    if (total - found > 0) {
-      uniqueLengths.add(parseInt(len))
-      if (parseInt(len) > longest) longest = parseInt(len)
-    }
-  }
-  return { longest, uniqueLengths: uniqueLengths.size }
-})
-
-const pangramStats = computed(() => {
-  const hd = puzzle.value?.hint_data
-  if (!hd) return { total: 0, found: 0, remaining: 0 }
-  const letterSet = new Set([center.value, ...outerLetters.value])
-  const foundPangrams = [...foundWords.value].filter(w => [...letterSet].every(c => w.includes(c))).length
-  return { total: hd.pangram_count, found: foundPangrams, remaining: hd.pangram_count - foundPangrams }
-})
-
-// Hint 3: word count per length (remaining)
-const lengthDistribution = computed(() => {
-  const hd = puzzle.value?.hint_data
-  if (!hd) return []
-  return Object.entries(hd.by_length)
-    .map(([len, total]) => ({ len: parseInt(len), total, remaining: total - (foundByLength.value[len] || 0) }))
-    .sort((a, b) => a.len - b.len)
-})
-
-// Hint 4: remaining words per two-letter pair
-const pairMap = computed(() => {
-  const hd = puzzle.value?.hint_data
-  if (!hd) return []
-  return Object.entries(hd.by_pair)
-    .map(([pair, total]) => ({ pair, remaining: total - (foundByPair.value[pair] || 0) }))
-    .sort((a, b) => a.pair.localeCompare(b.pair))
-})
-
-// --- Favicon swap ---
-// Pointy-top hexagon matching the game's honeycomb geometry, orange accent color
-const KENNO_FAVICON = "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><polygon points='90.7,26.5 90.7,73.5 50,97 9.3,73.5 9.3,26.5 50,3' fill='%23ff643e'/></svg>"
-let _originalFavicon = null
-
-function _swapFavicon(href) {
-  const el = document.querySelector("link[rel='icon']")
-  if (el) { _originalFavicon = el.href; el.href = href }
-}
-function _restoreFavicon() {
-  const el = document.querySelector("link[rel='icon']")
-  if (el && _originalFavicon) el.href = _originalFavicon
-}
-
-// --- Theme-color meta (iOS Safari status bar) + html background ---
-let _originalThemeColor = null
-let _themeColorMeta = null
-let _originalHtmlBg = null
-
-function _setThemeColor() {
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
-  _themeColorMeta = document.querySelector('meta[name="theme-color"]')
-  if (!_themeColorMeta) {
-    _themeColorMeta = document.createElement('meta')
-    _themeColorMeta.name = 'theme-color'
-    document.head.appendChild(_themeColorMeta)
-  }
-  _originalThemeColor = _themeColorMeta.content
-  _themeColorMeta.content = color
-  // Make html background match page bg so sides don't show --color-bg-page on wide screens
-  _originalHtmlBg = document.documentElement.style.backgroundColor
-  document.documentElement.style.backgroundColor = color
-}
-
-function _updateThemeColor() {
-  if (!_themeColorMeta) return
-  const color = getComputedStyle(document.documentElement).getPropertyValue('--color-bg-primary').trim()
-  _themeColorMeta.content = color
-  document.documentElement.style.backgroundColor = color
-}
-
-function _restoreThemeColor() {
-  if (!_themeColorMeta) return
-  if (_originalThemeColor != null) {
-    _themeColorMeta.content = _originalThemeColor
-  } else {
-    _themeColorMeta.remove()
-  }
-  document.documentElement.style.backgroundColor = _originalHtmlBg
-}
-
-let _themeObserver = null
-
-// --- Timer helpers ---
-function getElapsedMs() {
-  if (!startedAt.value) return 0
-  return Date.now() - startedAt.value - totalPausedMs.value
-}
-
-function handleVisibilityChange() {
-  if (document.hidden) {
-    hiddenAt = Date.now()
-  } else {
-    if (hiddenAt !== null) {
-      totalPausedMs.value += Date.now() - hiddenAt
-      hiddenAt = null
-    }
-  }
-}
-
-function handlePageHide() {
-  // Fired when page may be unloaded/backgrounded (more reliable on mobile)
-  if (hiddenAt === null) {
-    hiddenAt = Date.now()
-  }
-}
 
 // --- State persistence (per-puzzle localStorage) ---
 function saveState() {
@@ -381,7 +231,7 @@ async function fetchPuzzle(overrideIndex) {
     outerLetters.value = [...data.letters]
     puzzleNumber.value = data.puzzle_number
     await loadState()
-    if (startedAt.value === null) startedAt.value = Date.now()
+    startTimer()
   } catch {
     fetchError.value = 'Lataus epäonnistui.'
   } finally {
@@ -609,26 +459,12 @@ function handleKeydown(e) {
 }
 
 onMounted(() => {
-  _swapFavicon(KENNO_FAVICON)
-  _setThemeColor()
-  // Update theme-color when dark/light mode toggles (class change on <html>)
-  _themeObserver = new MutationObserver(_updateThemeColor)
-  _themeObserver.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] })
   document.addEventListener('keydown', handleKeydown)
-  document.addEventListener('visibilitychange', handleVisibilityChange)
-  window.addEventListener('blur', handleVisibilityChange)
-  window.addEventListener('pagehide', handlePageHide)
   fetchPuzzle()
 })
 
 onUnmounted(() => {
-  _restoreFavicon()
-  _restoreThemeColor()
-  if (_themeObserver) { _themeObserver.disconnect(); _themeObserver = null }
   document.removeEventListener('keydown', handleKeydown)
-  document.removeEventListener('visibilitychange', handleVisibilityChange)
-  window.removeEventListener('blur', handleVisibilityChange)
-  window.removeEventListener('pagehide', handlePageHide)
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
