@@ -167,6 +167,10 @@ const wordColumns = computed(() => {
   return cols
 })
 
+function isPangram(word) {
+  return parsedLetters.value.every(l => word.includes(l))
+}
+
 // ---------------------------------------------------------------------------
 // Slot loading
 // ---------------------------------------------------------------------------
@@ -784,7 +788,7 @@ onMounted(async () => {
                 :key="word"
                 class="flex items-center gap-1 text-sm py-0.5"
               >
-                <span :style="{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }">{{ word }}</span>
+                <span :style="{ color: isPangram(word) ? 'var(--color-accent)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: isPangram(word) ? '600' : 'normal' }">{{ word }}</span>
                 <button
                   @click="blockWord(word)"
                   class="text-xs leading-none opacity-40 hover:opacity-100"
@@ -856,7 +860,7 @@ onMounted(async () => {
                 :key="word"
                 class="flex items-center gap-1 text-sm py-0.5"
               >
-                <span :style="{ color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }">{{ word }}</span>
+                <span :style="{ color: isPangram(word) ? 'var(--color-accent)' : 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)', fontWeight: isPangram(word) ? '600' : 'normal' }">{{ word }}</span>
                 <button
                   @click="blockWord(word)"
                   class="text-xs leading-none opacity-40 hover:opacity-100"
