@@ -17,6 +17,9 @@ frontend/node_modules/
 # Environment variables
 .env
 
+# Claude Code agent memory
+.claude/
+
 # Internal planning docs
 ROADMAP.md
 GEMINI.md
