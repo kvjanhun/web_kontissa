@@ -35,13 +35,13 @@ web_kontissa/
 ├── docker-compose.yml          # Service config: env_file, volume for /app/data, port 127.0.0.1:8080:80, healthcheck on /api/meta every 30s
 ├── .github/
 │   └── workflows/
-│       └── test.yml            # CI: runs pytest + Playwright on push/PR to main; uploads playwright-report on failure
+│       └── test.yml            # CI: 3 jobs — pytest, vitest (unit), Playwright (E2E) on push/PR to main; uploads playwright-report on failure
 ├── run.py                      # Flask dev entry point (port 5001, debug=True)
 ├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, flask-limiter, gunicorn, cowsay, requests)
 ├── ADMIN_TOOLS.md              # Admin tool documentation with screenshots (Kennotyökalu, Kenno Stats)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
 ├── frontend/
-│   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4; devDeps include @playwright/test; scripts: test:e2e, test:e2e:ui
+│   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4; devDeps include vitest, @playwright/test; scripts: test (vitest), test:watch, test:e2e, test:e2e:ui
 │   ├── playwright.config.js    # Playwright config: dual webServer (Flask :5001, Vite :5173), Chromium only
 │   ├── e2e/
 │   │   ├── fixtures/
@@ -53,7 +53,7 @@ web_kontissa/
 │   │   ├── recipes.spec.js     # 4 tests: auth redirect, list, detail, new form
 │   │   ├── admin.spec.js       # 5 tests: non-admin blocked, admin access, tabs, sections, tab switching
 │   │   └── not-found.spec.js   # 2 tests: 404 page, home link
-│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering
+│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering, test.exclude for Vitest (skips e2e/)
 │   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
 │   ├── public/
 │   │   ├── favicon.ico             # Default site favicon
@@ -72,8 +72,12 @@ web_kontissa/
 │       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
 │       │   ├── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
 │       │   ├── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
+│       │   ├── useSanakennoLogic.js  # Pure Sanakenno game logic (no Vue/DOM). Exports: RANKS, scoreWord, recalcScore, rankForScore, rankThresholds, progressToNextRank, colorizeWord, toColumns. Imported by SanakennoPage.vue; unit-tested in src/__tests__/.
 │       │   ├── useTerminal.js  # Interactive shell logic: boot sequence (skip on re-mount), command handlers, history navigation
 │       │   └── useThemeColor.js   # Manages <meta name="theme-color"> and html background to match --color-bg-primary. Observes dark/light class changes via MutationObserver. Restores on unmount.
+│       ├── __tests__/
+│       │   ├── useSanakennoLogic.test.js  # 43 Vitest unit tests for all useSanakennoLogic exports
+│       │   └── useHintData.test.js        # 20 Vitest unit tests for useHintData composable (uses Vue refs)
 │       ├── locales/
 │       │   ├── en.json         # English translations (~90 keys); includes admin.tab.kennotyokalu = "Kenno Tool"
 │       │   └── fi.json         # Finnish translations; includes admin.tab.kennotyokalu = "Kennotyökalu"
@@ -222,6 +226,15 @@ pytest tests/
 
 Uses an in-memory SQLite database. No server running required. Rate limiting is disabled in tests via the `TESTING` env var (`limiter.enabled = not os.environ.get("TESTING")`).
 
+**Frontend unit tests (Vitest)**
+
+```bash
+cd frontend && npm run test          # Run once
+cd frontend && npm run test:watch    # Watch mode
+```
+
+Tests live in `frontend/src/__tests__/`. Vitest is configured in `vite.config.js` to exclude `e2e/` and `node_modules/`. No server required.
+
 **E2E (Playwright)**
 
 ```bash
@@ -248,7 +261,7 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 - **Firewall (iptables)**: Default deny inbound. Only ports 80, 443 open publicly. SSH restricted to two LAN IPs. Container port 8080 blocked from external access.
 - **TLS**: Let's Encrypt with certbot, ECDSA certificates, TLSv1.2+1.3 only. Auto-renewal via systemd timer with nginx reload hook.
-- **CI**: GitHub Actions (`.github/workflows/test.yml`) runs pytest and Playwright on every push and PR to main. Playwright report is uploaded as an artifact on failure.
+- **CI**: GitHub Actions (`.github/workflows/test.yml`) runs three parallel jobs on every push and PR to main: `pytest` (backend), `vitest` (frontend unit), `playwright` (E2E). Playwright report is uploaded as an artifact on failure.
 - **Deployment**: Push to GitHub main → webhook (token-authenticated) → `deploy-site.sh` (git pull, docker compose up --build, systemctl restart).
 - **Services**: `web-kontissa.service` (Docker Compose app, runs as kvjanhun), `webhook.service` (deploy listener, runs as kvjanhun). The old `site-container.service` (static HTML site) has been disabled.
 
