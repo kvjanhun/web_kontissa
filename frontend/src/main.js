@@ -10,14 +10,14 @@ export const createApp = ViteSSG(
   App,
   { routes, scrollBehavior() { return { top: 0 } } },
   ({ router, isClient }) => {
-    router.beforeEach((to) => {
-      if (to.meta.requiresAdmin) {
-        const { isAdmin } = useAuth()
-        if (!isAdmin.value) return '/login'
-      }
-      if (to.meta.requiresAuth) {
-        const { isAuthenticated } = useAuth()
-        if (!isAuthenticated.value) return '/login'
+    router.beforeEach(async (to) => {
+      if (to.meta.requiresAdmin || to.meta.requiresAuth) {
+        const { isAdmin, isAuthenticated, checkAuth } = useAuth()
+        // Ensure auth state is populated before checking guards
+        // (handles direct URL navigation and page refresh)
+        if (!isAuthenticated.value) await checkAuth()
+        if (to.meta.requiresAdmin && !isAdmin.value) return '/login'
+        if (to.meta.requiresAuth && !isAuthenticated.value) return '/login'
       }
     })
     router.afterEach((to) => {

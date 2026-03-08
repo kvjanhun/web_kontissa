@@ -20,6 +20,14 @@ frontend/node_modules/
 # Claude Code agent memory
 .claude/
 
+# Playwright
+frontend/test-results/
+frontend/playwright-report/
+frontend/playwright/.cache/
+
+# E2E test database
+app/data/test-e2e.db
+
 # Internal planning docs
 ROADMAP.md
 GEMINI.md
