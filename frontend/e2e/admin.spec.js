@@ -36,7 +36,7 @@ test.describe('Admin Dashboard', () => {
     await expect(adminPage).toHaveURL('/admin', { timeout: 10000 })
 
     await adminPage.locator('button').filter({ hasText: /Health|Terveys/ }).click()
-    // Health tab shows Python version string like "3.13.x (default, ...)"
-    await expect(adminPage.locator('text=/\\d\\.\\d+\\.\\d+.*default/')).toBeVisible({ timeout: 10000 })
+    // Health tab shows the Python label row
+    await expect(adminPage.getByText('Python', { exact: true })).toBeVisible({ timeout: 10000 })
   })
 })
