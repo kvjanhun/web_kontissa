@@ -14,6 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                        "app", "data", "test-e2e.db")
+os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.environ["DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 
 from datetime import datetime, timezone
