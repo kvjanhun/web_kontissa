@@ -6,6 +6,7 @@ import { useFaviconSwap } from '../composables/useFaviconSwap.js'
 import { useThemeColor } from '../composables/useThemeColor.js'
 import { useGameTimer } from '../composables/useGameTimer.js'
 import { useHintData } from '../composables/useHintData.js'
+import { RANKS, scoreWord, recalcScore as _recalcScore, rankForScore, rankThresholds as _rankThresholds, progressToNextRank as _progressToNextRank, colorizeWord, toColumns } from '../composables/useSanakennoLogic.js'
 
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
@@ -70,15 +71,7 @@ async function hashWord(word) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-const RANKS = [
-  { pct: 100, name: 'Täysi kenno' },
-  { pct: 70,  name: 'Ällistyttävä' },
-  { pct: 40,  name: 'Sanavalmis' },
-  { pct: 20,  name: 'Onnistuja' },
-  { pct: 10,  name: 'Nyt mennään!' },
-  { pct: 2,   name: 'Hyvä alku' },
-  { pct: 0,   name: 'Etsi sanoja!' },
-]
+// RANKS imported from useSanakennoLogic.js
 
 const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏', pairs: '🔠' }
 
@@ -90,58 +83,21 @@ const HINT_SVG = {
   pairs: '<span aria-hidden="true" style="font-weight:450;font-size:1.1em;line-height:1;">AB</span>',
 }
 
-const rank = computed(() => {
-  if (!puzzle.value || puzzle.value.max_score === 0) return RANKS[RANKS.length - 1].name
-  const pct = (score.value / puzzle.value.max_score) * 100
-  for (const r of RANKS) {
-    if (pct >= r.pct) return r.name
-  }
-  return RANKS[RANKS.length - 1].name
-})
+const rank = computed(() => rankForScore(score.value, puzzle.value?.max_score ?? 0))
 
-const rankThresholds = computed(() => {
-  const max = puzzle.value?.max_score ?? 0
-  // Hide Täysi kenno from the visible list — it's a surprise reveal
-  const visible = rank.value === 'Täysi kenno'
-    ? RANKS
-    : RANKS.filter(r => r.name !== 'Täysi kenno')
-  return [...visible].reverse().map(r => ({
-    name: r.name,
-    points: Math.ceil(r.pct / 100 * max),
-    isCurrent: rank.value === r.name,
-  }))
-})
+const rankThresholds = computed(() => _rankThresholds(rank.value, puzzle.value?.max_score ?? 0))
 
-const progressToNextRank = computed(() => {
-  if (!puzzle.value || puzzle.value.max_score === 0) return 0
-  const max = puzzle.value.max_score
-  const scorePct = (score.value / max) * 100
-  const currentIdx = RANKS.findIndex(r => scorePct >= r.pct)
-  if (currentIdx === -1) return 0
-  if (currentIdx === 0) return 100
-  const currentRankPts = Math.ceil(RANKS[currentIdx].pct / 100 * max)
-  const nextRankPts = Math.ceil(RANKS[currentIdx - 1].pct / 100 * max)
-  if (nextRankPts <= currentRankPts) return 100
-  return Math.min(100, ((score.value - currentRankPts) / (nextRankPts - currentRankPts)) * 100)
-})
+const progressToNextRank = computed(() => _progressToNextRank(score.value, puzzle.value?.max_score ?? 0))
 
 const allFound = computed(() => {
   if (!puzzle.value?.hint_data) return false
   return foundWords.value.size === puzzle.value.hint_data.word_count
 })
 
-// Colour each character of the word being typed:
-//   center letter  → accent (orange)
-//   other puzzle letter → text-primary
-//   dash           → text-tertiary (structural, not a letter)
-//   anything else  → text-tertiary (invalid, will fail validation)
+const COLOR_MAP = { accent: 'var(--color-accent)', primary: 'var(--color-text-primary)', tertiary: 'var(--color-text-tertiary)' }
 const currentWordChars = computed(() =>
-  [...currentWord.value].map(char => {
-    if (char === '-')              return { char, color: 'var(--color-text-tertiary)' }
-    if (char === center.value)     return { char, color: 'var(--color-accent)' }
-    if (allLetters.value.has(char)) return { char, color: 'var(--color-text-primary)' }
-    return { char, color: 'var(--color-text-tertiary)' }
-  })
+  colorizeWord(currentWord.value, center.value, allLetters.value)
+    .map(({ char, color }) => ({ char, color: COLOR_MAP[color] }))
 )
 
 // Primary sort: alphabetical. Secondary: length (shortest first) as tiebreaker.
@@ -149,14 +105,6 @@ const sortedFoundWords = computed(() =>
   [...foundWords.value].sort((a, b) => a.localeCompare(b) || a.length - b.length)
 )
 
-const WORDS_PER_COLUMN = 10
-function toColumns(words) {
-  const cols = []
-  for (let i = 0; i < words.length; i += WORDS_PER_COLUMN) {
-    cols.push(words.slice(i, i + WORDS_PER_COLUMN))
-  }
-  return cols
-}
 const wordColumns = computed(() => toColumns(sortedFoundWords.value))
 
 // --- Hint computeds (extracted to composable) ---
@@ -176,14 +124,7 @@ function saveState() {
 }
 
 function recalcScore(words) {
-  const letterSet = new Set([center.value, ...outerLetters.value])
-  let total = 0
-  for (const w of words) {
-    const pts = w.length === 4 ? 1 : w.length
-    const isPangram = [...letterSet].every(c => w.includes(c))
-    total += pts + (isPangram ? 7 : 0)
-  }
-  return total
+  return _recalcScore(words, new Set([center.value, ...outerLetters.value]))
 }
 
 async function loadState() {

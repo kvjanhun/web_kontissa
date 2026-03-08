@@ -6,6 +6,8 @@
     "dev": "vite",
     "build": "vite-ssg build",
     "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
@@ -20,6 +22,7 @@
     "@vitejs/plugin-vue": "^5.2.0",
     "tailwindcss": "^4.1.0",
     "vite": "^6.2.0",
-    "vite-ssg": "^0.24.0"
+    "vite-ssg": "^0.24.0",
+    "vitest": "^4.0.18"
   }
 }
