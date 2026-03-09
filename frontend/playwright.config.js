@@ -9,7 +9,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'html',
   use: {
-    baseURL: 'http://localhost:5173',
+    baseURL: 'http://localhost:3000',
     trace: 'on-first-retry',
   },
   projects: [
@@ -26,8 +26,8 @@ export default defineConfig({
       cwd: import.meta.dirname,
     },
     {
-      command: 'npx vite --port 5173',
-      port: 5173,
+      command: 'TESTING=1 npx nuxt build && npx nuxt preview --port 3000',
+      port: 3000,
       reuseExistingServer: !process.env.CI,
       cwd: import.meta.dirname,
     },
