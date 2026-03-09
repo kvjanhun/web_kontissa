@@ -10,14 +10,15 @@ These two roles are not separate hats — they are one mindset. Every feature de
 
 ## Project Overview
 
-Personal portfolio site for Konsta Janhunen (erez.ac). Vue 3 SPA frontend, Flask JSON API backend, SQLite database, deployed via Docker on a self-hosted Intel NUC running RHEL.
+Personal portfolio site for Konsta Janhunen (erez.ac). Nuxt 3 SSG frontend, Flask JSON API backend, SQLite database, deployed via Docker on a self-hosted Intel NUC running RHEL.
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend | Vue 3 (Composition API, `<script setup>`), Vue Router 4, Tailwind CSS 4 |
-| Build | Vite 6, vite-ssg (static site generation for SEO) |
+| Frontend | Nuxt 3, Vue 3 (Composition API, `<script setup>`), Tailwind CSS 4 |
+| Build | Nuxt (`nuxt generate` for SSG, Vite under the hood) |
+| State | Pinia (`@pinia/nuxt` module; stores auto-imported) |
 | Backend | Flask 3.1, Flask-SQLAlchemy, Flask-Login, Flask-Limiter (30 req/min default) |
 | Database | SQLite |
 | Auth | Flask-Login session cookies, werkzeug scrypt password hashing |
@@ -45,75 +46,90 @@ web_kontissa/
 │   ├── deploy-site.sh          # Webhook deploy script: git pull → docker build → restart; sends Telegram on success/failure
 │   └── health-alert.sh         # Cron health monitor: checks Docker container status every 5 min, sends Telegram down/recovery alerts
 ├── frontend/
-│   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4; devDeps include vitest, @playwright/test; scripts: test (vitest), test:watch, test:e2e, test:e2e:ui
-│   ├── playwright.config.js    # Playwright config: dual webServer (Flask :5001, Vite :5173), Chromium only
-│   ├── e2e/
-│   │   ├── fixtures/
-│   │   │   └── auth.js         # Playwright fixtures: authenticatedPage (regular user), adminPage (admin user); login via form
-│   │   ├── homepage.spec.js    # 3 tests: heading, nav links, title
-│   │   ├── navigation.spec.js  # 3 tests: route transitions, auth redirects
-│   │   ├── auth.spec.js        # 4 tests: form, invalid creds, login redirect, logout
-│   │   ├── sanakenno.spec.js   # 7 tests: game load, keyboard input, hints, share, rules modal
-│   │   ├── recipes.spec.js     # 4 tests: auth redirect, list, detail, new form
-│   │   ├── admin.spec.js       # 5 tests: non-admin blocked, admin access, tabs, sections, tab switching
-│   │   └── not-found.spec.js   # 2 tests: 404 page, home link
-│   ├── vite.config.js          # Vue+Tailwind plugins, /api proxy to :5001, output to ../app/static/dist, ssgOptions for static pre-rendering, test.exclude for Vitest (skips e2e/)
-│   ├── index.html              # Dark mode flash prevention script, Schema.org JSON-LD
+│   ├── package.json            # Nuxt 3, Pinia, Tailwind 4; devDeps include vitest, @playwright/test; scripts: dev, build (nuxt generate), test (vitest), test:watch, test:e2e, test:e2e:ui
+│   ├── nuxt.config.ts          # Nuxt config: SSR=true, nitro.prerender.routes for SSG, routeRules for /api proxy, @pinia/nuxt module, Tailwind vite plugin, global CSS, app.head (dark-mode script, JSON-LD, OG meta), auto-import dirs (stores, composables)
+│   ├── vitest.config.js        # Vitest config: jsdom environment, excludes e2e/, path aliases ~ and @
+│   ├── playwright.config.js    # Playwright config: webServer for Flask :5001 + `nuxt build && nuxt preview` :3000, Chromium only, baseURL :3000
+│   ├── app.vue                 # Root component: <NuxtLayout><NuxtPage>. Initialises darkModeStore on mount.
+│   ├── assets/
+│   │   └── style.css           # Tailwind import, CSS custom properties theme, dark mode, DM Sans + Ubuntu Mono
 │   ├── public/
 │   │   ├── favicon.ico             # Default site favicon
 │   │   └── sanakenno-favicon.png   # 64x64 orange pointy-top hexagon PNG; swapped in by useFaviconSwap on /sanakenno
-│   └── src/
-│       ├── main.js             # ViteSSG entry: createApp with SSG, router guards, i18n title updates
-│       ├── router.js           # 11 routes, lazy loading, admin + auth guards via beforeEach
-│       ├── style.css           # Tailwind import, CSS custom properties theme, dark mode, DM Sans + Ubuntu Mono
-│       ├── App.vue             # Layout shell: AppHeader, router-view, AppFooter. Calls checkAuth() on mount
-│       ├── composables/
-│       │   ├── useAuth.js      # Shared reactive auth state (user, isAdmin, isAuthenticated, login, logout, checkAuth)
-│       │   ├── useDarkMode.js  # localStorage-backed dark mode with system preference fallback
-│       │   ├── useFaviconSwap.js  # Swaps page favicon on mount (URL string), restores on unmount. Uses element replacement. Safari covered server-side via routes.py.
-│       │   ├── useGameTimer.js    # Sanakenno elapsed-time tracking with pause/resume on tab visibility. Exposes startedAt, totalPausedMs, start(), getElapsedMs(), reset().
-│       │   ├── useHintData.js     # Pure computed derivations for Sanakenno hint panels (letterMap, unfoundLengths, pangramStats, lengthDistribution, pairMap). Takes puzzle, foundWords, outerLetters, center refs.
-│       │   ├── useI18n.js      # EN/FI i18n: locale ref, t(key, params) function, localStorage persistence
-│       │   ├── useNavLinks.js  # Shared nav link list used by AppHeader and AppFooter
-│       │   ├── usePageView.js  # trackPageView(path) — fire-and-forget POST /api/pageview
-│       │   ├── useSanakennoLogic.js  # Pure Sanakenno game logic (no Vue/DOM). Exports: RANKS, scoreWord, recalcScore, rankForScore, rankThresholds, progressToNextRank, colorizeWord, toColumns. Imported by SanakennoPage.vue; unit-tested in src/__tests__/.
-│       │   ├── useTerminal.js  # Interactive shell logic: boot sequence (skip on re-mount), command handlers, history navigation
-│       │   └── useThemeColor.js   # Manages <meta name="theme-color"> and html background to match --color-bg-primary. Observes dark/light class changes via MutationObserver. Restores on unmount.
-│       ├── __tests__/
-│       │   ├── useSanakennoLogic.test.js  # 43 Vitest unit tests for all useSanakennoLogic exports
-│       │   └── useHintData.test.js        # 20 Vitest unit tests for useHintData composable (uses Vue refs)
-│       ├── locales/
-│       │   ├── en.json         # English translations (~90 keys); includes admin.tab.kennotyokalu = "Kenno Tool"
-│       │   └── fi.json         # Finnish translations; includes admin.tab.kennotyokalu = "Kennotyökalu"
-│       ├── components/
-│       │   ├── AppHeader.vue   # Sticky nav, always-hamburger menu, auth-aware links, LangToggle
-│       │   ├── AppFooter.vue   # Full auth-aware nav links + last updated date from /api/meta
-│       │   ├── ThemeToggle.vue # Sun/moon toggle button
-│       │   ├── LangToggle.vue  # EN/FI language toggle button
-│       │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, echo, date, clear; fuzzy "Did you mean:" suggestions via Levenshtein distance ≤ 2
-│       │   ├── weatherIcons.js    # Inline SVG weather icons + wawaToIcon(code) mapper
-│       │   ├── SectionBlock.vue    # Section renderer with 4 types: 'quote' (decorative centered blockquote, no card), 'currently' (card with accent-bordered label:value items), 'pills' (card with 3-col grid of flat accent-bordered items), 'text' (card with v-html content). All card types have orange accent bar under title.
-│       │   └── admin/
-│       │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows); type selector dropdown (Text/Pills/Quote/Currently) in create and edit forms; placeholder text is dynamic based on selected type
-│       │       ├── AdminPageViews.vue    # Page views table with timestamps
-│       │       ├── AdminRecipes.vue      # Recipe table with edit/delete
-│       │       ├── AdminHealth.vue       # System health key-value display
-│       │       ├── AdminKennoStats.vue     # Sanakenno stats (page views, blocked words, puzzles) + daily achievements table (7d/30d/90d period selector, all 7 rank columns, totals row)
-│       │       ├── AdminKennoPuzzleTool.vue # Kennotyökalu tab: unified single-editor. Left column: scrollable all-puzzles slot list with dates + custom/today badges. Right column: compact toolbar (slot number, letters input, swap, delete/revert) + KennoVariationsGrid + KennoWordList. Clean state: view/switch center. Dirty state: preview letters → select center → save.
-│       │       ├── AdminBlockedWords.vue # Blocked words table with unblock
-│       │       ├── KennoVariationsGrid.vue # 7-column center letter selector grid. Props: variations, activeCenter, disabled, showTarget. Emits: select.
-│       │       └── KennoWordList.vue    # Sorted multi-column word list with pangram highlighting (orange accent + semibold) and per-word block buttons. Props: words, letters, loading, error, emptyMessage. Emits: block.
-│       └── views/
-│           ├── HomePage.vue    # Hero with terminal animation
-│           ├── AboutPage.vue   # Fetches and renders /api/sections; groups compact types (currently, pills) into side-by-side pairs on md+ screens; no h1 heading (quote section serves as intro)
-│           ├── ContactPage.vue # Static contact links (email, GitHub, LinkedIn)
-│           ├── LoginPage.vue   # Auth form or logged-in state with logout
-│           ├── AdminPage.vue   # Protected admin dashboard, flat tab bar (Sections, Analytics, Recipes, Health, Sanakenno, Kennotyökalu) with lazy-mounted panels
-│           ├── RecipeListPage.vue    # Recipe cards with search + category filter
-│           ├── RecipeDetailPage.vue  # Single recipe view with wake lock + step checkboxes
-│           ├── RecipeFormPage.vue    # Create/edit recipe form with dynamic rows
-│           ├── SanakennoPage.vue    # Sanakenno (Finnish Spelling Bee) game. Title in top bar row alongside navigation. Sticky score/progress/hints-toggle/share row. Admin controls removed (puzzle switcher + center variations now in AdminKennoPuzzleTool.vue).
-│           └── NotFound.vue    # 404
+│   ├── layouts/
+│   │   ├── default.vue         # Layout shell: AppHeader, <slot>, AppFooter, aria-live announcer, checkAuth on mount
+│   │   └── standalone.vue      # Bare layout (just <slot>); used by sanakenno page via definePageMeta
+│   ├── middleware/
+│   │   ├── auth.global.js      # Global route guard: checks requiresAuth/requiresAdmin meta, calls authStore.checkAuth(), redirects to /login
+│   │   └── pageview.global.js  # Global after-nav hook: updates page title via i18nStore, fires trackPageView (skips /admin)
+│   ├── pages/
+│   │   ├── index.vue           # Hero with terminal animation
+│   │   ├── about.vue           # Fetches and renders /api/sections; groups compact types (currently, pills) into side-by-side pairs on md+ screens; no h1 heading (quote section serves as intro)
+│   │   ├── contact.vue         # Static contact links (email, GitHub, LinkedIn)
+│   │   ├── login.vue           # Auth form or logged-in state with logout
+│   │   ├── admin.vue           # Protected admin dashboard (requiresAdmin meta), flat tab bar (Sections, Analytics, Recipes, Health, Sanakenno, Kennotyökalu) with lazy-mounted panels
+│   │   ├── sanakenno.vue       # Sanakenno game (standalone layout). Title in top bar row, sticky score/progress/hints-toggle/share row.
+│   │   ├── [...slug].vue       # Catch-all 404 page
+│   │   └── recipes/
+│   │       ├── index.vue       # Recipe cards with search + category filter
+│   │       ├── new.vue         # Create recipe form with dynamic rows
+│   │       └── [slug]/
+│   │           ├── index.vue   # Single recipe view with wake lock + step checkboxes
+│   │           └── edit.vue    # Edit recipe form with dynamic rows
+│   ├── stores/
+│   │   ├── auth.js             # Pinia store: user, isAdmin, isAuthenticated, login(), logout(), checkAuth()
+│   │   ├── darkMode.js         # Pinia store: isDark, toggleDark(), init(); localStorage-backed with system preference fallback
+│   │   └── i18n.js             # Pinia store: locale, t(key, params), setLocale(); EN/FI with localStorage persistence
+│   ├── composables/
+│   │   ├── useFaviconSwap.js   # Swaps page favicon on mount (URL string), restores on unmount. Safari covered server-side via routes.py.
+│   │   ├── useGameTimer.js     # Sanakenno elapsed-time tracking with pause/resume on tab visibility. Exposes startedAt, totalPausedMs, start(), getElapsedMs(), reset().
+│   │   ├── useHintData.js      # Pure computed derivations for Sanakenno hint panels (letterMap, unfoundLengths, pangramStats, lengthDistribution, pairMap). Takes puzzle, foundWords, outerLetters, center refs.
+│   │   ├── useNavLinks.js      # Shared nav link list used by AppHeader and AppFooter
+│   │   ├── usePageView.js      # trackPageView(path) — fire-and-forget POST /api/pageview
+│   │   ├── useSanakennoLogic.js  # Pure Sanakenno game logic (no Vue/DOM). Exports: RANKS, scoreWord, recalcScore, rankForScore, rankThresholds, progressToNextRank, colorizeWord, toColumns. Unit-tested in tests/unit/.
+│   │   ├── useTerminal.js      # Interactive shell logic: boot sequence (skip on re-mount), command handlers, history navigation
+│   │   └── useThemeColor.js    # Manages <meta name="theme-color"> and html background to match --color-bg-primary. Observes dark/light class changes via MutationObserver. Restores on unmount.
+│   ├── locales/
+│   │   ├── en.json             # English translations (~90 keys); includes admin.tab.kennotyokalu = "Kenno Tool"
+│   │   └── fi.json             # Finnish translations; includes admin.tab.kennotyokalu = "Kennotyökalu"
+│   ├── components/
+│   │   ├── AppHeader.vue       # Sticky nav, always-hamburger menu, auth-aware links, LangToggle
+│   │   ├── AppFooter.vue       # Full auth-aware nav links + last updated date from /api/meta
+│   │   ├── ThemeToggle.vue     # Sun/moon toggle button
+│   │   ├── LangToggle.vue      # EN/FI language toggle button
+│   │   ├── SanakennoRulesModal.vue  # Rules modal overlay for Sanakenno
+│   │   ├── TerminalWindow.vue  # Interactive shell with boot sequence, commands: help, about, skills, fetch, weather, cowsay, cowthink, echo, date, clear; fuzzy "Did you mean:" suggestions via Levenshtein distance ≤ 2
+│   │   ├── weatherIcons.js     # Inline SVG weather icons + wawaToIcon(code) mapper
+│   │   ├── SectionBlock.vue    # Section renderer with 4 types: 'quote' (decorative centered blockquote, no card), 'currently' (card with accent-bordered label:value items), 'pills' (card with 3-col grid of flat accent-bordered items), 'text' (card with v-html content). All card types have orange accent bar under title.
+│   │   └── admin/
+│   │       ├── AdminSections.vue     # Sections CRUD + reorder (up/down arrows); type selector dropdown (Text/Pills/Quote/Currently) in create and edit forms; placeholder text is dynamic based on selected type
+│   │       ├── AdminPageViews.vue    # Page views table with timestamps
+│   │       ├── AdminRecipes.vue      # Recipe table with edit/delete
+│   │       ├── AdminHealth.vue       # System health key-value display
+│   │       ├── AdminKennoStats.vue     # Sanakenno stats (page views, blocked words, puzzles) + daily achievements table (7d/30d/90d period selector, all 7 rank columns, totals row)
+│   │       ├── AdminKennoPuzzleTool.vue # Kennotyökalu tab: unified single-editor. Left column: scrollable all-puzzles slot list with dates + custom/today badges. Right column: compact toolbar (slot number, letters input, swap, delete/revert) + KennoVariationsGrid + KennoWordList. Clean state: view/switch center. Dirty state: preview letters → select center → save.
+│   │       ├── AdminBlockedWords.vue # Blocked words table with unblock
+│   │       ├── KennoVariationsGrid.vue # 7-column center letter selector grid. Props: variations, activeCenter, disabled, showTarget. Emits: select.
+│   │       └── KennoWordList.vue    # Sorted multi-column word list with pangram highlighting (orange accent + semibold) and per-word block buttons. Props: words, letters, loading, error, emptyMessage. Emits: block.
+│   ├── tests/
+│   │   └── unit/
+│   │       ├── useSanakennoLogic.test.js  # 43 Vitest unit tests for all useSanakennoLogic exports
+│   │       ├── useHintData.test.js        # 20 Vitest unit tests for useHintData composable (uses Vue refs)
+│   │       └── stores/
+│   │           ├── auth.test.js           # Vitest unit tests for useAuthStore
+│   │           ├── darkMode.test.js       # Vitest unit tests for useDarkModeStore
+│   │           └── i18n.test.js           # Vitest unit tests for useI18nStore
+│   └── e2e/
+│       ├── fixtures/
+│       │   ├── auth.js         # Playwright fixtures: authenticatedPage (regular user), adminPage (admin user); login via form
+│       │   └── base.js         # Base Playwright fixtures
+│       ├── homepage.spec.js    # 3 tests: heading, nav links, title
+│       ├── navigation.spec.js  # 3 tests: route transitions, auth redirects
+│       ├── auth.spec.js        # 4 tests: form, invalid creds, login redirect, logout
+│       ├── sanakenno.spec.js   # 7 tests: game load, keyboard input, hints, share, rules modal
+│       ├── recipes.spec.js     # 4 tests: auth redirect, list, detail, new form
+│       ├── admin.spec.js       # 5 tests: non-admin blocked, admin access, tabs, sections, tab switching
+│       └── not-found.spec.js   # 2 tests: 404 page, home link
 ├── app/
 │   ├── __init__.py             # Flask app, SECRET_KEY from env, LoginManager + Limiter setup
 │   ├── models.py               # User, Section (with section_type), Recipe, Ingredient, Step, BlockedWord, KennoConfig, KennoPuzzle, KennoAchievement, PageView models
@@ -203,11 +219,11 @@ web_kontissa/
 # Terminal 1 — Flask API
 DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
 
-# Terminal 2 — Vite dev server with HMR
+# Terminal 2 — Nuxt dev server with HMR
 cd frontend && npm run dev
 ```
 
-Vite dev server at http://localhost:5173 proxies `/api/*` to Flask at http://localhost:5001.
+Nuxt dev server at http://localhost:3000. `/api/*` requests are proxied to Flask at http://localhost:5001 via `routeRules` in `nuxt.config.ts`.
 
 > **Note:** Port 5001 is used because macOS AirPlay Receiver occupies port 5000.
 
@@ -237,7 +253,7 @@ cd frontend && npm run test          # Run once
 cd frontend && npm run test:watch    # Watch mode
 ```
 
-Tests live in `frontend/src/__tests__/`. Vitest is configured in `vite.config.js` to exclude `e2e/` and `node_modules/`. No server required.
+Tests live in `frontend/tests/unit/`. Vitest is configured in `vitest.config.js` to exclude `e2e/` and `node_modules/`. No server required.
 
 **E2E (Playwright)**
 
@@ -246,12 +262,12 @@ cd frontend && npm run test:e2e          # Headless Chromium
 cd frontend && npm run test:e2e:ui       # Interactive UI mode
 ```
 
-Playwright spins up both servers automatically (Flask on :5001, Vite on :5173). Uses a file-based SQLite DB at `app/data/test-e2e.db` seeded by `scripts/seed_e2e.py`. Rate limiting is disabled via `TESTING=1`. Test credentials: `admin@test.com` / `adminpass123` and `user@test.com` / `userpass123`. 28 tests across 7 spec files; runs in ~7s locally, ~55s in CI.
+Playwright spins up both servers automatically (Flask on :5001, Nuxt preview on :3000 via `nuxt build && nuxt preview`). Uses a file-based SQLite DB at `app/data/test-e2e.db` seeded by `scripts/seed_e2e.py`. Rate limiting is disabled via `TESTING=1`. The `nuxt build` preset (node-server) is used instead of `nuxt generate` (static) because Nitro's node server supports the `routeRules` API proxy, while the static preset uses `npx serve` which doesn't. Test credentials: `admin@test.com` / `adminpass123` and `user@test.com` / `userpass123`. 28 tests across 7 spec files. A hydration-aware base fixture (`e2e/fixtures/base.js`) wraps `page.goto()` with `waitForLoadState('networkidle')` to ensure Vue hydration completes before interactions.
 
 ### Frontend build only
 
 ```bash
-cd frontend && npm run build    # Output: app/static/dist/
+cd frontend && npm run build    # Runs nuxt generate, output: frontend/.output/public/
 ```
 
 ## Server Architecture
@@ -285,8 +301,8 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 
 ### Frontend
 - Composition API with `<script setup>` exclusively — no Options API
-- Composables for shared state (`useAuth`, `useDarkMode`, `useI18n`) — module-level refs for singleton pattern. `useNavLinks` provides the shared navigation link list consumed by both `AppHeader` and `AppFooter`.
-- **Static site generation (SSG)**: `vite-ssg` pre-renders `/`, `/about`, `/contact`, `/login` at build time into static HTML with real content (SEO-friendly). Vue hydrates on top in the browser for interactivity. `main.js` exports `createApp` via `ViteSSG()` instead of the standard `createApp()`. Protected and dynamic routes (`/admin`, `/recipes/*`, `/sanakenno`) are not pre-rendered.
+- Pinia stores for shared state (`useAuthStore`, `useDarkModeStore`, `useI18nStore`) — composition API style (`defineStore` with setup function), auto-imported via `@pinia/nuxt`. `useNavLinks` composable provides the shared navigation link list consumed by both `AppHeader` and `AppFooter`.
+- **Static site generation (SSG)**: `nuxt generate` pre-renders routes listed in `nitro.prerender.routes` (`/`, `/about`, `/contact`, `/login`) at build time into static HTML with real content (SEO-friendly). Vue hydrates on top in the browser for interactivity. Protected and dynamic routes (`/admin`, `/recipes/*`, `/sanakenno`) are not pre-rendered.
 - Lazy-loaded routes (all except HomePage)
 - Styling via Tailwind utility classes + CSS custom properties for theme colors
 - Inline `:style` bindings for theme-aware dynamic colors
@@ -294,9 +310,9 @@ Internet → [443 HTTPS] → nginx (TLS termination, ECDSA cert)
 - `SectionBlock.vue` renders 4 section types: `'quote'` (decorative centered blockquote with large opening quote mark, no card wrapper), `'currently'` (card with line-separated `label: value` items rendered as accent-bordered rows), `'pills'` (card with comma-separated items in a 3-column grid of accent-bordered flat items), `'text'` (card with `v-html` content). All card types (currently, pills, text) have an orange accent bar under the title. Paragraph spacing (`p + p` margin) is applied via a scoped deep selector on `.section-content`. Supports a `compact` prop to suppress bottom margin when used in paired grid layout.
 - `AboutPage.vue` groups adjacent compact section types (`currently`, `pills`) into side-by-side two-column grid pairs on `md+` screens. The "About" h1 heading is removed — the quote section serves as the page intro.
 - Recipe content uses `{{ }}` only — no `v-html`, all user content auto-escaped
-- `requiresAuth` route meta guard redirects unauthenticated users to `/login`. The `router.beforeEach` hook is `async` and `await`s `checkAuth()` before evaluating guards — this ensures auth state is populated on direct URL navigation to protected routes (e.g. `/admin`, `/recipes`). Omitting the `await` causes a race condition where the guard fires before the `/api/me` response arrives.
-- Logout (`useAuth.js`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the router guard.
-- i18n via custom `useI18n` composable — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` meta resolved in `main.js` afterEach. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
+- `requiresAuth` and `requiresAdmin` page meta guards via `middleware/auth.global.js`. The middleware skips server-side execution (`if (import.meta.server) return`) since session cookies aren't available during SSR. Client-side, it `await`s `checkAuth()` before evaluating guards — this ensures auth state is populated on direct URL navigation to protected routes (e.g. `/admin`, `/recipes`).
+- Logout (`useAuthStore`) waits for the server response before clearing client auth state. The logout button uses `@click.prevent` and navigates manually after the logout call completes, preventing race conditions with the route guard.
+- i18n via Pinia `useI18nStore` — no external dependency. All UI strings in `locales/en.json` and `locales/fi.json`. Use `t('key')` for translation, `t('key', { param: value })` for interpolation. Fallback chain: current locale → English → raw key. Route titles use `titleKey` page meta resolved in `middleware/pageview.global.js`. Language persists in localStorage, defaults to browser locale. Terminal prompt, brand names, API content, and Schema.org JSON-LD are NOT translated.
 - Accessibility: skip-to-content link, `:focus-visible` ring on all interactive elements, `aria-expanded` on mobile menu with Escape-to-close, `aria-live` route announcer in App.vue, `role="alert"` on error messages, `role="status"` on loading/success states, `aria-hidden="true"` on decorative SVGs, `aria-label` on icon-only buttons, `prefers-reduced-motion` respected via CSS. Sanakenno honeycomb SVG hexagons have `role="button"` and `aria-label` (letter name) for screen reader access.
 
 ### Design
@@ -358,7 +374,7 @@ When making changes, think about: Does this introduce a new input vector? Does t
 ## Important Notes
 
 - The SQLite database is persisted via Docker volume (`./app/data:/app/data`). Never delete this directory.
-- The `app/static/dist/` directory is gitignored — it's generated by Vite during Docker build.
+- The `app/static/dist/` directory is gitignored — it's generated by `nuxt generate` during Docker build and copied from `frontend/.output/public/`.
 - The `.env` file is gitignored. It contains `SECRET_KEY` at minimum.
 - The server is a low-power Intel NUC. Keep Docker images lean (alpine bases) and avoid heavy build-time operations where possible.
 - Auto-deploy means every push to main goes live. Test changes before pushing. Breaking the build breaks the site.
