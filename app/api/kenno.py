@@ -1,13 +1,16 @@
 from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 import zoneinfo
-from flask import jsonify, request, session
+from flask import Blueprint, jsonify, request, session
 from flask_login import current_user, login_required
 import hashlib
 import os
 
-from app import app, limiter
+from app import limiter
 from app.models import db, BlockedWord, KennoConfig, KennoAchievement, KennoPuzzle, PageView
+from app.decorators import admin_required
+
+kenno_bp = Blueprint('kenno', __name__)
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -170,7 +173,7 @@ def _compute_variation(letters, center_letter):
 _HELSINKI = zoneinfo.ZoneInfo("Europe/Helsinki")
 
 
-@app.route("/api/kenno")
+@kenno_bp.route("/api/kenno")
 def kenno():
     puzzle_number = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
 
@@ -202,12 +205,9 @@ def kenno():
     return jsonify(result)
 
 
-@app.route("/api/kenno/block", methods=["POST"])
-@login_required
+@kenno_bp.route("/api/kenno/block", methods=["POST"])
+@admin_required
 def kenno_block_word():
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     data = request.get_json() or {}
     word = data.get("word", "").strip().lower()
     if not word:
@@ -221,13 +221,10 @@ def kenno_block_word():
     return jsonify({"word": word, "blocked": True})
 
 
-@app.route("/api/kenno/variations")
-@login_required
+@kenno_bp.route("/api/kenno/variations")
+@admin_required
 def kenno_variations():
     """Return all 7 center-letter variations for a puzzle (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     puzzle_idx = request.args.get("puzzle", type=int)
     if puzzle_idx is None:
         return jsonify({"error": "puzzle parameter required"}), 400
@@ -250,13 +247,10 @@ def kenno_variations():
     })
 
 
-@app.route("/api/kenno/center", methods=["POST"])
-@login_required
+@kenno_bp.route("/api/kenno/center", methods=["POST"])
+@admin_required
 def kenno_set_center():
     """Set the center letter for a puzzle (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     data = request.get_json() or {}
     puzzle_idx = data.get("puzzle")
     center = data.get("center", "").strip().lower()
@@ -285,13 +279,10 @@ def kenno_set_center():
     return jsonify({"puzzle": puzzle_idx, "center": center})
 
 
-@app.route("/api/kenno/stats")
-@login_required
+@kenno_bp.route("/api/kenno/stats")
+@admin_required
 def kenno_stats():
     """Sanakenno overview stats (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     sanakenno_pv = db.session.query(PageView).filter_by(path="/sanakenno").first()
     page_views = sanakenno_pv.count if sanakenno_pv else 0
     blocked_words_count = db.session.query(BlockedWord).count()
@@ -304,13 +295,10 @@ def kenno_stats():
     })
 
 
-@app.route("/api/kenno/blocked")
-@login_required
+@kenno_bp.route("/api/kenno/blocked")
+@admin_required
 def kenno_blocked_list():
     """List all blocked words with timestamps (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     words = db.session.query(BlockedWord).order_by(BlockedWord.blocked_at.desc()).all()
     return jsonify([
         {
@@ -328,7 +316,7 @@ VALID_RANKS = [
 ]
 
 
-@app.route("/api/kenno/achievement", methods=["POST"])
+@kenno_bp.route("/api/kenno/achievement", methods=["POST"])
 @limiter.limit("10/minute")
 def kenno_achievement():
     """Record an anonymous rank achievement (session-deduped)."""
@@ -379,13 +367,10 @@ def kenno_achievement():
     return jsonify({"status": "recorded"}), 201
 
 
-@app.route("/api/kenno/achievements")
-@login_required
+@kenno_bp.route("/api/kenno/achievements")
+@admin_required
 def kenno_achievements():
     """Daily achievement summary (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     days = request.args.get("days", 30, type=int)
     days = max(1, min(90, days))
 
@@ -429,13 +414,10 @@ def kenno_achievements():
     return jsonify({"days": days, "daily": daily, "totals": totals})
 
 
-@app.route("/api/kenno/block/<int:word_id>", methods=["DELETE"])
-@login_required
+@kenno_bp.route("/api/kenno/block/<int:word_id>", methods=["DELETE"])
+@admin_required
 def kenno_unblock_word(word_id):
     """Unblock a word by ID (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     bw = db.session.get(BlockedWord, word_id)
     if not bw:
         return jsonify({"error": "Blocked word not found"}), 404
@@ -467,14 +449,11 @@ def _validate_puzzle_letters(letters):
     return sorted(cleaned), None
 
 
-@app.route("/api/kenno/preview", methods=["POST"])
-@login_required
+@kenno_bp.route("/api/kenno/preview", methods=["POST"])
+@admin_required
 @limiter.limit("20/minute")
 def kenno_preview():
     """Preview all 7 center-letter variations for arbitrary letters (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     data = request.get_json() or {}
     letters, err = _validate_puzzle_letters(data.get("letters", []))
     if err:
@@ -498,13 +477,10 @@ def kenno_preview():
     return jsonify(result)
 
 
-@app.route("/api/kenno/puzzle", methods=["POST"])
-@login_required
+@kenno_bp.route("/api/kenno/puzzle", methods=["POST"])
+@admin_required
 def kenno_save_puzzle():
     """Create or update a custom puzzle in a slot (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     data = request.get_json() or {}
 
     slot = data.get("slot")
@@ -571,13 +547,10 @@ def _next_play_date_for_slot(slot):
     return None
 
 
-@app.route("/api/kenno/schedule")
-@login_required
+@kenno_bp.route("/api/kenno/schedule")
+@admin_required
 def kenno_schedule():
     """Return upcoming puzzle rotation schedule (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     days = request.args.get("days", 14, type=int)
     days = max(1, min(90, days))
 
@@ -602,13 +575,10 @@ def kenno_schedule():
     })
 
 
-@app.route("/api/kenno/puzzle/swap", methods=["POST"])
-@login_required
+@kenno_bp.route("/api/kenno/puzzle/swap", methods=["POST"])
+@admin_required
 def kenno_swap_puzzles():
     """Swap two puzzle slots (admin only). Swaps both letters and center."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     data = request.get_json() or {}
     slot_a = data.get("slot_a")
     slot_b = data.get("slot_b")
@@ -666,13 +636,10 @@ def _upsert_puzzle_slot(slot, letters, center, now):
         db.session.add(KennoConfig(key=key, value=center))
 
 
-@app.route("/api/kenno/puzzle/<int:slot>", methods=["DELETE"])
-@login_required
+@kenno_bp.route("/api/kenno/puzzle/<int:slot>", methods=["DELETE"])
+@admin_required
 def kenno_delete_puzzle(slot):
     """Delete a puzzle slot (admin only)."""
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
     today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
     if slot == today_slot:
         return jsonify({"error": "Cannot modify today's live puzzle"}), 409

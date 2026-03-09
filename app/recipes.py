@@ -1,8 +1,9 @@
 import re
-from flask import request, jsonify
+from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
 from .models import db, Recipe, Ingredient, Step
-from . import app
+
+recipes_bp = Blueprint('recipes', __name__)
 
 VALID_CATEGORIES = [
     "Breakfast", "Lunch", "Dinner", "Dessert",
@@ -67,13 +68,13 @@ def _parse_steps(items):
     return steps, None
 
 
-@app.route("/api/recipes/categories")
+@recipes_bp.route("/api/recipes/categories")
 @login_required
 def api_recipe_categories():
     return jsonify(VALID_CATEGORIES)
 
 
-@app.route("/api/recipes")
+@recipes_bp.route("/api/recipes")
 @login_required
 def api_list_recipes():
     q = request.args.get("q", "").strip()
@@ -97,7 +98,7 @@ def api_list_recipes():
     return jsonify([r.to_dict() for r in recipes])
 
 
-@app.route("/api/recipes/<slug>")
+@recipes_bp.route("/api/recipes/<slug>")
 @login_required
 def api_get_recipe(slug):
     recipe = Recipe.query.filter_by(slug=slug).first()
@@ -139,7 +140,7 @@ def _validate_recipe_data(data):
     return (title, category, ingredients, steps), None
 
 
-@app.route("/api/recipes", methods=["POST"])
+@recipes_bp.route("/api/recipes", methods=["POST"])
 @login_required
 def api_create_recipe():
     data = request.get_json()
@@ -165,7 +166,7 @@ def api_create_recipe():
     return jsonify(recipe.to_dict(include_children=True)), 201
 
 
-@app.route("/api/recipes/<int:recipe_id>", methods=["PUT"])
+@recipes_bp.route("/api/recipes/<int:recipe_id>", methods=["PUT"])
 @login_required
 def api_update_recipe(recipe_id):
     recipe = db.session.get(Recipe, recipe_id)
@@ -192,7 +193,7 @@ def api_update_recipe(recipe_id):
     return jsonify(recipe.to_dict(include_children=True))
 
 
-@app.route("/api/recipes/<int:recipe_id>", methods=["DELETE"])
+@recipes_bp.route("/api/recipes/<int:recipe_id>", methods=["DELETE"])
 @login_required
 def api_delete_recipe(recipe_id):
     recipe = db.session.get(Recipe, recipe_id)

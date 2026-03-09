@@ -1,4 +1,5 @@
 import os
+import time
 from flask import Flask
 from flask_login import LoginManager
 from flask_limiter import Limiter
@@ -55,12 +56,29 @@ with app.app_context():
     db.create_all()
     _run_migrations()
 
-from . import routes  # registers the routes with the app
-from . import auth
-from . import recipes
-from .api import cowsay
-from .api import weather
-from .api import kenno
-from .api import pageviews
-from .api import health
+# App-wide request counter (used by AdminHealth)
+_stats = {"requests": 0, "start_time": time.time()}
 
+
+@app.before_request
+def _count_requests():
+    _stats["requests"] += 1
+
+
+from .routes import core_bp
+from .auth import auth_bp
+from .recipes import recipes_bp
+from .api.cowsay import cowsay_bp
+from .api.weather import weather_bp
+from .api.kenno import kenno_bp
+from .api.pageviews import pageviews_bp
+from .api.health import health_bp
+
+app.register_blueprint(auth_bp)
+app.register_blueprint(recipes_bp)
+app.register_blueprint(cowsay_bp)
+app.register_blueprint(weather_bp)
+app.register_blueprint(kenno_bp)
+app.register_blueprint(pageviews_bp)
+app.register_blueprint(health_bp)
+app.register_blueprint(core_bp)  # last — has catch-all route

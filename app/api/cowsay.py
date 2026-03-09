@@ -1,7 +1,8 @@
-from flask import jsonify, request
+from flask import Blueprint, jsonify, request
 from cowsay import get_output_string, char_names, CHARS
 from cowsay.main import generate_char
-from app import app
+
+cowsay_bp = Blueprint('cowsay', __name__)
 
 
 def _generate_think_bubble(text):
@@ -36,7 +37,7 @@ def _get_think_output(char, text):
     return result
 
 
-@app.route("/api/cowsay")
+@cowsay_bp.route("/api/cowsay")
 def cowsay_route():
     try:
         message = request.args.get("message", "moo")
@@ -60,6 +61,6 @@ def cowsay_route():
         return jsonify({"error": str(e)}), 500
 
 
-@app.route("/api/cowsay/characters")
+@cowsay_bp.route("/api/cowsay/characters")
 def cowsay_characters():
     return jsonify({"characters": list(char_names)})

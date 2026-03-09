@@ -1,13 +1,15 @@
 from datetime import datetime, timezone, timedelta
 
-from flask import jsonify, request, session
+from flask import Blueprint, jsonify, request, session
 from sqlalchemy import func
-from app import app, limiter
+from app import limiter
 from app.models import db, PageView, PageViewEvent
-from app.routes import admin_required
+from app.decorators import admin_required
+
+pageviews_bp = Blueprint('pageviews', __name__)
 
 
-@app.route("/api/pageview", methods=["POST"])
+@pageviews_bp.route("/api/pageview", methods=["POST"])
 @limiter.limit("60/minute")
 def track_pageview():
     data = request.get_json()
@@ -38,7 +40,7 @@ def track_pageview():
     return jsonify({"path": pv.path if pv else path, "count": pv.count if pv else 0})
 
 
-@app.route("/api/pageviews")
+@pageviews_bp.route("/api/pageviews")
 @admin_required
 def list_pageviews():
     views = db.session.query(PageView).order_by(PageView.count.desc()).all()
@@ -53,7 +55,7 @@ def list_pageviews():
     ])
 
 
-@app.route("/api/pageviews/events")
+@pageviews_bp.route("/api/pageviews/events")
 @admin_required
 def pageview_events():
     days = request.args.get("days", 30, type=int)

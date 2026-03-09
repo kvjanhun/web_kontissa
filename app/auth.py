@@ -1,10 +1,12 @@
-from flask import request, jsonify
+from flask import Blueprint, request, jsonify
 from flask_login import login_user, logout_user, current_user, login_required
 from .models import db, User
-from . import app, limiter
+from . import limiter
+
+auth_bp = Blueprint('auth', __name__)
 
 
-@app.route("/api/login", methods=["POST"])
+@auth_bp.route("/api/login", methods=["POST"])
 @limiter.limit("5/minute")
 def api_login():
     data = request.get_json()
@@ -25,14 +27,14 @@ def api_login():
     return jsonify(user.to_dict())
 
 
-@app.route("/api/logout", methods=["POST"])
+@auth_bp.route("/api/logout", methods=["POST"])
 @login_required
 def api_logout():
     logout_user()
     return jsonify({"message": "Logged out"})
 
 
-@app.route("/api/me")
+@auth_bp.route("/api/me")
 def api_me():
     if current_user.is_authenticated:
         return jsonify(current_user.to_dict())

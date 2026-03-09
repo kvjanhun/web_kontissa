@@ -2,9 +2,9 @@ import time
 import xml.etree.ElementTree as ET
 
 import requests
-from flask import jsonify
+from flask import Blueprint, jsonify
 
-from app import app
+weather_bp = Blueprint('weather', __name__)
 
 FMI_URL = (
     "https://opendata.fmi.fi/wfs?service=WFS&version=2.0.0"
@@ -173,7 +173,7 @@ def _fetch_weather():
     return data
 
 
-@app.route("/api/weather")
+@weather_bp.route("/api/weather")
 def weather_route():
     try:
         data = _fetch_weather()

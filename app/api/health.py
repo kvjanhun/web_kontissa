@@ -2,20 +2,12 @@ import os
 import sys
 import time
 
-from flask import jsonify
-from flask_login import login_required, current_user
-
-from app import app
+from flask import Blueprint, jsonify, current_app
 from app.models import db, User, Recipe, Section, BlockedWord, PageViewEvent
+from app.decorators import admin_required
+from app import _stats
 
-_START_TIME = time.time()
-_REQUEST_COUNT = 0
-
-
-@app.before_request
-def _count_requests():
-    global _REQUEST_COUNT
-    _REQUEST_COUNT += 1
+health_bp = Blueprint('health', __name__)
 
 
 def _read_os_info():
@@ -42,13 +34,10 @@ def _read_vm_rss():
     return None
 
 
-@app.route("/api/admin/health")
-@login_required
+@health_bp.route("/api/admin/health")
+@admin_required
 def admin_health():
-    if getattr(current_user, "role", None) != "admin":
-        return jsonify({"error": "Admin access required"}), 403
-
-    db_path = app.config["SQLALCHEMY_DATABASE_URI"]
+    db_path = current_app.config["SQLALCHEMY_DATABASE_URI"]
     db_size = 0
     if db_path.startswith("sqlite:///"):
         file_path = db_path[len("sqlite:///"):]
@@ -85,9 +74,9 @@ def admin_health():
         "db_size_bytes": db_size,
         "disk_total_bytes": disk_total,
         "disk_free_bytes": disk_free,
-        "uptime_seconds": round(time.time() - _START_TIME, 1),
+        "uptime_seconds": round(time.time() - _stats["start_time"], 1),
         "os_info": _read_os_info(),
         "memory_rss_bytes": _read_vm_rss(),
-        "request_count": _REQUEST_COUNT,
+        "request_count": _stats["requests"],
         "table_counts": table_counts,
     })
