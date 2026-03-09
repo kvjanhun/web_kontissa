@@ -1,9 +1,9 @@
 <script setup>
 import { computed } from 'vue'
 import { useHead } from '@unhead/vue'
-import { useI18n } from '../composables/useI18n.js'
+import { useI18nStore } from '../stores/i18n.js'
 
-const { t } = useI18n()
+const { t } = useI18nStore()
 
 useHead({
   title: computed(() => t('contact.metaTitle')),

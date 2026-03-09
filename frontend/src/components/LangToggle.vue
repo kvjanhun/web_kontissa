@@ -1,7 +1,10 @@
 <script setup>
-import { useI18n } from '../composables/useI18n.js'
+import { storeToRefs } from 'pinia'
+import { useI18nStore } from '../stores/i18n.js'
 
-const { locale, setLocale } = useI18n()
+const i18nStore = useI18nStore()
+const { locale } = storeToRefs(i18nStore)
+const { setLocale } = i18nStore
 
 function toggle() {
   setLocale(locale.value === 'fi' ? 'en' : 'fi')

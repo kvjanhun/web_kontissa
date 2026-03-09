@@ -3,11 +3,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import AppHeader from './components/AppHeader.vue'
 import AppFooter from './components/AppFooter.vue'
-import { useAuth } from './composables/useAuth'
-import { useI18n } from './composables/useI18n'
+import { useAuthStore } from './stores/auth.js'
+import { useI18nStore } from './stores/i18n.js'
+import { useDarkModeStore } from './stores/darkMode.js'
 
-const { checkAuth } = useAuth()
-const { t } = useI18n()
+const authStore = useAuthStore()
+const { t } = useI18nStore()
+const darkModeStore = useDarkModeStore()
 const updateDate = ref('')
 const routeAnnouncement = ref('')
 
@@ -19,7 +21,8 @@ router.afterEach((to) => {
 })
 
 onMounted(async () => {
-  checkAuth()
+  darkModeStore.init()
+  authStore.checkAuth()
   try {
     const res = await fetch('/api/meta')
     const meta = await res.json()

@@ -2,8 +2,9 @@
 import { ref, onMounted, markRaw } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
-import { useAuth } from '../composables/useAuth'
-import { useI18n } from '../composables/useI18n.js'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth.js'
+import { useI18nStore } from '../stores/i18n.js'
 
 import AdminSections from '../components/admin/AdminSections.vue'
 import AdminPageViews from '../components/admin/AdminPageViews.vue'
@@ -20,8 +21,8 @@ useHead({
 })
 
 const router = useRouter()
-const { isAdmin } = useAuth()
-const { t } = useI18n()
+const { isAdmin } = storeToRefs(useAuthStore())
+const { t } = useI18nStore()
 
 const tabs = [
   { key: 'sections', labelKey: 'admin.tab.sections', component: markRaw(AdminSections) },
