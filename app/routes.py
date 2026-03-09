@@ -1,40 +1,32 @@
 import os
 import re
-from functools import wraps
-from flask import jsonify, redirect, request, url_for, Response, send_from_directory
-from flask_login import login_required, current_user
+from flask import Blueprint, jsonify, redirect, request, url_for, Response, send_from_directory
+from flask_login import current_user
 from .models import db, Section
 from .utils import get_latest_commit_date
+from .decorators import admin_required
 from datetime import datetime
-from . import app, limiter
+from . import limiter
 
-
-def admin_required(f):
-    @wraps(f)
-    @login_required
-    def decorated(*args, **kwargs):
-        if current_user.role != "admin":
-            return jsonify({"error": "Admin access required"}), 403
-        return f(*args, **kwargs)
-    return decorated
+core_bp = Blueprint('core', __name__)
 
 DIST_DIR = os.path.join(os.path.dirname(__file__), "static", "dist")
 
-@app.route("/")
+@core_bp.route("/")
 @limiter.exempt
 def index():
     return send_from_directory(DIST_DIR, "index.html")
 
-@app.route("/index.html")
+@core_bp.route("/index.html")
 def legacy_index():
-    return redirect(url_for("index"), code=301)
+    return redirect(url_for("core.index"), code=301)
 
-@app.route("/api/sections")
+@core_bp.route("/api/sections")
 def api_sections():
     sections = Section.query.order_by(Section.position.asc(), Section.id.asc()).all()
     return jsonify([s.to_dict() for s in sections])
 
-@app.route("/api/meta")
+@core_bp.route("/api/meta")
 def api_meta():
     last_updated = get_latest_commit_date()
     update_date = datetime.fromisoformat(last_updated.replace("Z", "+00:00")).strftime("%Y-%m-%d") if last_updated else "2025"
@@ -44,7 +36,7 @@ def api_meta():
         "update_date": update_date
     })
 
-@app.route("/sitemap.xml")
+@core_bp.route("/sitemap.xml")
 def generate_sitemap():
     commit_date = get_latest_commit_date()
     lastmod = commit_date[:10] if commit_date else "2026-03-01"
@@ -69,7 +61,7 @@ def generate_sitemap():
 
     return Response(xml, mimetype="application/xml")
 
-@app.route("/api/sections", methods=["POST"])
+@core_bp.route("/api/sections", methods=["POST"])
 @admin_required
 def api_create_section():
     data = request.get_json()
@@ -97,7 +89,7 @@ def api_create_section():
     return jsonify(section.to_dict()), 201
 
 
-@app.route("/api/sections/<int:section_id>", methods=["PUT"])
+@core_bp.route("/api/sections/<int:section_id>", methods=["PUT"])
 @admin_required
 def api_update_section(section_id):
     section = db.session.get(Section, section_id)
@@ -124,7 +116,7 @@ def api_update_section(section_id):
     return jsonify(section.to_dict())
 
 
-@app.route("/api/sections/<int:section_id>", methods=["DELETE"])
+@core_bp.route("/api/sections/<int:section_id>", methods=["DELETE"])
 @admin_required
 def api_delete_section(section_id):
     section = db.session.get(Section, section_id)
@@ -136,7 +128,7 @@ def api_delete_section(section_id):
     return jsonify({"message": "Section deleted"})
 
 
-@app.route("/api/sections/reorder", methods=["PUT"])
+@core_bp.route("/api/sections/reorder", methods=["PUT"])
 @admin_required
 def api_reorder_sections():
     data = request.get_json()
@@ -161,7 +153,7 @@ def api_reorder_sections():
     return jsonify({"message": "Sections reordered"})
 
 
-@app.route("/sanakenno")
+@core_bp.route("/sanakenno")
 @limiter.exempt
 def sanakenno_page():
     """Serve the Sanakenno game with game-specific OG meta tags for link previews."""
@@ -182,7 +174,7 @@ def sanakenno_page():
     return Response(html, mimetype="text/html")
 
 
-@app.route("/<path:path>")
+@core_bp.route("/<path:path>")
 @limiter.exempt
 def catch_all(path):
     """Serve static file from dist/ if it exists, otherwise fall back to index.html for Vue Router."""
