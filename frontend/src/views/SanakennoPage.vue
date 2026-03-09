@@ -6,7 +6,7 @@ import { useFaviconSwap } from '../composables/useFaviconSwap.js'
 import { useThemeColor } from '../composables/useThemeColor.js'
 import { useGameTimer } from '../composables/useGameTimer.js'
 import { useHintData } from '../composables/useHintData.js'
-import { RANKS, scoreWord, recalcScore as _recalcScore, rankForScore, rankThresholds as _rankThresholds, progressToNextRank as _progressToNextRank, colorizeWord, toColumns } from '../composables/useSanakennoLogic.js'
+import { recalcScore as _recalcScore, rankForScore, rankThresholds as _rankThresholds, progressToNextRank as _progressToNextRank, colorizeWord, toColumns } from '../composables/useSanakennoLogic.js'
 
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
@@ -71,7 +71,6 @@ async function hashWord(word) {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('')
 }
 
-// RANKS imported from useSanakennoLogic.js
 
 const HINT_ICONS = { summary: '📊', letters: '🔤', distribution: '📏', pairs: '🔠' }
 
