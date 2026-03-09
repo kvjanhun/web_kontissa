@@ -40,6 +40,10 @@ web_kontissa/
 ├── requirements.txt            # Python deps (Flask, flask-sqlalchemy, flask-login, flask-limiter, gunicorn, cowsay, requests)
 ├── ADMIN_TOOLS.md              # Admin tool documentation with screenshots (Kennotyökalu, Kenno Stats)
 ├── .env                        # SECRET_KEY (gitignored, required in production)
+├── server/
+│   ├── README.md               # Deployment instructions and scp commands
+│   ├── deploy-site.sh          # Webhook deploy script: git pull → docker build → restart; sends Telegram on success/failure
+│   └── health-alert.sh         # Cron health monitor: checks Docker container status every 5 min, sends Telegram down/recovery alerts
 ├── frontend/
 │   ├── package.json            # Vue 3, Vue Router 4, Vite 6, Tailwind 4; devDeps include vitest, @playwright/test; scripts: test (vitest), test:watch, test:e2e, test:e2e:ui
 │   ├── playwright.config.js    # Playwright config: dual webServer (Flask :5001, Vite :5173), Chromium only
