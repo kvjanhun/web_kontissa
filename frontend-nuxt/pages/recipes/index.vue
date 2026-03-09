@@ -1,0 +1,138 @@
+<script setup>
+import { useI18nStore } from '~/stores/i18n.js'
+
+definePageMeta({
+  titleKey: 'title.recipes',
+  requiresAuth: true,
+})
+
+const router = useRouter()
+const { t } = useI18nStore()
+const recipes = ref([])
+const categories = ref([])
+const search = ref('')
+const selectedCategory = ref('')
+const loading = ref(true)
+const error = ref('')
+
+let debounceTimer = null
+
+async function fetchRecipes() {
+  loading.value = true
+  error.value = ''
+  try {
+    const params = new URLSearchParams()
+    if (search.value) params.set('q', search.value)
+    if (selectedCategory.value) params.set('category', selectedCategory.value)
+    const res = await fetch(`/api/recipes?${params}`)
+    if (!res.ok) throw new Error(t('recipes.loadError'))
+    recipes.value = await res.json()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    loading.value = false
+  }
+}
+
+async function fetchCategories() {
+  try {
+    const res = await fetch('/api/recipes/categories')
+    if (res.ok) categories.value = await res.json()
+  } catch {}
+}
+
+function debouncedFetch() {
+  clearTimeout(debounceTimer)
+  debounceTimer = setTimeout(fetchRecipes, 300)
+}
+
+watch(search, debouncedFetch)
+watch(selectedCategory, fetchRecipes)
+
+onMounted(() => {
+  fetchCategories()
+  fetchRecipes()
+})
+</script>
+
+<template>
+  <div class="max-w-4xl mx-auto py-8 px-4">
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-light" :style="{ color: 'var(--color-text-primary)' }">{{ t('recipes.heading') }}</h1>
+      <NuxtLink
+        to="/recipes/new"
+        class="px-4 py-2 bg-accent text-white rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90"
+      >
+        {{ t('recipes.newRecipe') }}
+      </NuxtLink>
+    </div>
+
+    <div class="flex flex-col sm:flex-row gap-3 mb-6">
+      <input
+        v-model="search"
+        type="text"
+        :placeholder="t('recipes.searchPlaceholder')"
+        class="flex-1 px-4 py-2 rounded-lg text-sm outline-none"
+        :style="{
+          backgroundColor: 'var(--color-input-bg)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-primary)'
+        }"
+      />
+      <select
+        v-model="selectedCategory"
+        class="px-4 py-2 rounded-lg text-sm outline-none"
+        :style="{
+          backgroundColor: 'var(--color-input-bg)',
+          border: '1px solid var(--color-border)',
+          color: 'var(--color-text-primary)'
+        }"
+      >
+        <option value="">{{ t('recipes.allCategories') }}</option>
+        <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
+      </select>
+    </div>
+
+    <p v-if="error" class="text-red-500 mb-4" role="alert">{{ error }}</p>
+
+    <p
+      v-if="loading"
+      class="text-center py-12"
+      :style="{ color: 'var(--color-text-secondary)' }"
+      role="status"
+    >{{ t('recipes.loading') }}</p>
+
+    <p
+      v-else-if="recipes.length === 0"
+      class="text-center py-12"
+      :style="{ color: 'var(--color-text-secondary)' }"
+    >{{ t('recipes.noResults') }}</p>
+
+    <div v-else class="grid gap-4 sm:grid-cols-2">
+      <NuxtLink
+        v-for="recipe in recipes"
+        :key="recipe.id"
+        :to="`/recipes/${recipe.slug}`"
+        class="block p-5 rounded-lg transition-colors duration-200"
+        :style="{
+          backgroundColor: 'var(--color-card-bg)',
+          border: '1px solid var(--color-border)'
+        }"
+      >
+        <h2 class="text-lg font-medium mb-1" :style="{ color: 'var(--color-text-primary)' }">
+          {{ recipe.title }}
+        </h2>
+        <span
+          v-if="recipe.category"
+          class="inline-block text-xs px-2 py-0.5 rounded-full"
+          :style="{
+            backgroundColor: 'var(--color-tag-bg)',
+            color: 'var(--color-text-secondary)'
+          }"
+        >
+          {{ recipe.category }}
+        </span>
+      </NuxtLink>
+    </div>
+  </div>
+</template>
