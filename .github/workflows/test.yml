@@ -32,10 +32,10 @@ jobs:
           node-version: "22"
 
       - name: Install frontend dependencies
-        run: cd frontend && npm ci
+        run: cd frontend-nuxt && npm ci
 
       - name: Run unit tests
-        run: cd frontend && npm run test
+        run: cd frontend-nuxt && npm run test
 
   playwright:
     runs-on: ubuntu-latest
@@ -54,16 +54,16 @@ jobs:
           node-version: "22"
 
       - name: Install frontend dependencies
-        run: cd frontend && npm ci
+        run: cd frontend-nuxt && npm ci
 
       - name: Install Playwright browsers
-        run: cd frontend && npx playwright install chromium --with-deps
+        run: cd frontend-nuxt && npx playwright install chromium --with-deps
 
       - name: Seed E2E database
         run: python scripts/seed_e2e.py
 
       - name: Run E2E tests
-        run: cd frontend && npx playwright test
+        run: cd frontend-nuxt && npx playwright test
         env:
           CI: "true"
 
@@ -72,7 +72,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: playwright-report
-          path: frontend/playwright-report/
+          path: frontend-nuxt/playwright-report/
           retention-days: 7
 
   deploy:
