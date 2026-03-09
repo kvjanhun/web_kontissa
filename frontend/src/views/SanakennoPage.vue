@@ -479,7 +479,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Progress bar toward next rank -->
-        <div class="w-full h-1 rounded-full mb-1" :style="{ background: 'var(--color-bg-secondary)' }">
+        <div class="w-full h-1 rounded-full mb-1" style="pointer-events: none;" :style="{ background: 'var(--color-bg-secondary)' }">
           <div
             class="h-full rounded-full"
             :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"

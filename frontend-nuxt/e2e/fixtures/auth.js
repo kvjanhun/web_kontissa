@@ -1,4 +1,4 @@
-import { test as base } from '@playwright/test'
+import { test as base } from './base.js'
 
 // Must match scripts/seed_e2e.py credentials
 const ADMIN_EMAIL = 'admin@test.com'

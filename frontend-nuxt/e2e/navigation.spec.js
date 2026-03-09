@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/base.js'
 
 test.describe('Navigation', () => {
   test('navigates between public pages', async ({ page }) => {

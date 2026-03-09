@@ -9,10 +9,11 @@ export default defineNuxtConfig({
     prerender: {
       routes: ['/', '/about', '/contact', '/login'],
     },
-    devProxy: {
-      '/api': 'http://localhost:5001',
-      '/sitemap.xml': 'http://localhost:5001',
-    },
+  },
+
+  routeRules: {
+    '/api/**': { proxy: 'http://localhost:5001/api/**' },
+    '/sitemap.xml': { proxy: 'http://localhost:5001/sitemap.xml' },
   },
 
   // Modules
@@ -69,5 +70,5 @@ export default defineNuxtConfig({
   },
 
   // Disable Nuxt devtools in production
-  devtools: { enabled: true },
+  devtools: { enabled: !process.env.TESTING },
 })

@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/base.js'
 
 test.describe('404 Page', () => {
   test('shows 404 for nonexistent route', async ({ page }) => {
