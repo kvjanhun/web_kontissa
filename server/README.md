@@ -39,6 +39,6 @@ TELEGRAM_CHAT_ID="..."
 ## Deploying changes
 
 ```bash
-scp server/deploy-site.sh  kvjanhun@erez.ac:/home/kvjanhun/Projects/web_kontissa/deploy-site.sh
+scp server/deploy-site.sh kvjanhun@erez.ac:/home/kvjanhun/Projects/web_kontissa/deploy-site.sh
 scp server/health-alert.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/health-alert.sh
 ```
