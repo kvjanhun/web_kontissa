@@ -1,8 +1,9 @@
 import { computed } from 'vue'
-import { useAuth } from './useAuth'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth.js'
 
 export function useNavLinks(handleLogout) {
-  const { isAuthenticated, isAdmin } = useAuth()
+  const { isAuthenticated, isAdmin } = storeToRefs(useAuthStore())
 
   const navLinks = computed(() => {
     const links = [

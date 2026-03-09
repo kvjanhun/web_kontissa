@@ -1,10 +1,10 @@
 <script setup>
 import { ref, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from '../composables/useI18n.js'
+import { useI18nStore } from '../stores/i18n.js'
 
 const router = useRouter()
-const { t } = useI18n()
+const { t } = useI18nStore()
 const recipes = ref([])
 const categories = ref([])
 const search = ref('')

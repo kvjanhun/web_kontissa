@@ -2,8 +2,9 @@
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useHead } from '@unhead/vue'
-import { useAuth } from '../composables/useAuth'
-import { useI18n } from '../composables/useI18n.js'
+import { storeToRefs } from 'pinia'
+import { useAuthStore } from '../stores/auth.js'
+import { useI18nStore } from '../stores/i18n.js'
 
 useHead({
   meta: [
@@ -12,8 +13,10 @@ useHead({
 })
 
 const router = useRouter()
-const { user, isAuthenticated, login, logout } = useAuth()
-const { t } = useI18n()
+const authStore = useAuthStore()
+const { user, isAuthenticated } = storeToRefs(authStore)
+const { login, logout } = authStore
+const { t } = useI18nStore()
 
 const email = ref('')
 const password = ref('')

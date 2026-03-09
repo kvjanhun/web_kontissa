@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { useI18n } from '../../composables/useI18n.js'
+import { useI18nStore } from '../../stores/i18n.js'
 
-const { t } = useI18n()
+const { t } = useI18nStore()
 
 const sections = ref([])
 const editingId = ref(null)

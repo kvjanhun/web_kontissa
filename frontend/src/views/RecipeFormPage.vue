@@ -1,11 +1,11 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { useI18n } from '../composables/useI18n.js'
+import { useI18nStore } from '../stores/i18n.js'
 
 const route = useRoute()
 const router = useRouter()
-const { t } = useI18n()
+const { t } = useI18nStore()
 
 const isEdit = computed(() => !!route.params.slug)
 const recipeId = ref(null)

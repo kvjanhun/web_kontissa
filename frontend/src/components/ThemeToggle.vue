@@ -1,9 +1,12 @@
 <script setup>
-import { useDarkMode } from '../composables/useDarkMode.js'
-import { useI18n } from '../composables/useI18n.js'
+import { storeToRefs } from 'pinia'
+import { useDarkModeStore } from '../stores/darkMode.js'
+import { useI18nStore } from '../stores/i18n.js'
 
-const { isDark, toggleDark } = useDarkMode()
-const { t } = useI18n()
+const darkModeStore = useDarkModeStore()
+const { isDark } = storeToRefs(darkModeStore)
+const { toggleDark } = darkModeStore
+const { t } = useI18nStore()
 </script>
 
 <template>
