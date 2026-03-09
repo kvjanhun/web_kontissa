@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test'
+import { test, expect } from './fixtures/base.js'
 
 test.describe('Sanakenno', () => {
   test('game loads with honeycomb and score', async ({ page }) => {

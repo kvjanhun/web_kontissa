@@ -441,8 +441,8 @@ onUnmounted(() => {
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
   <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
     <!-- Spacer: natural position of sticky bar = stick position (env + 3rem from viewport top).
-         main has p-6 = 1.5rem padding-top, so spacer = env(safe-area-inset-top) + 1.5rem. -->
-    <div style="height: calc(env(safe-area-inset-top) + 1.5rem);" aria-hidden="true"></div>
+         Fixed header (h-12) is 3rem tall, standalone layout has no extra padding, so spacer = env(safe-area-inset-top) + 3rem. -->
+    <div style="height: calc(env(safe-area-inset-top) + 3rem);" aria-hidden="true"></div>
     <!-- Loading / error -->
     <div v-if="loading" class="text-center py-16" style="color: var(--color-text-secondary)">
       Ladataan...
@@ -481,7 +481,7 @@ onUnmounted(() => {
         </div>
 
         <!-- Progress bar toward next rank -->
-        <div class="w-full h-1 rounded-full mb-1" :style="{ background: 'var(--color-bg-secondary)' }">
+        <div class="w-full h-1 rounded-full mb-1" style="pointer-events: none;" :style="{ background: 'var(--color-bg-secondary)' }">
           <div
             class="h-full rounded-full"
             :style="{ background: 'var(--color-accent)', width: progressToNextRank + '%', transition: 'width 0.5s ease' }"
@@ -503,7 +503,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Avut (hints) -->
-      <div class="mb-2">
+      <div class="mb-2" style="scroll-margin-top: 6rem;">
         <button
           class="text-sm font-medium"
           style="color: var(--color-text-secondary); background: none; border: none; cursor: pointer; padding: 0;"
