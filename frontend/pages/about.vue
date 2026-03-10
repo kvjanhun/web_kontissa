@@ -64,12 +64,14 @@ const layoutGroups = computed(() => {
       </div>
     </div>
 
-    <div v-else-if="error" class="rounded-lg p-6 text-center" :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }">
-      <p class="text-red-500 mb-2">{{ t('about.loadError') }}</p>
-      <p :style="{ color: 'var(--color-text-tertiary)' }" class="text-sm">{{ t('about.loadErrorHint') }}</p>
-    </div>
+    <ClientOnly>
+      <div v-if="error" class="rounded-lg p-6 text-center" :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }">
+        <p class="text-red-500 mb-2">{{ t('about.loadError') }}</p>
+        <p :style="{ color: 'var(--color-text-tertiary)' }" class="text-sm">{{ t('about.loadErrorHint') }}</p>
+      </div>
+    </ClientOnly>
 
-    <template v-else>
+    <template v-if="!loading && !error">
       <template v-for="(group, gi) in layoutGroups" :key="gi">
         <div v-if="group.type === 'pair'" class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
           <SectionBlock v-for="s in group.sections" :key="s.id" :section="s" :compact="true" />
