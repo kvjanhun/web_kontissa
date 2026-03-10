@@ -24,7 +24,8 @@ frontend/.output/
 # Claude Code agent memory
 .claude/
 
-# Playwright
+# Test results
+test-results/
 frontend/test-results/
 frontend/playwright-report/
 frontend/playwright/.cache/

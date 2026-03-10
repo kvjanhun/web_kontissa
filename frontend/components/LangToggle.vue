@@ -1,7 +1,4 @@
 <script setup>
-import { storeToRefs } from 'pinia'
-import { useI18nStore } from '~/stores/i18n.js'
-
 const i18nStore = useI18nStore()
 const { locale } = storeToRefs(i18nStore)
 const { setLocale } = i18nStore

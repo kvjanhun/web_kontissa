@@ -1,12 +1,4 @@
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
-import { useAuthStore } from '~/stores/auth.js'
-import { useI18nStore } from '~/stores/i18n.js'
-import { useNavLinks } from '~/composables/useNavLinks.js'
-import ThemeToggle from './ThemeToggle.vue'
-import LangToggle from './LangToggle.vue'
-
 const { logout } = useAuthStore()
 const { t } = useI18nStore()
 const router = useRouter()

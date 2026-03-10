@@ -1,6 +1,3 @@
-import { trackPageView } from '~/composables/usePageView.js'
-import { useI18nStore } from '~/stores/i18n.js'
-
 export default defineNuxtRouteMiddleware((to, from) => {
   // Only run on client side, and only after initial navigation
   if (import.meta.server) return

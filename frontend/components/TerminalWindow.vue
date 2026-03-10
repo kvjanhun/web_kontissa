@@ -1,7 +1,4 @@
 <script setup>
-import { ref, watch, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
-import { useTerminal } from '~/composables/useTerminal.js'
-
 const {
   outputLines,
   currentInput,

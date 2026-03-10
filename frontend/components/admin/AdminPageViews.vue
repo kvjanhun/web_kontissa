@@ -1,6 +1,4 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-
 const pageViews = ref([])
 const events = ref(null)
 const loading = ref(true)

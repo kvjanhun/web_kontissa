@@ -82,7 +82,7 @@ async function runBootSequence() {
     'Welcome to erez.ac (GNU/Linux 5.14.0-el9 x86_64)',
     '',
     ' * Server: Intel NUC11ATKC2, Vantaa',
-    ' * Stack:  Flask 3.1 + Vue 3 + SQLite',
+    ' * Stack:  Flask 3.1 + Nuxt 3 + SQLite',
     ' * Type <span class="text-term-user">help</span> for available commands',
     '',
     `Last login: ${dateStr} from visitor`,
@@ -175,7 +175,7 @@ function handleFetch() {
     `<span class="text-term-dir">CPU</span>      <span class="text-gray-300">Intel Celeron N4505 @ 2.00GHz</span>`,
     `<span class="text-term-dir">Memory</span>   <span class="text-gray-300">7.3 GiB</span>`,
     `<span class="text-term-dir">Disk</span>     <span class="text-gray-300">70G (31% used)</span>`,
-    `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">47 weeks</span>`,
+    `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">49 weeks</span>`,
     `<span class="text-term-dir">Docker</span>   <span class="text-gray-300">28.0.4</span>`,
     `<span class="text-term-dir">Stack</span>    <span class="text-gray-300">Flask 3.1 / Vue 3 / SQLite</span>`,
     `<span class="text-term-dir">Theme</span>    <span class="text-gray-300">${isDark.value ? 'Dark' : 'Light'} mode</span>`,
@@ -247,9 +247,9 @@ function handleSkills() {
   pushLine(
     '<div class="my-1 text-sm space-y-1.5">' +
     '<div><span class="text-term-user font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
-    '<div><span class="text-term-dir font-bold">Frontend</span>   <span class="text-gray-300">Vue 3 · React · Tailwind CSS · Vite</span></div>' +
+    '<div><span class="text-term-dir font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
     '<div><span class="text-accent font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
-    '<div><span class="text-purple-400 font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux (RHEL) · GitHub Actions</span></div>' +
+    '<div><span class="text-purple-400 font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
     '<div><span class="text-yellow-400 font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
     '</div>'
   )

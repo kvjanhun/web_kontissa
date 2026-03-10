@@ -1,6 +1,4 @@
 <script setup>
-import { computed } from 'vue'
-
 const props = defineProps({
   section: { type: Object, required: true },
   compact: { type: Boolean, default: false }

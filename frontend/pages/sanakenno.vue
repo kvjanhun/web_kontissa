@@ -1,8 +1,4 @@
 <script setup>
-import { useFaviconSwap } from '~/composables/useFaviconSwap.js'
-import { useThemeColor } from '~/composables/useThemeColor.js'
-import { useGameTimer } from '~/composables/useGameTimer.js'
-import { useHintData } from '~/composables/useHintData.js'
 import { recalcScore as _recalcScore, rankForScore, rankThresholds as _rankThresholds, progressToNextRank as _progressToNextRank, colorizeWord, toColumns } from '~/composables/useSanakennoLogic.js'
 
 definePageMeta({
