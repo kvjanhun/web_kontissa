@@ -69,6 +69,7 @@ onMounted(() => {
       <input
         v-model="search"
         type="text"
+        :aria-label="t('recipes.searchPlaceholder')"
         :placeholder="t('recipes.searchPlaceholder')"
         class="flex-1 px-4 py-2 rounded-lg text-sm outline-none"
         :style="{
