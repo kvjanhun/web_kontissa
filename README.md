@@ -4,18 +4,20 @@ Personal portfolio website by Konsta Janhunen.
 
 ## Stack
 
-- **Frontend**: Vue 3 (Composition API, `<script setup>`) + Vite + Tailwind CSS 4
+- **Frontend**: Nuxt 3 (Vue 3, Composition API, `<script setup>`) + Tailwind CSS 4
 - **Backend**: Flask (Python) with JSON API endpoints
 - **Database**: SQLite via Flask-SQLAlchemy
 - **Auth**: Flask-Login with session cookies, scrypt password hashing
+- **State**: Pinia stores via `@pinia/nuxt`
 - **Server**: Gunicorn (production), Flask dev server (local)
 - **Deployment**: Docker Compose (multi-stage build), auto-deployed via GitHub webhook
+- **CI**: GitHub Actions — pytest, Vitest, Playwright on every push
 
 ## Features
 
-- Multi-page Vue SPA with client-side routing and static site generation (vite-ssg)
+- Nuxt 3 with static site generation (`nuxt generate`) and file-based routing
 - Dark/light mode with warm stone-orange theme
-- EN/FI language support via custom i18n composable
+- EN/FI language support via custom Pinia i18n store
 - Interactive terminal animation on the home page (cowsay, weather, etc.)
 - Admin panel for managing content sections (tab-based dashboard)
 - Shared recipe book with search, categories, cooking mode with wake lock
@@ -32,7 +34,7 @@ Site has many self-made admin tools that require authentication on the live site
 
 ## Background
 
-Originally built with Flask + Jinja2 templates and vanilla JavaScript. In February 2026, the frontend was migrated to Vue 3 SFCs with Vite, the Jinja2 templates replaced by Vue components, and Flask routes converted to a JSON API. The site has since grown to include recipes, Sanakenno, i18n, and SSG — all developed with Claude (Anthropic), orchestrated by Konsta.
+Originally built with Flask + Jinja2 templates and vanilla JavaScript. In February 2026, the frontend was migrated to Vue 3 SFCs with Vite, the Jinja2 templates replaced by Vue components, and Flask routes converted to a JSON API. In March 2026, the frontend was migrated from Vite + vite-ssg to Nuxt 3 with Pinia for state management. The site has since grown to include recipes, Sanakenno, i18n, and SSG — all developed with Claude (Anthropic), orchestrated by Konsta.
 
 ## Running Locally
 
@@ -51,13 +53,13 @@ Then visit: [http://localhost:8080](http://localhost:8080)
 pip install -r requirements.txt
 DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
 
-# Terminal 2 — Vite dev server with HMR
+# Terminal 2 — Nuxt dev server with HMR
 cd frontend && npm install && npm run dev
 ```
 
-Then visit: [http://localhost:5173](http://localhost:5173)
+Then visit: [http://localhost:3000](http://localhost:3000)
 
-Vite proxies `/api/*` requests to Flask on port 5001.
+Nuxt proxies `/api/*` requests to Flask on port 5001 via `routeRules` in `nuxt.config.ts`.
 
 ## Configuration
 
@@ -75,7 +77,7 @@ docker compose exec web python3 -c "from app.create_user import create; create('
 
 ## Production Notes
 
-- Multi-stage Docker build: Node builds the frontend, final image is Python-only
+- Multi-stage Docker build: Node builds the frontend (`nuxt generate`), final image is Python-only
 - Gunicorn as WSGI server, Nginx + Let's Encrypt for TLS termination (external)
 - Auto-deploy via GitHub webhook — pushes to main go live immediately
 
