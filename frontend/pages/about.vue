@@ -10,9 +10,14 @@ useHead({
   ]
 })
 
-const sections = ref([])
-const loading = ref(true)
-const error = ref(null)
+const { data: sections, pending: loading, error, refresh } = await useFetch('/api/sections', {
+  default: () => [],
+})
+
+// If pre-render failed (no Flask during nuxt generate), retry on client
+if (import.meta.client && error.value && !sections.value.length) {
+  await refresh()
+}
 
 const COMPACT_TYPES = new Set(['currently', 'pills'])
 
@@ -39,18 +44,6 @@ const layoutGroups = computed(() => {
     groups.push({ type: 'single', section: compactBuffer[0] })
   }
   return groups
-})
-
-onMounted(async () => {
-  try {
-    const res = await fetch('/api/sections')
-    sections.value = await res.json()
-  } catch (e) {
-    console.error('Failed to load sections:', e)
-    error.value = e
-  } finally {
-    loading.value = false
-  }
 })
 </script>
 
