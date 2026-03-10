@@ -1,8 +1,4 @@
 <script setup>
-import { storeToRefs } from 'pinia'
-import { useDarkModeStore } from '~/stores/darkMode.js'
-import { useI18nStore } from '~/stores/i18n.js'
-
 const darkModeStore = useDarkModeStore()
 const { isDark } = storeToRefs(darkModeStore)
 const { toggleDark } = darkModeStore

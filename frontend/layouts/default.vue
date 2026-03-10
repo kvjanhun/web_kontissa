@@ -1,9 +1,4 @@
 <script setup>
-import { useI18nStore } from '~/stores/i18n.js'
-import { useAuthStore } from '~/stores/auth.js'
-import AppHeader from '~/components/AppHeader.vue'
-import AppFooter from '~/components/AppFooter.vue'
-
 const authStore = useAuthStore()
 const { t } = useI18nStore()
 const updateDate = ref('')

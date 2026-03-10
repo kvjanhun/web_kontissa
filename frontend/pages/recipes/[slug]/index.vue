@@ -1,6 +1,4 @@
 <script setup>
-import { useI18nStore } from '~/stores/i18n.js'
-
 definePageMeta({
   titleKey: 'title.recipe',
   requiresAuth: true,

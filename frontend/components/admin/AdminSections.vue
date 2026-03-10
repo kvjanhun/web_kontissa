@@ -1,7 +1,4 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { useI18nStore } from '~/stores/i18n.js'
-
 const { t } = useI18nStore()
 
 const sections = ref([])

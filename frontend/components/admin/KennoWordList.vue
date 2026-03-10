@@ -1,6 +1,4 @@
 <script setup>
-import { computed } from 'vue'
-
 const WORDS_PER_COLUMN = 10
 
 const props = defineProps({

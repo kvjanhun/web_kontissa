@@ -1,6 +1,4 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-
 const stats = ref(null)
 const loading = ref(true)
 

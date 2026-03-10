@@ -1,6 +1,4 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-
 const recipes = ref([])
 const loading = ref(true)
 const error = ref('')

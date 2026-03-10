@@ -1,8 +1,4 @@
 <script setup>
-import { ref, computed, watch, onMounted, nextTick } from 'vue'
-import KennoVariationsGrid from './KennoVariationsGrid.vue'
-import KennoWordList from './KennoWordList.vue'
-
 const FINNISH_LETTERS = new Set('abcdefghijklmnopqrstuvwxyzäö')
 
 // ---------------------------------------------------------------------------

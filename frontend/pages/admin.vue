@@ -1,7 +1,4 @@
 <script setup>
-import { useAuthStore } from '~/stores/auth.js'
-import { useI18nStore } from '~/stores/i18n.js'
-
 definePageMeta({
   titleKey: 'title.admin',
   requiresAdmin: true,

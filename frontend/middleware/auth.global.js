@@ -1,5 +1,3 @@
-import { useAuthStore } from '~/stores/auth.js'
-
 export default defineNuxtRouteMiddleware(async (to) => {
   if (import.meta.server) return  // cookies not available server-side
   if (!to.meta.requiresAdmin && !to.meta.requiresAuth) return
