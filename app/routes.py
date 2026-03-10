@@ -1,5 +1,4 @@
 import os
-import re
 from flask import Blueprint, jsonify, redirect, request, url_for, Response, send_from_directory
 from flask_login import current_user
 from .models import db, Section
@@ -153,35 +152,15 @@ def api_reorder_sections():
     return jsonify({"message": "Sections reordered"})
 
 
-@core_bp.route("/sanakenno")
-@limiter.exempt
-def sanakenno_page():
-    """Serve the Sanakenno game with game-specific OG meta tags for link previews."""
-    index_path = os.path.join(DIST_DIR, "index.html")
-    try:
-        with open(index_path, encoding="utf-8") as f:
-            html = f.read()
-    except FileNotFoundError:
-        return send_from_directory(DIST_DIR, "index.html")
-
-    DESC = "Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli."
-    html = re.sub(r"<title>[^<]*</title>", "<title>Sanakenno \u2014 erez.ac</title>", html)
-    html = re.sub(r'<meta name="description"[^>]*>', f'<meta name="description" content="{DESC}">', html)
-    html = re.sub(r'<meta property="og:title"[^>]*>', '<meta property="og:title" content="Sanakenno \u2014 sanapeli">', html)
-    html = re.sub(r'<meta property="og:description"[^>]*>', f'<meta property="og:description" content="{DESC}">', html)
-    html = re.sub(r'<meta property="og:url"[^>]*>', '<meta property="og:url" content="https://erez.ac/sanakenno">', html)
-    html = re.sub(r'<link rel="icon"[^>]*>', '<link rel="icon" type="image/png" href="/sanakenno-favicon.png">', html)
-    return Response(html, mimetype="text/html")
-
-
 @core_bp.route("/<path:path>")
 @limiter.exempt
 def catch_all(path):
-    """Serve static file from dist/ if it exists, otherwise fall back to index.html for Vue Router."""
+    """Serve static file from dist/ if it exists, otherwise fall back to SPA shell for client-side routing."""
     file_path = os.path.join(DIST_DIR, path)
     if os.path.isfile(file_path):
         return send_from_directory(DIST_DIR, path)
     index_path = os.path.join(DIST_DIR, path, "index.html")
     if os.path.isfile(index_path):
         return send_from_directory(os.path.join(DIST_DIR, path), "index.html")
-    return send_from_directory(DIST_DIR, "index.html")
+    # SPA fallback: 200.html is a generic Nuxt shell (not pre-rendered for any specific route)
+    return send_from_directory(DIST_DIR, "200.html")

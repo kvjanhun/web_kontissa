@@ -10,6 +10,19 @@ definePageMeta({
   titleKey: 'title.sanakenno',
 })
 
+useHead({
+  title: 'Sanakenno — erez.ac',
+  meta: [
+    { name: 'description', content: 'Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli.' },
+    { property: 'og:title', content: 'Sanakenno — sanapeli' },
+    { property: 'og:description', content: 'Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli.' },
+    { property: 'og:url', content: 'https://erez.ac/sanakenno' },
+  ],
+  link: [
+    { rel: 'icon', type: 'image/png', href: '/sanakenno-favicon.png' },
+  ],
+})
+
 // --- Persistence keys ---
 function stateKey(n) { return `sanakenno_state_${n}` }
 const LEGACY_STATE_KEY = 'sanakenno_state'  // migration from single-key format
