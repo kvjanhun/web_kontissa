@@ -1,4 +1,9 @@
 <script setup>
+// Explicit imports needed: Nuxt auto-imports these as AdminKennoVariationsGrid /
+// AdminKennoWordList (directory prefix), but the template uses the short names.
+import KennoVariationsGrid from './KennoVariationsGrid.vue'
+import KennoWordList from './KennoWordList.vue'
+
 const FINNISH_LETTERS = new Set('abcdefghijklmnopqrstuvwxyzäö')
 
 // ---------------------------------------------------------------------------
