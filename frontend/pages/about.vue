@@ -10,14 +10,21 @@ useHead({
   ]
 })
 
-const { data: sections, pending: loading, error, refresh } = await useFetch('/api/sections', {
+const retrying = ref(false)
+
+const { data: sections, pending, error, refresh } = await useFetch('/api/sections', {
   default: () => [],
 })
 
 // If pre-render failed (no Flask during nuxt generate), retry on client
 if (import.meta.client && error.value && !sections.value.length) {
+  error.value = null
+  retrying.value = true
   await refresh()
+  retrying.value = false
 }
+
+const loading = computed(() => pending.value || retrying.value)
 
 const COMPACT_TYPES = new Set(['currently', 'pills'])
 
