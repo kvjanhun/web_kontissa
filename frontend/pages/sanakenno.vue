@@ -466,7 +466,7 @@ onUnmounted(() => {
   <SanakennoRulesModal :show="showRules" @close="showRules = false" />
 
   <!-- touch-action: manipulation prevents double-tap zoom on iOS Safari -->
-  <div class="max-w-sm mx-auto" style="touch-action: manipulation;">
+  <div class="max-w-sm mx-auto" style="touch-action: manipulation; padding-bottom: calc(env(safe-area-inset-bottom) + 1rem);">
     <!-- Spacer: natural position of sticky bar = stick position (env + 3rem from viewport top).
          Fixed header (h-12) is 3rem tall, standalone layout has no extra padding, so spacer = env(safe-area-inset-top) + 3rem. -->
     <div style="height: calc(env(safe-area-inset-top) + 3rem);" aria-hidden="true"></div>
@@ -880,5 +880,12 @@ onUnmounted(() => {
   background-clip: padding-box;
   border-image: linear-gradient(135deg, var(--color-accent), #ffb43c, var(--color-accent)) 1;
   animation: glow-intense 2s ease-in-out infinite;
+}
+</style>
+
+<!-- Unscoped: disable double-tap zoom on all elements (iOS Safari) -->
+<style>
+*, *::before, *::after {
+  touch-action: manipulation;
 }
 </style>
