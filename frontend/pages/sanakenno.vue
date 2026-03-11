@@ -16,7 +16,7 @@ useHead({
   ],
   link: [
     { rel: 'icon', type: 'image/png', href: '/sanakenno-favicon-v2.png' },
-    { rel: 'apple-touch-icon', href: '/sanakenno-favicon-v2.png' },
+    { rel: 'apple-touch-icon', sizes: '180x180', href: '/sanakenno-apple-touch-icon.png' },
   ],
 })
 
