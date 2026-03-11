@@ -66,7 +66,6 @@ const shareCopied = ref(false)
 let shareCopiedTimer = null
 
 // --- Composables ---
-useFaviconSwap('/sanakenno-favicon.png')
 useThemeColor()
 const { startedAt, totalPausedMs, start: startTimer, getElapsedMs } = useGameTimer()
 
