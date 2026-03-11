@@ -8,7 +8,8 @@ definePageMeta({
 
 useHead({
   title: 'Sanakenno — erez.ac',
-  htmlAttrs: { style: 'touch-action: manipulation' },
+  // Override global viewport to disable zoom entirely (game UI — zoom is never useful)
+  viewport: 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover',
   meta: [
     { name: 'description', content: 'Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli.' },
     { property: 'og:title', content: 'Sanakenno — sanapeli' },
