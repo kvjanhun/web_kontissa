@@ -41,9 +41,7 @@ export default defineNuxtConfig({
         { property: 'og:url', content: 'https://erez.ac' },
         { property: 'og:type', content: 'website' },
       ],
-      link: [
-        { rel: 'icon', href: '/favicon.ico' },
-      ],
+      link: [],
       script: [
         // Dark mode flash prevention — runs before Vue hydrates
         {

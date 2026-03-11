@@ -31,7 +31,7 @@ SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side word valida
 - **Found words**: Last 6 visible, "Kaikki ▼" expands to full alphabetical list. Re-submit flashes orange 1.5s.
 - **Touch**: `touch-action: manipulation` on root div. `touch-action: none` on honeycomb SVG.
 - **OG meta**: Set via `useHead()` — baked into pre-rendered HTML. Flask `sanakenno_page()` route removed.
-- **Favicon**: `useFaviconSwap.js` swaps to `sanakenno-favicon.png` on mount, restores on unmount.
+- **Favicon**: Set via `useHead()` link — Nuxt's head manager adds/removes it with page lifecycle.
 - **Timer**: `useGameTimer.js` tracks elapsed time with pause/resume on tab visibility.
 - **Achievement tracking**: Fire-and-forget `POST /api/kenno/achievement` on each rank transition.
 
