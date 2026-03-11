@@ -30,7 +30,12 @@ sys.path.insert(0, REPO_ROOT)
 
 DEFAULT_WORDLIST = os.path.join(REPO_ROOT, "app", "wordlists", "kotus_words.txt")
 
-os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(REPO_ROOT, 'app', 'data', 'site.db')}")
+_db_candidates = [
+    os.path.join(REPO_ROOT, "app", "data", "site.db"),  # local dev
+    os.path.join(REPO_ROOT, "data", "site.db"),          # inside container (WORKDIR=/app)
+]
+_db_path = next((p for p in _db_candidates if os.path.exists(os.path.dirname(p))), _db_candidates[0])
+os.environ.setdefault("DATABASE_URI", f"sqlite:///{_db_path}")
 
 
 def load_words(path):
