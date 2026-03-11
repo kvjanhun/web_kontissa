@@ -17,6 +17,7 @@ frontend/node_modules/
 # Nuxt build artifacts
 frontend/.nuxt/
 frontend/.output/
+frontend/dist
 
 # Environment variables
 .env
