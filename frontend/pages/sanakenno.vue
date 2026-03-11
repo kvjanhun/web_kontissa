@@ -663,7 +663,7 @@ onUnmounted(() => {
             :key="i"
             aria-hidden="true"
             style="cursor: pointer;"
-            @pointerdown="pressedHexIndex = i; addLetter(hex.letter)"
+            @pointerdown.prevent="pressedHexIndex = i; addLetter(hex.letter)"
             @pointerup="pressedHexIndex = null"
             @pointerleave="pressedHexIndex = null"
           >
