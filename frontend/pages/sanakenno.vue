@@ -15,7 +15,7 @@ useHead({
     { property: 'og:url', content: 'https://erez.ac/sanakenno' },
   ],
   link: [
-    { rel: 'icon', type: 'image/png', href: '/sanakenno-favicon.png' },
+    { rel: 'icon', type: 'image/png', href: '/sanakenno-favicon-v2.png' },
   ],
 })
 
