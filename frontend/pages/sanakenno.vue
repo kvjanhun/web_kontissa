@@ -13,10 +13,15 @@ useHead({
     { property: 'og:title', content: 'Sanakenno — sanapeli' },
     { property: 'og:description', content: 'Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli.' },
     { property: 'og:url', content: 'https://erez.ac/sanakenno' },
+    // PWA: standalone app on iOS
+    { name: 'apple-mobile-web-app-capable', content: 'yes' },
+    { name: 'apple-mobile-web-app-status-bar-style', content: 'default' },
+    { name: 'apple-mobile-web-app-title', content: 'Sanakenno' },
   ],
   link: [
     { rel: 'icon', type: 'image/png', href: '/sanakenno-favicon-v2.png' },
     { rel: 'apple-touch-icon', sizes: '180x180', href: '/sanakenno-apple-touch-icon.png' },
+    { rel: 'manifest', href: '/sanakenno.webmanifest' },
   ],
 })
 
@@ -413,6 +418,17 @@ function handleKeydown(e) {
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
   fetchPuzzle()
+
+  // Service worker: register in production, unregister in dev (conflicts with Vite HMR)
+  if ('serviceWorker' in navigator) {
+    if (import.meta.dev) {
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((r) => r.unregister())
+      })
+    } else {
+      navigator.serviceWorker.register('/sanakenno-sw.js', { scope: '/sanakenno' })
+    }
+  }
 })
 
 onUnmounted(() => {
@@ -456,8 +472,13 @@ onUnmounted(() => {
     <div v-if="loading" class="text-center py-16" style="color: var(--color-text-secondary)">
       Ladataan...
     </div>
-    <div v-else-if="fetchError" class="text-center py-16 text-red-400" role="alert">
-      {{ fetchError }}
+    <div v-else-if="fetchError" class="text-center py-16" role="alert">
+      <p class="text-red-400 mb-4">{{ fetchError }}</p>
+      <button
+        class="px-4 py-2 rounded-lg text-sm font-medium"
+        style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
+        @click="fetchPuzzle()"
+      >Yritä uudelleen</button>
     </div>
 
     <template v-else-if="puzzle">

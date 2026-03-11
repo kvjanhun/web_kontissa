@@ -1,0 +1,22 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <!-- Maskable icon: content within 80% safe zone (51.2px padding each side) -->
+  <rect width="512" height="512" fill="#3A3A3A"/>
+
+  <!-- Hexagon scaled to fit within safe zone (~410px centered) -->
+  <polygon
+    points="256,72 434,175 434,337 256,440 78,337 78,175"
+    fill="#ff643e"
+    stroke="#ffffff"
+    stroke-width="4"
+  />
+
+  <!-- Letter: y offset matches original 180x180 SVG ratio (center + 0.37*fontSize) -->
+  <text
+    x="256"
+    y="315"
+    text-anchor="middle"
+    font-size="160"
+    font-family="'DM Sans', sans-serif"
+    font-weight="700"
+    fill="#FFFFFF">E</text>
+</svg>
