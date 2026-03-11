@@ -7,7 +7,7 @@ import hashlib
 import os
 
 from app import limiter
-from app.models import db, BlockedWord, KennoConfig, KennoAchievement, KennoPuzzle, PageView
+from app.models import db, BlockedWord, KennoCombination, KennoConfig, KennoAchievement, KennoPuzzle, PageView
 from app.decorators import admin_required
 
 kenno_bp = Blueprint('kenno', __name__)
@@ -655,3 +655,107 @@ def kenno_delete_puzzle(slot):
     db.session.commit()
     _PUZZLE_CACHE.pop(slot, None)
     return jsonify({"slot": slot, "deleted": True})
+
+
+@kenno_bp.route("/api/kenno/combinations")
+@admin_required
+def kenno_combinations():
+    """Browse pre-computed 7-letter combinations (admin only).
+
+    Query params:
+      requires     — comma-separated letters that MUST appear (e.g. "a,ö")
+      excludes     — comma-separated letters that MUST NOT appear
+      min_pangrams — minimum total pangrams (default: 1)
+      max_pangrams — maximum total pangrams
+      min_words    — minimum max-center word count
+      max_words    — maximum max-center word count
+      min_words_min — minimum min-center word count (worst center has at least N)
+      max_words_min — maximum min-center word count
+      in_rotation  — "true"/"false" to filter by rotation membership
+      sort         — column to sort by (default: "pangrams")
+      order        — "asc" or "desc" (default: "desc")
+      page         — 1-indexed page (default: 1)
+      per_page     — results per page (default: 50, max 200)
+    """
+    q = KennoCombination.query
+
+    # Letter filters
+    requires = request.args.get("requires", "").strip()
+    if requires:
+        for letter in requires.split(","):
+            letter = letter.strip().lower()
+            if letter:
+                q = q.filter(KennoCombination.letters.contains(letter))
+
+    excludes = request.args.get("excludes", "").strip()
+    if excludes:
+        for letter in excludes.split(","):
+            letter = letter.strip().lower()
+            if letter:
+                q = q.filter(~KennoCombination.letters.contains(letter))
+
+    # Numeric filters
+    min_pangrams = request.args.get("min_pangrams", 1, type=int)
+    q = q.filter(KennoCombination.total_pangrams >= min_pangrams)
+
+    max_pangrams = request.args.get("max_pangrams", type=int)
+    if max_pangrams is not None:
+        q = q.filter(KennoCombination.total_pangrams <= max_pangrams)
+
+    # Word count filters (max center = best case)
+    min_words = request.args.get("min_words", type=int)
+    if min_words is not None:
+        q = q.filter(KennoCombination.max_word_count >= min_words)
+
+    max_words = request.args.get("max_words", type=int)
+    if max_words is not None:
+        q = q.filter(KennoCombination.max_word_count <= max_words)
+
+    # Word count filters (min center = worst case)
+    min_words_min = request.args.get("min_words_min", type=int)
+    if min_words_min is not None:
+        q = q.filter(KennoCombination.min_word_count >= min_words_min)
+
+    max_words_min = request.args.get("max_words_min", type=int)
+    if max_words_min is not None:
+        q = q.filter(KennoCombination.min_word_count <= max_words_min)
+
+    # Rotation filter
+    in_rotation = request.args.get("in_rotation")
+    if in_rotation == "true":
+        q = q.filter(KennoCombination.in_rotation == True)  # noqa: E712
+    elif in_rotation == "false":
+        q = q.filter(KennoCombination.in_rotation == False)  # noqa: E712
+
+    # Sorting
+    sort_col = request.args.get("sort", "pangrams")
+    sort_order = request.args.get("order", "desc")
+
+    col_map = {
+        "pangrams": KennoCombination.total_pangrams,
+        "words_max": KennoCombination.max_word_count,
+        "words_min": KennoCombination.min_word_count,
+        "score_max": KennoCombination.max_max_score,
+        "score_min": KennoCombination.min_max_score,
+        "letters": KennoCombination.letters,
+    }
+    col = col_map.get(sort_col, KennoCombination.total_pangrams)
+    if sort_order == "asc":
+        q = q.order_by(col.asc())
+    else:
+        q = q.order_by(col.desc())
+
+    # Pagination
+    page = max(1, request.args.get("page", 1, type=int))
+    per_page = min(200, max(1, request.args.get("per_page", 50, type=int)))
+
+    total = q.count()
+    rows = q.offset((page - 1) * per_page).limit(per_page).all()
+
+    return jsonify({
+        "combinations": [r.to_dict() for r in rows],
+        "total": total,
+        "page": page,
+        "per_page": per_page,
+        "pages": (total + per_page - 1) // per_page,
+    })
