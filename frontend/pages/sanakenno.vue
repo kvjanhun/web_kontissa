@@ -656,14 +656,15 @@ onUnmounted(() => {
           role="img"
           :aria-label="`Kirjainkenno: kirjaimet ${hexes.map(h => h.letter.toUpperCase()).join(', ')}, keskuskirjain ${center.toUpperCase()}`"
           class="select-none"
-          style="touch-action: none;"
+          style="touch-action: manipulation;"
+          @touchmove.prevent
         >
           <g
             v-for="(hex, i) in hexes"
             :key="i"
             aria-hidden="true"
             style="cursor: pointer;"
-            @pointerdown.prevent="pressedHexIndex = i; addLetter(hex.letter)"
+            @pointerdown="pressedHexIndex = i; addLetter(hex.letter)"
             @pointerup="pressedHexIndex = null"
             @pointerleave="pressedHexIndex = null"
           >
