@@ -4,7 +4,7 @@
 
   <!-- Hexagon scaled to fit within safe zone (~410px centered) -->
   <polygon
-    points="256,72 434,175 434,337 256,440 78,337 78,175"
+    points="256,72 415,164 415,348 256,440 97,348 97,164"
     fill="#ff643e"
     stroke="#ffffff"
     stroke-width="4"
@@ -12,7 +12,7 @@
 
   <!-- Letter: y offset matches original 180x180 SVG ratio (center + 0.37*fontSize) -->
   <text
-    x="256"
+    x="250"
     y="315"
     text-anchor="middle"
     font-size="160"

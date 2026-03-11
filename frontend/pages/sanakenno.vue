@@ -8,6 +8,7 @@ definePageMeta({
 
 useHead({
   title: 'Sanakenno — erez.ac',
+  htmlAttrs: { style: 'touch-action: manipulation' },
   meta: [
     { name: 'description', content: 'Löydä sanat seitsemästä kirjaimesta. Päivittäinen sanapeli.' },
     { property: 'og:title', content: 'Sanakenno — sanapeli' },
