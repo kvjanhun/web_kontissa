@@ -12,6 +12,7 @@ RUN apk add --no-cache gcc musl-dev libffi-dev
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
+COPY scripts/ ./scripts/
 COPY run.py .
 COPY --from=frontend /src/frontend/.output/public/ ./app/static/dist/
 CMD ["gunicorn", "--preload", "-w", "2", "-b", "0.0.0.0:80", "run:app"]
