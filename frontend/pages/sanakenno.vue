@@ -417,8 +417,19 @@ function handleKeydown(e) {
   }
 }
 
+// Prevent double-tap zoom on iOS — CSS touch-action alone is not reliable
+let lastTouchEnd = 0
+function preventDoubleTapZoom(e) {
+  const now = Date.now()
+  if (now - lastTouchEnd <= 300) {
+    e.preventDefault()
+  }
+  lastTouchEnd = now
+}
+
 onMounted(() => {
   document.addEventListener('keydown', handleKeydown)
+  document.addEventListener('touchend', preventDoubleTapZoom, { passive: false })
   fetchPuzzle()
 
   // Service worker: register in production, unregister in dev (conflicts with Vite HMR)
@@ -435,6 +446,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   document.removeEventListener('keydown', handleKeydown)
+  document.removeEventListener('touchend', preventDoubleTapZoom)
   if (msgTimer) clearTimeout(msgTimer)
   if (resubTimer) clearTimeout(resubTimer)
   if (rejectTimer) clearTimeout(rejectTimer)
