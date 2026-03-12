@@ -37,6 +37,7 @@
 | DELETE | `/api/kenno/puzzle/<slot>` | Admin | Revert/remove slot |
 | POST | `/api/kenno/achievement` | Public | Record rank achievement (session-deduped) |
 | GET | `/api/kenno/achievements` | Admin | Daily achievement counts by rank |
+| GET | `/api/kenno/combinations` | Admin | Browse bee_combinations (filterable, sortable, paginated) |
 | POST | `/api/pageview` | Public | Track page view |
 | GET | `/api/pageviews` | Admin | All page views |
 | GET | `/api/admin/health` | Admin | System health |
@@ -46,7 +47,7 @@
 
 ## Models
 
-`User`, `Section` (with `section_type`: text/pills/quote/currently), `Recipe`, `Ingredient`, `Step`, `BlockedWord`, `KennoConfig`, `KennoPuzzle`, `KennoAchievement`, `PageView`
+`User`, `Section` (with `section_type`: text/pills/quote/currently), `Recipe`, `Ingredient`, `Step`, `BlockedWord`, `KennoConfig`, `KennoPuzzle`, `KennoAchievement`, `KennoCombination`, `PageView`
 
 ## Sanakenno Backend (api/kenno.py)
 

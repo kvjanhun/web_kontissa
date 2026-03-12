@@ -36,25 +36,25 @@ def unauthorized():
     return jsonify({"error": "Authentication required"}), 401
 
 
-def _run_migrations():
-    """Add columns to existing tables that db.create_all() won't add to SQLite."""
-    migrations = [
-        "ALTER TABLE blocked_words ADD COLUMN blocked_at DATETIME",
-        "ALTER TABLE page_views ADD COLUMN created_at DATETIME",
-        "ALTER TABLE page_views ADD COLUMN updated_at DATETIME",
-        "ALTER TABLE section ADD COLUMN position INTEGER DEFAULT 0",
-    ]
-    for sql in migrations:
-        try:
-            db.session.execute(db.text(sql))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+# def _run_migrations():
+#     """Add columns to existing tables that db.create_all() won't add to SQLite."""
+#     migrations = [
+#         "ALTER TABLE blocked_words ADD COLUMN blocked_at DATETIME",
+#         "ALTER TABLE page_views ADD COLUMN created_at DATETIME",
+#         "ALTER TABLE page_views ADD COLUMN updated_at DATETIME",
+#         "ALTER TABLE section ADD COLUMN position INTEGER DEFAULT 0",
+#     ]
+#     for sql in migrations:
+#         try:
+#             db.session.execute(db.text(sql))
+#             db.session.commit()
+#         except Exception:
+#             db.session.rollback()
 
 
 with app.app_context():
     db.create_all()
-    _run_migrations()
+    # _run_migrations()
 
 # App-wide request counter (used by AdminHealth)
 _stats = {"requests": 0, "start_time": time.time()}
