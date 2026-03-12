@@ -24,7 +24,7 @@ function escapeHtml(str) {
 
 const KNOWN_COMMANDS = ['help', 'about', 'skills', 'fetch', 'weather', 'cowsay', 'cowthink', 'echo', 'date', 'clear']
 
-function levenshtein(a, b) {
+export function levenshtein(a, b) {
   const m = a.length, n = b.length
   const dp = Array.from({ length: m + 1 }, () => Array(n + 1).fill(0))
   for (let i = 0; i <= m; i++) dp[i][0] = i
@@ -39,7 +39,7 @@ function levenshtein(a, b) {
   return dp[m][n]
 }
 
-function findClosestCommand(input) {
+export function findClosestCommand(input) {
   let best = null
   let bestDist = Infinity
   for (const cmd of KNOWN_COMMANDS) {
@@ -57,7 +57,7 @@ function pushPromptLine(command) {
   pushLine(`<div class="flex font-mono">${PROMPT_HTML}<span class="text-white">${escapeHtml(command)}</span></div>`, 'prompt')
 }
 
-const prefersReducedMotion = typeof window !== 'undefined'
+const prefersReducedMotion = typeof window !== 'undefined' && typeof window.matchMedia === 'function'
   ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
   : false
 
@@ -190,7 +190,7 @@ function handleFetch() {
   )
 }
 
-function parseCowArgs(argsArray) {
+export function parseCowArgs(argsArray) {
   let character = 'cow'
   let message = ''
   const rest = [...argsArray]
