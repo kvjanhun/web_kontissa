@@ -50,6 +50,8 @@ services:
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=false
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=https://erez.ac/logs/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     restart: unless-stopped
 
 volumes:
