@@ -495,9 +495,11 @@ def kenno_save_puzzle():
     if center not in letters:
         return jsonify({"error": f"center '{center}' must be one of the 7 letters"}), 400
 
-    # Safety: reject writes to today's live slot
+    force = data.get("force", False)
+
+    # Safety: reject writes to today's live slot unless forced
     today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
-    if slot == today_slot:
+    if slot == today_slot and not force:
         return jsonify({"error": "Cannot modify today's live puzzle"}), 409
 
     # Upsert KennoPuzzle row
@@ -594,8 +596,10 @@ def kenno_swap_puzzles():
     if slot_a >= total or slot_b >= total:
         return jsonify({"error": "Slot out of range"}), 400
 
+    force = data.get("force", False)
+
     today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
-    if slot_a == today_slot or slot_b == today_slot:
+    if (slot_a == today_slot or slot_b == today_slot) and not force:
         return jsonify({"error": "Cannot swap today's live puzzle"}), 409
 
     # Read current state for both slots
@@ -640,8 +644,9 @@ def _upsert_puzzle_slot(slot, letters, center, now):
 @admin_required
 def kenno_delete_puzzle(slot):
     """Delete a puzzle slot (admin only)."""
+    force = request.args.get("force", "false").lower() == "true"
     today_slot = _get_puzzle_for_date(datetime.now(_HELSINKI).date())
-    if slot == today_slot:
+    if slot == today_slot and not force:
         return jsonify({"error": "Cannot modify today's live puzzle"}), 409
 
     row = db.session.get(KennoPuzzle, slot)
