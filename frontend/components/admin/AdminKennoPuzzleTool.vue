@@ -92,7 +92,6 @@ const displayNumber = computed(() => currentSlot.value + 1)
 
 const canSave = computed(() => {
   if (!isDirty.value) return false
-  if (isToday.value) return false
   if (saving.value) return false
   return true
 })
@@ -101,12 +100,11 @@ const canSwap = computed(() => {
   if (swapSlotInput.value == null || swapSlotInput.value < 1) return false
   const other = swapSlotInput.value - 1
   if (other === currentSlot.value) return false
-  if (todaySlot.value !== null && (currentSlot.value === todaySlot.value || other === todaySlot.value)) return false
   if (totalPuzzles.value && other >= totalPuzzles.value) return false
   return true
 })
 
-const canDelete = computed(() => !isToday.value)
+const canDelete = computed(() => true)
 
 // ---------------------------------------------------------------------------
 // Slot loading
@@ -190,7 +188,11 @@ async function onSelectCenter(comboLetters, center) {
   activeCenter.value = center
 
   // If this is the saved combo, change center on the server (clean mode)
-  if (comboLetters === savedCombo.value && !isToday.value) {
+  if (comboLetters === savedCombo.value) {
+    if (isToday.value && !confirm("VAROITUS: Olet vaihtamassa TÄMÄN PÄIVÄN live-pelin keskuskirjainta. Oletko varma?")) {
+      activeCenter.value = savedCenter.value
+      return
+    }
     centerSaving.value = true
     try {
       const res = await fetch('/api/kenno/center', {
@@ -263,6 +265,8 @@ async function blockWord(word) {
 
 async function savePuzzle() {
   if (!canSave.value) return
+  if (isToday.value && !confirm("VAROITUS: Olet muokkaamassa TÄMÄN PÄIVÄN live-peliä. Oletko aivan varma?")) return
+
   saving.value = true
   saveError.value = ''
   try {
@@ -273,6 +277,7 @@ async function savePuzzle() {
         slot: currentSlot.value,
         letters: activeCombo.value.split(''),
         center: activeCenter.value,
+        force: true
       }),
     })
     if (!res.ok) {
@@ -299,7 +304,12 @@ async function savePuzzle() {
 async function executeSwap() {
   if (!canSwap.value || swapLoading.value) return
   const other = swapSlotInput.value - 1
-  if (!confirm(`Vaihda pelien ${displayNumber.value} ja ${swapSlotInput.value} paikat?`)) return
+  
+  if (isToday.value || other === todaySlot.value) {
+    if (!confirm("VAROITUS: Olet vaihtamassa TÄMÄN PÄIVÄN live-pelin paikkaa. Oletko aivan varma?")) return
+  } else {
+    if (!confirm(`Vaihda pelien ${displayNumber.value} ja ${swapSlotInput.value} paikat?`)) return
+  }
 
   swapLoading.value = true
   swapError.value = ''
@@ -308,7 +318,7 @@ async function executeSwap() {
     const res = await fetch('/api/kenno/puzzle/swap', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ slot_a: currentSlot.value, slot_b: other }),
+      body: JSON.stringify({ slot_a: currentSlot.value, slot_b: other, force: true }),
     })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
@@ -329,13 +339,18 @@ async function executeSwap() {
 
 async function executeDelete() {
   if (!canDelete.value || deleteLoading.value) return
-  if (!confirm(`Poista peli ${displayNumber.value}?`)) return
+  
+  if (isToday.value) {
+    if (!confirm("VAROITUS: Olet poistamassa TÄMÄN PÄIVÄN live-pelin. Oletko aivan varma?")) return
+  } else {
+    if (!confirm(`Poista peli ${displayNumber.value}?`)) return
+  }
 
   deleteLoading.value = true
   deleteError.value = ''
   deleteSuccess.value = ''
   try {
-    const res = await fetch(`/api/kenno/puzzle/${currentSlot.value}`, { method: 'DELETE' })
+    const res = await fetch(`/api/kenno/puzzle/${currentSlot.value}?force=true`, { method: 'DELETE' })
     if (!res.ok) {
       const err = await res.json().catch(() => ({}))
       throw new Error(err.error || 'Poisto epäonnistui')

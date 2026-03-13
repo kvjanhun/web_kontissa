@@ -72,6 +72,7 @@ let resubTimer = null
 let rejectTimer = null
 const shareCopied = ref(false)
 let shareCopiedTimer = null
+let midnightTimer = null
 
 // --- Composables ---
 useThemeColor()
@@ -432,6 +433,21 @@ onMounted(() => {
   document.addEventListener('touchend', preventDoubleTapZoom, { passive: false })
   fetchPuzzle()
 
+  // Store the date the component was mounted
+  const loadedDateStr = new Date().toDateString()
+
+  // Auto-refresh at midnight to load the next day's puzzle
+  const now = new Date()
+  const msUntilMidnight = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1, 0, 0, 1).getTime() - now.getTime()
+  midnightTimer = setTimeout(() => { window.location.reload() }, msUntilMidnight)
+
+  // Also handle the case where the app was suspended and resumed after midnight
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && new Date().toDateString() !== loadedDateStr) {
+      window.location.reload()
+    }
+  })
+
   // Service worker: register in production, unregister in dev (conflicts with Vite HMR)
   if ('serviceWorker' in navigator) {
     if (import.meta.dev) {
@@ -452,6 +468,7 @@ onUnmounted(() => {
   if (rejectTimer) clearTimeout(rejectTimer)
   if (shareCopiedTimer) clearTimeout(shareCopiedTimer)
   if (celebrationTimer) clearTimeout(celebrationTimer)
+  if (midnightTimer) clearTimeout(midnightTimer)
 })
 </script>
 
@@ -629,8 +646,15 @@ onUnmounted(() => {
         </div>
       </div>
 
+      <!-- All found celebration -->
+      <div v-if="allFound" class="text-center py-3 rounded-lg mb-2" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
+        <p class="text-2xl mb-1">🎉</p>
+        <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ puzzle.hint_data.word_count }} sanaa löydetty!</p>
+      </div>
+
       <!-- Current word display -->
       <div
+        v-else
         class="text-center text-2xl mb-2 min-h-[2.5rem] font-light"
         :class="{ 'word-shake': wordShake }"
         style="font-family: var(--font-mono); letter-spacing: 0.15em;"
@@ -645,6 +669,7 @@ onUnmounted(() => {
 
       <!-- Feedback message -->
       <div
+        v-show="!allFound"
         class="text-center text-sm font-medium mb-2 min-h-[1.25rem]"
         :style="{
           color: messageType === 'error'   ? '#ef4444'
@@ -660,7 +685,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Honeycomb -->
-      <div class="flex justify-center mb-3">
+      <div class="flex justify-center mb-3" :style="{ opacity: allFound ? 0.7 : 1, pointerEvents: allFound ? 'none' : 'auto' }">
         <svg
           viewBox="18 18 264 264"
           width="264"
@@ -712,7 +737,7 @@ onUnmounted(() => {
       </div>
 
       <!-- Controls -->
-      <div class="flex justify-center gap-3 mb-3">
+      <div v-if="!allFound" class="flex justify-center gap-3 mb-3">
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
@@ -734,12 +759,6 @@ onUnmounted(() => {
         >
           OK
         </button>
-      </div>
-
-      <!-- All found celebration -->
-      <div v-if="allFound" class="text-center py-3 rounded-lg mb-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
-        <p class="text-2xl mb-1">🎉</p>
-        <p class="font-semibold" style="color: var(--color-text-primary);">Kaikki {{ puzzle.hint_data.word_count }} sanaa löydetty!</p>
       </div>
 
       <!-- Found words -->
