@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e
 
 source /home/kvjanhun/.config/site-alerts.env
 
@@ -11,7 +12,7 @@ send_telegram() {
 
 trap 'send_telegram "❌ <b>Deploy failed</b>
 Commit: <code>$(git log -1 --pretty=%s 2>/dev/null || echo unknown)</code>
-Time: $(date +\"%Y-%m-%d %H:%M\")"' ERR
+Time: $(date "+%Y-%m-%d %H:%M")"; exit 1' ERR
 
 # Navigate to your project directory
 cd /home/kvjanhun/Projects/web_kontissa || exit 1
@@ -22,9 +23,6 @@ git pull origin main
 
 echo "Rebuilding Docker container..."
 docker compose up --build -d
-
-echo "Restarting the site container via systemd..."
-sudo systemctl restart site-container
 
 COMMIT_MSG=$(git log -1 --pretty=%s)
 COMMIT_HASH=$(git log -1 --pretty=%h)
