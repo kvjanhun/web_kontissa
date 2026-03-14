@@ -52,6 +52,8 @@ services:
       - loki
     volumes:
       - ./server/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
+      - ./server/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
+      - ./server/observability/dashboards:/etc/grafana/provisioning/dashboards/json:ro
       - grafana_data:/var/lib/grafana
     environment:
       - GF_AUTH_ANONYMOUS_ENABLED=false

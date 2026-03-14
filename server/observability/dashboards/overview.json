@@ -1,0 +1,68 @@
+{
+  "title": "System Overview",
+  "tags": ["system", "logs", "security"],
+  "timezone": "browser",
+  "schemaVersion": 36,
+  "refresh": "10s",
+  "panels": [
+    {
+      "type": "logs",
+      "title": "Nginx Traffic",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        { "expr": "{job=\"nginx\"}", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Application Errors & Warnings (Flask/Nuxt)",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        { "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Security Events (Failed Logins & Access)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        { "expr": "{compose_service=\"web\"} |= \"login_failed\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} },
+        { "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"", "refId": "B", "datasource": {"type": "loki", "uid": "loki_ds"} },
+        { "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"", "refId": "C", "datasource": {"type": "loki", "uid": "loki_ds"} }
+      ]
+    },
+    {
+      "type": "logs",
+      "title": "Sanakenno Moderation Log",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "wrapLogMessage": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        { "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+      ]
+    }
+  ]
+}
