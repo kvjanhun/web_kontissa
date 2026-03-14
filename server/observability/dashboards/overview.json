@@ -1,68 +1,233 @@
 {
-  "title": "System Overview",
-  "tags": ["system", "logs", "security"],
-  "timezone": "browser",
-  "schemaVersion": 36,
-  "refresh": "10s",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
   "panels": [
     {
-      "type": "logs",
-      "title": "Nginx Traffic",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
+      "datasource": {
+        "type": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
       "options": {
-        "showTime": true,
-        "showLabels": false,
+        "dedupStrategy": "none",
+        "detailsMode": "inline",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
         "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+        "showControls": false,
+        "showLabels": false,
+        "showTime": false,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
       },
+      "pluginVersion": "12.4.1",
       "targets": [
-        { "expr": "{job=\"nginx\"}", "refId": "A", "datasource": {"type": "loki"} }
-      ]
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"nginx\"}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx Traffic",
+      "type": "logs"
     },
     {
-      "type": "logs",
+      "datasource": {
+        "type": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"",
+          "refId": "A"
+        }
+      ],
       "title": "Application Errors & Warnings (Flask/Nuxt)",
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
-      },
-      "targets": [
-        { "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"", "refId": "A", "datasource": {"type": "loki"} }
-      ]
+      "type": "logs"
     },
     {
-      "type": "logs",
-      "title": "Security Events (Failed Logins & Access)",
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": {
+        "type": "loki"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 8
+      },
+      "id": 3,
       "options": {
-        "showTime": true,
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": false,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showControls": false,
         "showLabels": true,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": false
       },
+      "pluginVersion": "12.4.1",
       "targets": [
-        { "expr": "{compose_service=\"web\"} |= \"login_failed\"", "refId": "A", "datasource": {"type": "loki"} },
-        { "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"", "refId": "B", "datasource": {"type": "loki"} },
-        { "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"", "refId": "C", "datasource": {"type": "loki"} }
-      ]
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{compose_service=\"web\"} |= \"login_failed\"",
+          "queryType": "range",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"",
+          "queryType": "range",
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"",
+          "queryType": "range",
+          "refId": "C"
+        }
+      ],
+      "title": "Security Events (Failed Logins & Access)",
+      "type": "logs"
     },
     {
-      "type": "logs",
-      "title": "Sanakenno Moderation Log",
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 },
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "wrapLogMessage": true,
-        "sortOrder": "Descending"
+      "datasource": {
+        "type": "loki"
       },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "pluginVersion": "12.4.1",
       "targets": [
-        { "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"", "refId": "A", "datasource": {"type": "loki"} }
-      ]
+        {
+          "datasource": {
+            "type": "loki"
+          },
+          "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Sanakenno Moderation Log",
+      "type": "logs"
     }
-  ]
+  ],
+  "preload": false,
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": [
+    "system",
+    "logs",
+    "security"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "System Overview",
+  "uid": "6e374828-400e-497a-aa30-a22bbee3fa0d",
+  "version": 3,
+  "weekStart": ""
 }
