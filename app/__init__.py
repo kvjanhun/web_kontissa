@@ -1,10 +1,27 @@
 import os
 import time
-from flask import Flask
+import structlog
+import logging
+from flask import Flask, request
 from flask_login import LoginManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from .models import db, User
+
+structlog.configure(
+    processors=[
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.StackInfoRenderer(),
+        structlog.dev.set_exc_info,
+        structlog.processors.TimeStamper(fmt="iso"),
+        structlog.processors.JSONRenderer()
+    ],
+    wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+    context_class=dict,
+    logger_factory=structlog.PrintLoggerFactory(),
+    cache_logger_on_first_use=False
+)
 
 app = Flask(__name__)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
@@ -63,6 +80,13 @@ _stats = {"requests": 0, "start_time": time.time()}
 @app.before_request
 def _count_requests():
     _stats["requests"] += 1
+    
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(
+        path=request.path,
+        method=request.method,
+        ip=request.headers.get("X-Forwarded-For", request.remote_addr)
+    )
 
 
 from .routes import core_bp

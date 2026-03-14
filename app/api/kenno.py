@@ -9,8 +9,10 @@ import os
 from app import limiter
 from app.models import db, BlockedWord, KennoCombination, KennoConfig, KennoAchievement, KennoPuzzle, PageView
 from app.decorators import admin_required
+import structlog
 
 kenno_bp = Blueprint('kenno', __name__)
+logger = structlog.get_logger(__name__)
 
 _WORDLIST_PATH = os.path.join(os.path.dirname(__file__), '..', 'wordlists', 'kotus_words.txt')
 try:
@@ -217,6 +219,7 @@ def kenno_block_word():
         db.session.add(BlockedWord(word=word))
         db.session.commit()
         _PUZZLE_CACHE.clear()
+        logger.info("word_blocked", word=word, admin_id=current_user.id, admin_email=current_user.email)
 
     return jsonify({"word": word, "blocked": True})
 
@@ -426,6 +429,7 @@ def kenno_unblock_word(word_id):
     db.session.delete(bw)
     db.session.commit()
     _PUZZLE_CACHE.clear()
+    logger.info("word_unblocked", word=word, word_id=word_id, admin_id=current_user.id, admin_email=current_user.email)
 
     return jsonify({"word": word, "unblocked": True})
 
