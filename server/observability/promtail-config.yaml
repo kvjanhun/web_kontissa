@@ -30,3 +30,13 @@ scrape_configs:
         target_label: 'unit'
       - source_labels: ['__journal__hostname']
         target_label: 'hostname'
+
+  - job_name: grafana
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: grafana
+          compose_service: grafana
+          host: nuc
+          __path__: /var/lib/grafana/log/*.log
