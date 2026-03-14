@@ -32,7 +32,7 @@ services:
     restart: unless-stopped
 
   promtail:
-    image: grafana/promtail:latest
+    image: grafana/promtail:main-sysd
     user: root
     depends_on:
       - loki
