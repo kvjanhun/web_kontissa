@@ -5,8 +5,8 @@ test.describe('Sanakenno', () => {
     await page.goto('/sanakenno')
     // Wait for the honeycomb SVG (has aria-label)
     await expect(page.locator('svg[aria-label^="Kirjainkenno"]')).toBeVisible({ timeout: 10000 })
-    // Score display should show 0
-    await expect(page.locator('text=0')).toBeVisible()
+    // Score display should show 0 (scope to Pisteet to avoid matching puzzle number #20)
+    await expect(page.locator('text=Pisteet: 0')).toBeVisible()
   })
 
   test('can type letters via keyboard', async ({ page }) => {
