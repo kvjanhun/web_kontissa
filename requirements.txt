@@ -6,3 +6,4 @@ flask-login==0.6.3
 flask-limiter==3.11.0
 cowsay==6.1
 tzdata
+structlog==25.1.0
