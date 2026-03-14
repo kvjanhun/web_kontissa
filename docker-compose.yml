@@ -63,4 +63,8 @@ services:
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_LOG_MODE=console file
     restart: unless-stopped
+
+volumes:
+  loki_data:
+  grafana_data:
     
