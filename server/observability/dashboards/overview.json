@@ -17,7 +17,7 @@
         "sortOrder": "Descending"
       },
       "targets": [
-        { "expr": "{job=\"nginx\"}", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+        { "expr": "{job=\"nginx\"}", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds_1"} }
       ]
     },
     {
@@ -31,7 +31,7 @@
         "sortOrder": "Descending"
       },
       "targets": [
-        { "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+        { "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds_1"} }
       ]
     },
     {
@@ -45,9 +45,9 @@
         "sortOrder": "Descending"
       },
       "targets": [
-        { "expr": "{compose_service=\"web\"} |= \"login_failed\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} },
-        { "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"", "refId": "B", "datasource": {"type": "loki", "uid": "loki_ds"} },
-        { "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"", "refId": "C", "datasource": {"type": "loki", "uid": "loki_ds"} }
+        { "expr": "{compose_service=\"web\"} |= \"login_failed\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds_1"} },
+        { "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"", "refId": "B", "datasource": {"type": "loki", "uid": "loki_ds_1"} },
+        { "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"", "refId": "C", "datasource": {"type": "loki", "uid": "loki_ds_1"} }
       ]
     },
     {
@@ -61,7 +61,7 @@
         "sortOrder": "Descending"
       },
       "targets": [
-        { "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds"} }
+        { "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"", "refId": "A", "datasource": {"type": "loki", "uid": "loki_ds_1"} }
       ]
     }
   ]
