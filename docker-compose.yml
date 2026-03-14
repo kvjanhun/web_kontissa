@@ -39,7 +39,7 @@ services:
     volumes:
       - ./server/observability/promtail-config.yaml:/etc/promtail/config.yml:ro
       - /var/log/nginx:/var/log/nginx:ro
-      - /var/log/journal:/var/log/journal:ro
+      - /run/log/journal:/run/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
     command: -config.file=/etc/promtail/config.yml
     restart: unless-stopped
