@@ -168,49 +168,10 @@
       ],
       "title": "Security Events (Failed Logins & Access)",
       "type": "logs"
-    },
-    {
-      "datasource": {
-        "type": "loki"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 16
-      },
-      "id": 4,
-      "options": {
-        "dedupStrategy": "none",
-        "enableInfiniteScrolling": false,
-        "enableLogDetails": true,
-        "showControls": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "unwrappedColumns": false,
-        "wrapLogMessage": true
-      },
-      "pluginVersion": "12.4.1",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki"
-          },
-          "expr": "{compose_service=\"web\"} | json | event=~\"word_blocked|word_unblocked\"",
-          "refId": "A"
-        }
-      ],
-      "title": "Sanakenno Moderation Log",
-      "type": "logs"
     }
   ],
   "preload": false,
-  "refresh": "10s",
+  "refresh": "60s",
   "schemaVersion": 42,
   "tags": [
     "system",
