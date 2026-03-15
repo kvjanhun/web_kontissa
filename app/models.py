@@ -30,11 +30,16 @@ class User(UserMixin, db.Model):
 
 class Section(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    slug = db.Column(db.String, unique=True, nullable=False)
+    slug = db.Column(db.String, nullable=False)
     title = db.Column(db.String, nullable=False)
     content = db.Column(db.Text, nullable=False)
     section_type = db.Column(db.String, nullable=False, default='text')
     position = db.Column(db.Integer, nullable=True, default=0)
+    locale = db.Column(db.String(5), nullable=False, default='en')
+
+    __table_args__ = (
+        db.UniqueConstraint('slug', 'locale', name='uq_section_slug_locale'),
+    )
 
     def to_dict(self):
         return {
@@ -44,6 +49,7 @@ class Section(db.Model):
             "content": self.content,
             "section_type": self.section_type,
             "position": self.position,
+            "locale": self.locale,
         }
 
 

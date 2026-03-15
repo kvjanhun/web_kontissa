@@ -11,6 +11,29 @@ class TestGetSections:
         assert len(data) == 1
         assert data[0]["slug"] == "test"
 
+    def test_list_sections_filters_by_locale(self, app, client):
+        from app.models import db, Section
+        with app.app_context():
+            db.session.add(Section(title="EN", slug="intro", content="Hello", locale="en"))
+            db.session.add(Section(title="FI", slug="intro", content="Hei", locale="fi"))
+            db.session.commit()
+        res = client.get("/api/sections?locale=fi")
+        data = res.get_json()
+        assert len(data) == 1
+        assert data[0]["title"] == "FI"
+        assert data[0]["locale"] == "fi"
+
+    def test_list_sections_defaults_to_en(self, app, client):
+        from app.models import db, Section
+        with app.app_context():
+            db.session.add(Section(title="EN", slug="intro", content="Hello", locale="en"))
+            db.session.add(Section(title="FI", slug="intro", content="Hei", locale="fi"))
+            db.session.commit()
+        res = client.get("/api/sections")
+        data = res.get_json()
+        assert len(data) == 1
+        assert data[0]["locale"] == "en"
+
 
 class TestCreateSection:
     def test_create_as_admin(self, logged_in_admin):
@@ -51,6 +74,26 @@ class TestCreateSection:
             "title": "Another", "slug": "test", "content": "dup",
         })
         assert res.status_code == 409
+
+    def test_create_same_slug_different_locale(self, logged_in_admin, sample_section):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "FI version", "slug": "test", "content": "Hei", "locale": "fi",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["locale"] == "fi"
+
+    def test_create_with_locale(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "FI", "slug": "fi-only", "content": "Moi", "locale": "fi",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["locale"] == "fi"
+
+    def test_create_invalid_locale(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "X", "slug": "x", "content": "x", "locale": "de",
+        })
+        assert res.status_code == 400
 
 
 class TestUpdateSection:
@@ -159,7 +202,7 @@ class TestSectionType:
             "section_type": "invalid",
         })
         assert res.status_code == 400
-        assert "section_type" in res.get_json()["error"]
+        assert "section_type" in res.get_json()["error"].lower()
 
     def test_update_section_type(self, logged_in_admin, sample_section):
         res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={
@@ -203,6 +246,23 @@ class TestSectionType:
         })
         assert res.status_code == 200
         assert res.get_json()["section_type"] == "currently"
+
+    def test_create_intro_section(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Intro", "slug": "intro", "content": "Hello world.",
+            "section_type": "intro",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["section_type"] == "intro"
+
+    def test_create_project_section(self, logged_in_admin):
+        res = logged_in_admin.post("/api/sections", json={
+            "title": "Projects", "slug": "projects",
+            "content": "Sanakenno|/sanakenno|A word game",
+            "section_type": "project",
+        })
+        assert res.status_code == 201
+        assert res.get_json()["section_type"] == "project"
 
     def test_section_type_in_list_response(self, logged_in_admin):
         logged_in_admin.post("/api/sections", json={
