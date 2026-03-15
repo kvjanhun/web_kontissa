@@ -9,3 +9,9 @@ datasources:
     isDefault: true
     jsonData:
       maxLines: 1000
+  - name: Prometheus
+    uid: prometheus_ds_1
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: false
