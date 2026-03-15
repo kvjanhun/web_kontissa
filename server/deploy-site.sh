@@ -1,5 +1,4 @@
 #!/bin/bash
-set -e
 
 cd /home/kvjanhun/Projects/web_kontissa || exit 1
 
@@ -12,16 +11,20 @@ send_telegram() {
     -d "parse_mode=HTML" > /dev/null 2>&1
 }
 
-trap 'trap - ERR; send_telegram "❌ <b>Deploy failed</b>
+fail() {
+  send_telegram "❌ <b>Deploy failed</b>
+Stage: <code>$1</code>
 Commit: <code>$(git log -1 --pretty=%h 2>/dev/null || echo unknown)</code> $(git log -1 --pretty=%s 2>/dev/null)
-Time: $(date "+%Y-%m-%d %H:%M")"; exit 1' ERR
+Time: $(date "+%Y-%m-%d %H:%M")"
+  exit 1
+}
 
 export GIT_SSH_COMMAND="ssh -i /home/kvjanhun/.ssh/webhook_deploy_key -o IdentitiesOnly=yes"
 echo "Pulling latest changes from GitHub..."
-git pull origin main
+git pull origin main || fail "git pull"
 
 echo "Rebuilding Docker container..."
-docker compose up --build -d
+docker compose up --build -d || fail "docker compose"
 
 COMMIT_MSG=$(git log -1 --pretty=%s)
 COMMIT_HASH=$(git log -1 --pretty=%h)
