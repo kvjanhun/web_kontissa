@@ -20,9 +20,15 @@ def index():
 def legacy_index():
     return redirect(url_for("core.index"), code=301)
 
+VALID_SECTION_TYPES = ("text", "pills", "quote", "currently", "intro", "project")
+
 @core_bp.route("/api/sections")
 def api_sections():
-    sections = Section.query.order_by(Section.position.asc(), Section.id.asc()).all()
+    locale = request.args.get("locale", "en").strip()
+    query = Section.query
+    if locale:
+        query = query.filter_by(locale=locale)
+    sections = query.order_by(Section.position.asc(), Section.id.asc()).all()
     return jsonify([s.to_dict() for s in sections])
 
 @core_bp.route("/api/meta")
@@ -72,17 +78,21 @@ def api_create_section():
     content = data.get("content", "").strip()
 
     section_type = data.get("section_type", "text").strip()
+    locale = data.get("locale", "en").strip()
 
     if not title or not slug or not content:
         return jsonify({"error": "title, slug, and content are required"}), 400
 
-    if section_type not in ("text", "pills", "quote", "currently"):
-        return jsonify({"error": "section_type must be 'text', 'pills', 'quote', or 'currently'"}), 400
+    if section_type not in VALID_SECTION_TYPES:
+        return jsonify({"error": f"section_type must be one of: {', '.join(VALID_SECTION_TYPES)}"}), 400
 
-    if Section.query.filter_by(slug=slug).first():
-        return jsonify({"error": "A section with this slug already exists"}), 409
+    if locale not in ("en", "fi"):
+        return jsonify({"error": "locale must be 'en' or 'fi'"}), 400
 
-    section = Section(title=title, slug=slug, content=content, section_type=section_type)
+    if Section.query.filter_by(slug=slug, locale=locale).first():
+        return jsonify({"error": "A section with this slug and locale already exists"}), 409
+
+    section = Section(title=title, slug=slug, content=content, section_type=section_type, locale=locale)
     db.session.add(section)
     db.session.commit()
     return jsonify(section.to_dict()), 201
@@ -107,9 +117,14 @@ def api_update_section(section_id):
         section.content = data["content"].strip()
     if "section_type" in data:
         section_type = data["section_type"].strip()
-        if section_type not in ("text", "pills", "quote", "currently"):
-            return jsonify({"error": "section_type must be 'text', 'pills', 'quote', or 'currently'"}), 400
+        if section_type not in VALID_SECTION_TYPES:
+            return jsonify({"error": f"section_type must be one of: {', '.join(VALID_SECTION_TYPES)}"}), 400
         section.section_type = section_type
+    if "locale" in data:
+        locale = data["locale"].strip()
+        if locale not in ("en", "fi"):
+            return jsonify({"error": "locale must be 'en' or 'fi'"}), 400
+        section.locale = locale
 
     db.session.commit()
     return jsonify(section.to_dict())
@@ -138,7 +153,8 @@ def api_reorder_sections():
     if not all(isinstance(i, int) for i in order):
         return jsonify({"error": "order must be a list of integers"}), 400
 
-    sections = Section.query.all()
+    locale = data.get("locale", "en")
+    sections = Section.query.filter_by(locale=locale).all()
     section_map = {s.id: s for s in sections}
 
     for sid in order:

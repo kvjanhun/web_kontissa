@@ -69,9 +69,31 @@ def unauthorized():
 #             db.session.rollback()
 
 
+def _run_migrations():
+    """Add columns to existing tables that db.create_all() won't add to SQLite."""
+    migrations = [
+        "ALTER TABLE section ADD COLUMN locale VARCHAR(5) NOT NULL DEFAULT 'en'",
+    ]
+    for sql in migrations:
+        try:
+            db.session.execute(db.text(sql))
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+
+    # Drop old unique constraint on slug alone and ensure slug+locale is unique
+    # SQLite doesn't support DROP CONSTRAINT, but the new UniqueConstraint
+    # in the model will apply to new tables. For existing tables, the old
+    # unique index on slug alone needs to be dropped if it exists.
+    try:
+        db.session.execute(db.text("DROP INDEX IF EXISTS ix_section_slug"))
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
 with app.app_context():
     db.create_all()
-    # _run_migrations()
+    _run_migrations()
 
 # App-wide request counter (used by AdminHealth)
 _stats = {"requests": 0, "start_time": time.time()}
