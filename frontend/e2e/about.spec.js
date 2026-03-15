@@ -8,32 +8,32 @@ test.describe('About page', () => {
     await expect(page.locator('text=loadError')).not.toBeVisible()
     await expect(page.locator('.text-red-500')).not.toBeVisible()
 
-    // Seeded sections should render
-    await expect(page.locator('blockquote', { hasText: 'Hello world' })).toBeVisible()
-    await expect(page.locator('h2', { hasText: 'Currently' })).toBeVisible()
-    await expect(page.locator('h2', { hasText: 'Skills' })).toBeVisible()
+    // Hero banner should render
+    await expect(page.locator('h1', { hasText: 'Konsta Janhunen' })).toBeVisible()
   })
 
-  test('renders quote section content', async ({ page }) => {
+  test('renders hero banner with tagline', async ({ page }) => {
     await page.goto('/about')
-    const quote = page.locator('#welcome blockquote')
-    await expect(quote).toHaveText('Hello world')
+    await expect(page.locator('.hero')).toBeVisible()
+    await expect(page.locator('text=Full-Stack Developer')).toBeVisible()
   })
 
   test('renders currently section with label:value items', async ({ page }) => {
     await page.goto('/about')
-    const section = page.locator('#currently')
-    await expect(section.locator('text=Status')).toBeVisible()
-    await expect(section.locator('text=Testing')).toBeVisible()
-    await expect(section.locator('text=Mood')).toBeVisible()
-    await expect(section.locator('text=Focused')).toBeVisible()
+    await expect(page.locator('text=Status')).toBeVisible()
+    await expect(page.locator('text=Testing')).toBeVisible()
+    await expect(page.locator('text=Mood')).toBeVisible()
+    await expect(page.locator('text=Focused')).toBeVisible()
   })
 
-  test('renders pills section with skill items', async ({ page }) => {
+  test('renders tech pills', async ({ page }) => {
     await page.goto('/about')
-    const section = page.locator('#skills')
-    await expect(section.locator('.pill', { hasText: 'Python' })).toBeVisible()
-    await expect(section.locator('.pill', { hasText: 'JavaScript' })).toBeVisible()
-    await expect(section.locator('.pill', { hasText: 'Vue' })).toBeVisible()
+    await expect(page.locator('.tech-pill', { hasText: 'Python' })).toBeVisible()
+    await expect(page.locator('.tech-pill', { hasText: 'Vue.js' })).toBeVisible()
+  })
+
+  test('renders project items', async ({ page }) => {
+    await page.goto('/about')
+    await expect(page.locator('text=TestProject')).toBeVisible()
   })
 })
