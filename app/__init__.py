@@ -81,13 +81,33 @@ def _run_migrations():
         except Exception:
             db.session.rollback()
 
-    # Drop old unique constraint on slug alone and ensure slug+locale is unique
-    # SQLite doesn't support DROP CONSTRAINT, but the new UniqueConstraint
-    # in the model will apply to new tables. For existing tables, the old
-    # unique index on slug alone needs to be dropped if it exists.
+    # SQLite can't ALTER constraints. Recreate the section table to replace
+    # the old unique(slug) with unique(slug, locale).
     try:
-        db.session.execute(db.text("DROP INDEX IF EXISTS ix_section_slug"))
-        db.session.commit()
+        # Check if the old autoindex still exists (means table hasn't been migrated)
+        result = db.session.execute(db.text(
+            "SELECT name FROM sqlite_master WHERE type='index' AND name='sqlite_autoindex_section_1'"
+        )).fetchone()
+        if result:
+            db.session.execute(db.text("""
+                CREATE TABLE section_new (
+                    id INTEGER PRIMARY KEY,
+                    slug VARCHAR NOT NULL,
+                    title VARCHAR NOT NULL,
+                    content TEXT NOT NULL,
+                    section_type VARCHAR NOT NULL DEFAULT 'text',
+                    position INTEGER DEFAULT 0,
+                    locale VARCHAR(5) NOT NULL DEFAULT 'en',
+                    UNIQUE(slug, locale)
+                )
+            """))
+            db.session.execute(db.text(
+                "INSERT INTO section_new (id, slug, title, content, section_type, position, locale) "
+                "SELECT id, slug, title, content, section_type, position, locale FROM section"
+            ))
+            db.session.execute(db.text("DROP TABLE section"))
+            db.session.execute(db.text("ALTER TABLE section_new RENAME TO section"))
+            db.session.commit()
     except Exception:
         db.session.rollback()
 
