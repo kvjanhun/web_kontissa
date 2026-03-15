@@ -80,13 +80,22 @@ _stats = {"requests": 0, "start_time": time.time()}
 @app.before_request
 def _count_requests():
     _stats["requests"] += 1
-    
+    request._start_time = time.time()
+
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(
         path=request.path,
         method=request.method,
         ip=request.headers.get("X-Forwarded-For", request.remote_addr)
     )
+
+
+@app.after_request
+def _log_request(response):
+    duration_ms = round((time.time() - getattr(request, '_start_time', time.time())) * 1000)
+    log = structlog.get_logger()
+    log.info("request", status=response.status_code, duration_ms=duration_ms)
+    return response
 
 
 from .routes import core_bp

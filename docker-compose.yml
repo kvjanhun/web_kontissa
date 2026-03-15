@@ -23,9 +23,10 @@ services:
         loki-external-labels: "compose_service=web"
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.6.7
     ports:
-      - "3100:3100"
+      - "127.0.0.1:3100:3100"
+    mem_limit: 256m
     volumes:
       - ./server/observability/loki-config.yaml:/etc/loki/local-config.yaml:ro
       - loki_data:/loki
@@ -34,11 +35,13 @@ services:
 
   promtail:
     image: grafana/promtail:3.3.2
+    mem_limit: 128m
     user: root
     depends_on:
       - loki
     volumes:
       - ./server/observability/promtail-config.yaml:/etc/promtail/config.yml:ro
+      - promtail_positions:/positions
       - /var/log/nginx:/var/log/nginx:ro
       - /run/log/journal:/run/log/journal:ro
       - /etc/machine-id:/etc/machine-id:ro
@@ -47,11 +50,13 @@ services:
     restart: unless-stopped
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:12.4.1
+    mem_limit: 256m
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
       - loki
+    cpus: 0.5
     volumes:
       - ./server/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./server/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
@@ -68,4 +73,5 @@ services:
 volumes:
   loki_data:
   grafana_data:
+  promtail_positions:
     
