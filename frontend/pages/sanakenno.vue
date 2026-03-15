@@ -741,21 +741,21 @@ onUnmounted(() => {
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
-          @click="deleteLetter"
+          @pointerdown.prevent="deleteLetter"
         >
           Poista
         </button>
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-bg-secondary); color: var(--color-text-primary); border: 1px solid var(--color-border);"
-          @click="shuffleLetters"
+          @pointerdown.prevent="shuffleLetters"
         >
           Sekoita
         </button>
         <button
           class="px-4 py-2 rounded-lg text-sm font-medium"
           style="background: var(--color-accent); color: white; border: 1px solid var(--color-accent);"
-          @click="submitWord"
+          @pointerdown.prevent="submitWord"
         >
           OK
         </button>
