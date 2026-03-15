@@ -80,6 +80,7 @@ docker compose exec web python3 -c "from app.create_user import create; create('
 - Multi-stage Docker build: Node builds the frontend (`nuxt generate`), final image is Python-only
 - Gunicorn as WSGI server, Nginx + Let's Encrypt for TLS termination (external)
 - Auto-deploy via GitHub Actions + webhook — pushes to main go live if test suite passes.
+- Litestream sidecar container continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup`, `eu-central-003`). Config: `server/observability/litestream.yml`. Credentials (`B2_KEY_ID`, `B2_APP_KEY`) in `.env` on the NUC.
 
 ## Author
 
