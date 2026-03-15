@@ -85,6 +85,24 @@ docker logs web_kontissa-litestream-1
 b2 ls erezac-db-backup site.db/
 ```
 
+### `backup-configs.sh`
+Backs up server configuration files (nginx, crontab, systemd services, iptables
+rules) to the same Backblaze B2 bucket used for database backups. Uses `rclone`
+with a remote named `b2`.
+
+**Deployed to:** `/home/kvjanhun/scripts/backup-configs.sh`
+**Scheduled via:** `crontab -l` (runs as kvjanhun)
+```
+0 4 * * * /home/kvjanhun/scripts/backup-configs.sh
+```
+
+**Setup (one-time on NUC):**
+```bash
+sudo dnf install rclone
+rclone config
+# Create a remote named "b2", type "b2", enter B2 key ID and app key
+```
+
 ## Deploying changes
 
 ```bash

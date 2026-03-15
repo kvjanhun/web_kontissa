@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
 
+cd /home/kvjanhun/Projects/web_kontissa || exit 1
+
 source /home/kvjanhun/.config/site-alerts.env
 
 send_telegram() {
@@ -11,11 +13,8 @@ send_telegram() {
 }
 
 trap 'send_telegram "❌ <b>Deploy failed</b>
-Commit: <code>$(git log -1 --pretty=%s 2>/dev/null || echo unknown)</code>
-Time: $(date "+%Y-%m-%d %H:%M")"; exit 1' ERR
-
-# Navigate to your project directory
-cd /home/kvjanhun/Projects/web_kontissa || exit 1
+Commit: <code>$(git log -1 --pretty=%h 2>/dev/null || echo unknown)</code> $(git log -1 --pretty=%s 2>/dev/null)
+Time: $(date "+%Y-%m-%d %H:%M")"' ERR
 
 export GIT_SSH_COMMAND="ssh -i /home/kvjanhun/.ssh/webhook_deploy_key -o IdentitiesOnly=yes"
 echo "Pulling latest changes from GitHub..."
