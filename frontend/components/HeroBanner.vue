@@ -9,7 +9,11 @@ const TAGLINE_KEYS = [
   'hero.tagline.5',
 ]
 
-const taglineKey = TAGLINE_KEYS[Math.floor(Math.random() * TAGLINE_KEYS.length)]
+// Use first tagline for SSR, randomize after mount to avoid hydration mismatch
+const taglineKey = ref(TAGLINE_KEYS[0])
+onMounted(() => {
+  taglineKey.value = TAGLINE_KEYS[Math.floor(Math.random() * TAGLINE_KEYS.length)]
+})
 </script>
 
 <template>

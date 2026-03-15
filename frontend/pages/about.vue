@@ -35,16 +35,30 @@ if (import.meta.client && error.value && !sections.value.length) {
 
 const loading = computed(() => pending.value || retrying.value)
 
-const bySlug = computed(() => {
+// Look up sections by type — admin only needs to pick the right type
+const byType = computed(() => {
   const map = {}
   for (const s of sections.value) {
-    map[s.slug] = s
+    map[s.section_type] = s
   }
   return map
 })
 
+// Slug-based lookup for free-form text sections (Beyond Code, Contact)
+const bySlug = computed(() => {
+  const map = {}
+  for (const s of sections.value) map[s.slug] = s
+  return map
+})
+
+const enByType = computed(() => {
+  const map = {}
+  for (const s of enSections.value) map[s.section_type] = s
+  return map
+})
+
 const currentlyItems = computed(() => {
-  const section = bySlug.value['currently']
+  const section = byType.value['currently']
   if (!section) return []
   return section.content.split('\n').map(line => {
     const idx = line.indexOf(':')
@@ -61,15 +75,8 @@ const TECH_CATEGORIES = [
   { labelKey: 'about.tech.ai', items: ['Claude'] }
 ]
 
-// Tech pills are language-independent — use EN sections
-const enBySlug = computed(() => {
-  const map = {}
-  for (const s of enSections.value) map[s.slug] = s
-  return map
-})
-
 const techCategories = computed(() => {
-  const section = enBySlug.value['Tech'] || enBySlug.value['tech']
+  const section = enByType.value['pills']
   if (!section) return []
   const available = new Set(section.content.split(',').map(s => s.trim()).filter(Boolean))
   const cats = []
@@ -96,12 +103,12 @@ const techCategories = computed(() => {
   return cats
 })
 
-const quoteText = computed(() => bySlug.value['quote']?.content || '')
-const introText = computed(() => bySlug.value['intro']?.content || '')
+const quoteText = computed(() => byType.value['quote']?.content || '')
+const introText = computed(() => byType.value['intro']?.content || '')
 
 // Parse project items from section content: "name|url|description" per line
 const projectItems = computed(() => {
-  const section = bySlug.value['projects']
+  const section = byType.value['project']
   if (!section) return []
   return section.content.split('\n').map(line => {
     const parts = line.split('|').map(s => s.trim())
