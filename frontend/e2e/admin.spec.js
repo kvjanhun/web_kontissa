@@ -28,7 +28,9 @@ test.describe('Admin Dashboard', () => {
   test('sections tab shows seeded sections', async ({ adminPage }) => {
     await adminPage.goto('/admin')
     await expect(adminPage).toHaveURL('/admin', { timeout: 10000 })
-    await expect(adminPage.locator('text=Welcome').first()).toBeVisible({ timeout: 10000 })
+    // Click Sections tab to ensure it's active and sections are loaded
+    await adminPage.locator('button').filter({ hasText: /Sections|Osiot/ }).click()
+    await expect(adminPage.locator('h3', { hasText: 'Quote' })).toBeVisible({ timeout: 10000 })
   })
 
   test('can switch between tabs', async ({ adminPage }) => {
