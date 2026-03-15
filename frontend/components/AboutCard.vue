@@ -117,6 +117,7 @@ onMounted(() => {
 }
 .about-card__body > div {
   overflow: hidden;
+  min-height: 0;
 }
 .about-card__body--open {
   grid-template-rows: 1fr;
