@@ -79,6 +79,7 @@ def _compute_puzzle(puzzle):
     try:
         blocked = frozenset(bw.word for bw in BlockedWord.query.all())
     except Exception:
+        logger.error("blocked_words_query_failed", exc_info=True)
         blocked = frozenset()
 
     words = []
@@ -145,6 +146,7 @@ def _compute_variation(letters, center_letter):
     try:
         blocked = frozenset(bw.word for bw in BlockedWord.query.all())
     except Exception:
+        logger.error("blocked_words_query_failed", exc_info=True)
         blocked = frozenset()
 
     words = []

@@ -1,4 +1,9 @@
-import time, requests
+import time
+
+import requests
+import structlog
+
+logger = structlog.get_logger(__name__)
 
 _cached_commit_time = None
 _cached_commit_timestamp = 0
@@ -20,7 +25,6 @@ def get_latest_commit_date():
         _cached_commit_time = commit_date
         _cached_commit_timestamp = now
         return commit_date
-    except Exception as e:
-        print("Error getting commit date:", e)
-        # Return stale cache if available, otherwise None
+    except Exception:
+        logger.warning("github_api_failed", exc_info=True, has_stale_cache=_cached_commit_time is not None)
         return _cached_commit_time
