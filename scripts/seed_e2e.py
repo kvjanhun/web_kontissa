@@ -59,14 +59,19 @@ def seed():
 
         # --- Sections ---
         sections = [
-            Section(title="Welcome", slug="welcome", content="Hello world",
+            Section(title="Quote", slug="quote", content="Hello world",
                     section_type="quote", position=0),
+            Section(title="Intro", slug="intro", content="Test intro text.",
+                    section_type="intro", position=1),
             Section(title="Currently", slug="currently",
                     content="Status: Testing\nMood: Focused",
-                    section_type="currently", position=1),
-            Section(title="Skills", slug="skills",
-                    content="Python, JavaScript, Vue",
-                    section_type="pills", position=2),
+                    section_type="currently", position=2),
+            Section(title="Tech", slug="Tech",
+                    content="Python, JavaScript, Vue.js",
+                    section_type="pills", position=3),
+            Section(title="Projects", slug="projects",
+                    content="TestProject|/about|A test project",
+                    section_type="project", position=4),
         ]
         db.session.add_all(sections)
 
