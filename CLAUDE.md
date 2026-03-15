@@ -22,6 +22,7 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Nuxt 3 SSG frontend, Flas
 | Auth | Flask-Login session cookies, werkzeug scrypt password hashing |
 | Container | Docker (multi-stage: Node → Python), Docker Compose |
 | Server | RHEL on Intel NUC, Nginx with Let's Encrypt TLS |
+| Observability | Loki + Promtail (logs), Prometheus + node_exporter (metrics), Grafana (dashboards) |
 | Deployment | GitHub webhook → deploy script → docker compose up --build |
 
 ## Project Structure
@@ -53,6 +54,7 @@ web_kontissa/
 ├── tests/                  # Backend pytest (297 tests)
 ├── scripts/                # seed_puzzles.py, seed_e2e.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh
+    └── observability/      # Loki, Promtail, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```
 
 ## Development
@@ -85,11 +87,12 @@ docker compose up --build -d
 ```
 Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
                             ├── /              → 127.0.0.1:8080 (Docker: Gunicorn → Flask)
+                            ├── /logs/         → 127.0.0.1:3000 (Grafana)
                             ├── /hooks/deploy  → 127.0.0.1:9000 (webhook)
                             └── /.well-known/  → /var/www/html (ACME)
 ```
 
-- **Firewall**: Default deny. Only 80, 443 public. SSH restricted to LAN IPs.
+- **Firewall**: Default deny. Only 80, 443 public. SSH restricted to LAN IPs. Docker bridge (172.18.0.0/16) allowed to reach node_exporter on port 9100.
 - **CI**: 3 parallel jobs (pytest, vitest, playwright). Deploy webhook fires after all pass.
 - **Auto-deploy**: Every push to main goes live. Breaking the build breaks the site.
 
