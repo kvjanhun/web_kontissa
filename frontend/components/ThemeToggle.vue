@@ -8,7 +8,8 @@ const { t } = useI18nStore()
 <template>
   <button
     @click="toggleDark"
-    class="p-2 rounded-lg transition-colors duration-200 hover:bg-white/10"
+    class="p-2 rounded-lg transition-colors duration-200 hover:opacity-80"
+    :style="{ color: 'var(--color-accent, #ff643e)' }"
     :aria-label="isDark ? t('theme.switchToLight') : t('theme.switchToDark')"
   >
     <!-- Sun icon (shown in dark mode) -->

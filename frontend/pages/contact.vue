@@ -13,7 +13,7 @@ useHead({
 
 <template>
   <div>
-    <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('contact.heading') }}</h1>
+    <HeroBanner />
 
     <div class="space-y-4">
       <a
@@ -56,3 +56,4 @@ useHead({
     </div>
   </div>
 </template>
+
