@@ -42,6 +42,7 @@ Refresh interval: 60s. Default time range: 6h.
 - `structlog` with `JSONRenderer` outputs to stdout, captured by Docker's Loki logging driver
 - `before_request` binds context: `path`, `method`, `ip` (from X-Forwarded-For)
 - `after_request` logs every request with `status` and `duration_ms`
+- Silent exception handlers in `kenno.py`, `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's existing App errors/warnings panels
 
 ## Networking
 
@@ -57,6 +58,7 @@ Refresh interval: 60s. Default time range: 6h.
 - **No cAdvisor** — overkill for 5 containers on a personal site
 - **Docker Loki logging driver** for Flask — avoids file-based log collection for the main app
 - **Image versions pinned** — prevents surprise breaking changes on rebuild
+- **No Loki healthcheck** — Loki's distroless image has no shell or curl; `depends_on` for Grafana, Promtail, and web uses plain `service_started` semantics (the default when no condition is specified)
 
 ## Maintenance
 
