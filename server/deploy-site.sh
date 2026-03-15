@@ -12,9 +12,9 @@ send_telegram() {
     -d "parse_mode=HTML" > /dev/null 2>&1
 }
 
-trap 'send_telegram "❌ <b>Deploy failed</b>
+trap 'trap - ERR; send_telegram "❌ <b>Deploy failed</b>
 Commit: <code>$(git log -1 --pretty=%h 2>/dev/null || echo unknown)</code> $(git log -1 --pretty=%s 2>/dev/null)
-Time: $(date "+%Y-%m-%d %H:%M")"' ERR
+Time: $(date "+%Y-%m-%d %H:%M")"; exit 1' ERR
 
 export GIT_SSH_COMMAND="ssh -i /home/kvjanhun/.ssh/webhook_deploy_key -o IdentitiesOnly=yes"
 echo "Pulling latest changes from GitHub..."
