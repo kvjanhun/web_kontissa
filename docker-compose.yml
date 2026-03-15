@@ -65,6 +65,18 @@ services:
       - '--web.enable-lifecycle'
     restart: unless-stopped
 
+  litestream:
+    image: litestream/litestream:0.3
+    mem_limit: 64m
+    command: replicate
+    environment:
+      - LITESTREAM_ACCESS_KEY_ID=${B2_KEY_ID}
+      - LITESTREAM_SECRET_ACCESS_KEY=${B2_APP_KEY}
+    volumes:
+      - ./server/observability/litestream.yml:/etc/litestream.yml:ro
+      - ./app/data:/data:ro
+    restart: unless-stopped
+
   grafana:
     image: grafana/grafana:12.4.1
     mem_limit: 256m
