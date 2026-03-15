@@ -69,7 +69,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | Disk I/O | Prometheus | node_exporter metrics |
 | Filesystem free space | Prometheus | node_exporter metrics |
 | Nginx traffic | Loki | nginx access/error logs |
-| Application errors | Loki | Flask structured JSON logs |
+| Application errors/warnings | Loki | Flask structured JSON logs (all exception handlers log via structlog) |
 | Security events | Loki | Failed logins (Flask, SSH, Grafana) |
 
 ## Configuration

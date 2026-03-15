@@ -54,7 +54,7 @@ web_kontissa/
 │   └── wordlists/          # kotus_words.txt (101k Finnish words)
 ├── tests/                  # Backend pytest (297 tests)
 ├── scripts/                # seed_puzzles.py, seed_e2e.py, etc.
-└── server/                 # deploy-site.sh, health-alert.sh
+└── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
     └── observability/      # Loki, Promtail, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```
 
@@ -104,6 +104,7 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 - **XSS**: Vue auto-escapes `{{ }}`. `v-html` only on admin-authored section content.
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`).
 - **Network**: Container port 8080 on localhost only. Nginx handles TLS.
+- **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx. CSP in report-only mode. Config: `server/erez.ac.conf`.
 - **Webhook**: Token-validated, runs as unprivileged user.
 
 When making changes: Does this introduce a new input vector? Does this expose internal state? Does this weaken the network boundary?
