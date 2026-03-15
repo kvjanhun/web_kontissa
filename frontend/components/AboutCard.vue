@@ -18,6 +18,24 @@ function toggle() {
   }
 }
 
+function close() {
+  if (props.expandable) {
+    isOpen.value = false
+  }
+}
+
+function onClickOutside(e) {
+  if (isOpen.value && cardRef.value && !cardRef.value.contains(e.target)) {
+    close()
+  }
+}
+
+function onKeydown(e) {
+  if (e.key === 'Escape' && isOpen.value) {
+    close()
+  }
+}
+
 onMounted(() => {
   const observer = new IntersectionObserver(
     ([entry]) => {
@@ -29,17 +47,30 @@ onMounted(() => {
     { threshold: 0.1 }
   )
   if (cardRef.value) observer.observe(cardRef.value)
+
+  if (props.expandable) {
+    document.addEventListener('click', onClickOutside)
+    document.addEventListener('keydown', onKeydown)
+  }
+})
+
+onUnmounted(() => {
+  if (props.expandable) {
+    document.removeEventListener('click', onClickOutside)
+    document.removeEventListener('keydown', onKeydown)
+  }
 })
 </script>
 
 <template>
   <article
     ref="cardRef"
-    class="about-card rounded-xl overflow-hidden transition-all duration-500"
+    class="about-card rounded-xl overflow-visible transition-all duration-500"
     :class="{
       'about-card--visible': visible,
       'about-card--accent': accent,
-      'about-card--expandable': expandable
+      'about-card--expandable': expandable,
+      'about-card--open': expandable && isOpen
     }"
     :style="{
       background: 'var(--color-bg-secondary)',
@@ -78,16 +109,23 @@ onMounted(() => {
       </div>
     </component>
 
+    <!-- Expandable: absolute overlay so it doesn't push layout -->
     <div
-      v-if="expandable"
-      class="about-card__body"
-      :class="{ 'about-card__body--open': isOpen }"
+      v-if="expandable && isOpen"
+      class="about-card__dropdown"
+      :style="{
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--color-border)',
+        borderTop: 'none'
+      }"
     >
-      <div class="px-5 pb-5 overflow-hidden">
+      <div class="px-5 py-4">
         <slot />
       </div>
     </div>
-    <div v-else class="px-5 pb-5" :class="{ 'pt-4': !title }">
+
+    <!-- Non-expandable: normal flow -->
+    <div v-if="!expandable" class="px-5 pb-5" :class="{ 'pt-4': !title }">
       <slot />
     </div>
   </article>
@@ -98,6 +136,7 @@ onMounted(() => {
   opacity: 0;
   transform: translateY(20px);
   transition: opacity 0.6s ease, transform 0.6s ease, box-shadow 0.2s ease;
+  position: relative;
 }
 .about-card--visible {
   opacity: 1;
@@ -109,17 +148,30 @@ onMounted(() => {
 .about-card--accent {
   border-color: color-mix(in srgb, var(--color-accent, #ff643e) 30%, transparent) !important;
 }
+.about-card--open {
+  z-index: 10;
+}
 
-.about-card__body {
-  display: grid;
-  grid-template-rows: 0fr;
-  transition: grid-template-rows 0.3s ease;
+.about-card__dropdown {
+  position: absolute;
+  top: 100%;
+  left: -1px;
+  right: -1px;
+  border-radius: 0 0 0.75rem 0.75rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  max-height: 60vh;
+  overflow-y: auto;
+  animation: dropdownIn 0.2s ease;
 }
-.about-card__body > div {
-  overflow: hidden;
-  min-height: 0;
-}
-.about-card__body--open {
-  grid-template-rows: 1fr;
+
+@keyframes dropdownIn {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 </style>

@@ -35,6 +35,7 @@ class Section(db.Model):
     content = db.Column(db.Text, nullable=False)
     section_type = db.Column(db.String, nullable=False, default='text')
     position = db.Column(db.Integer, nullable=True, default=0)
+    collapsible = db.Column(db.Boolean, nullable=False, default=False)
     locale = db.Column(db.String(5), nullable=False, default='en')
 
     __table_args__ = (
@@ -49,6 +50,7 @@ class Section(db.Model):
             "content": self.content,
             "section_type": self.section_type,
             "position": self.position,
+            "collapsible": self.collapsible,
             "locale": self.locale,
         }
 
