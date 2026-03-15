@@ -92,7 +92,16 @@ def api_create_section():
     if Section.query.filter_by(slug=slug, locale=locale).first():
         return jsonify({"error": "A section with this slug and locale already exists"}), 409
 
-    section = Section(title=title, slug=slug, content=content, section_type=section_type, locale=locale)
+    position = data.get("position")
+    if position is not None:
+        if not isinstance(position, int) or position < 0 or position > 29:
+            return jsonify({"error": "position must be an integer 0–29"}), 400
+
+    collapsible = bool(data.get("collapsible", False))
+
+    section = Section(title=title, slug=slug, content=content, section_type=section_type, locale=locale, collapsible=collapsible)
+    if position is not None:
+        section.position = position
     db.session.add(section)
     db.session.commit()
     return jsonify(section.to_dict()), 201
@@ -125,6 +134,13 @@ def api_update_section(section_id):
         if locale not in ("en", "fi"):
             return jsonify({"error": "locale must be 'en' or 'fi'"}), 400
         section.locale = locale
+    if "collapsible" in data:
+        section.collapsible = bool(data["collapsible"])
+    if "position" in data:
+        position = data["position"]
+        if not isinstance(position, int) or position < 0 or position > 29:
+            return jsonify({"error": "position must be an integer 0–29"}), 400
+        section.position = position
 
     db.session.commit()
     return jsonify(section.to_dict())

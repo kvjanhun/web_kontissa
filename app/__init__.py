@@ -73,6 +73,7 @@ def _run_migrations():
     """Add columns to existing tables that db.create_all() won't add to SQLite."""
     migrations = [
         "ALTER TABLE section ADD COLUMN locale VARCHAR(5) NOT NULL DEFAULT 'en'",
+        "ALTER TABLE section ADD COLUMN collapsible BOOLEAN NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
@@ -84,11 +85,9 @@ def _run_migrations():
     # SQLite can't ALTER constraints. Recreate the section table to replace
     # the old unique(slug) with unique(slug, locale).
     try:
-        # Check if the old autoindex still exists (means table hasn't been migrated)
-        result = db.session.execute(db.text(
-            "SELECT name FROM sqlite_master WHERE type='index' AND name='sqlite_autoindex_section_1'"
-        )).fetchone()
-        if result:
+        # Check if locale column is missing (means table needs migration)
+        columns = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(section)")).fetchall()]
+        if 'locale' not in columns:
             db.session.execute(db.text("""
                 CREATE TABLE section_new (
                     id INTEGER PRIMARY KEY,
@@ -97,6 +96,7 @@ def _run_migrations():
                     content TEXT NOT NULL,
                     section_type VARCHAR NOT NULL DEFAULT 'text',
                     position INTEGER DEFAULT 0,
+                    collapsible BOOLEAN NOT NULL DEFAULT 0,
                     locale VARCHAR(5) NOT NULL DEFAULT 'en',
                     UNIQUE(slug, locale)
                 )

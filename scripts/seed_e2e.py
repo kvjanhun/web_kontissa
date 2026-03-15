@@ -65,13 +65,13 @@ def seed():
                     section_type="intro", position=1),
             Section(title="Currently", slug="currently",
                     content="Status: Testing\nMood: Focused",
-                    section_type="currently", position=2),
+                    section_type="currently", position=20),
             Section(title="Tech", slug="Tech",
                     content="Python, JavaScript, Vue.js",
                     section_type="pills", position=3),
             Section(title="Projects", slug="projects",
                     content="TestProject|/about|A test project",
-                    section_type="project", position=4),
+                    section_type="project", position=10),
         ]
         db.session.add_all(sections)
 

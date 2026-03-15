@@ -45,27 +45,22 @@ const byType = computed(() => {
   return map
 })
 
-// Slug-based lookup for free-form text sections (Beyond Code, Contact)
-const bySlug = computed(() => {
-  const map = {}
-  for (const s of sections.value) map[s.slug] = s
-  return map
-})
+// Card sections: project, currently, text — positioned by number ranges
+// 0–9 = full-width row, 10–19 = left column, 20–29 = right column
+const cardTypes = new Set(['project', 'currently', 'text'])
+const cardSections = computed(() =>
+  sections.value
+    .filter(s => cardTypes.has(s.section_type))
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+)
+const fullWidthCards = computed(() => cardSections.value.filter(s => (s.position ?? 0) < 10))
+const leftColumnCards = computed(() => cardSections.value.filter(s => (s.position ?? 0) >= 10 && (s.position ?? 0) < 20))
+const rightColumnCards = computed(() => cardSections.value.filter(s => (s.position ?? 0) >= 20 && (s.position ?? 0) < 30))
 
 const enByType = computed(() => {
   const map = {}
   for (const s of enSections.value) map[s.section_type] = s
   return map
-})
-
-const currentlyItems = computed(() => {
-  const section = byType.value['currently']
-  if (!section) return []
-  return section.content.split('\n').map(line => {
-    const idx = line.indexOf(':')
-    if (idx === -1) return { label: line.trim(), value: '' }
-    return { label: line.slice(0, idx).trim(), value: line.slice(idx + 1).trim() }
-  }).filter(item => item.label)
 })
 
 // Categorize tech pills from the flat API list (case-sensitive to match DB)
@@ -106,16 +101,6 @@ const techCategories = computed(() => {
 
 const quoteText = computed(() => byType.value['quote']?.content || '')
 const introText = computed(() => byType.value['intro']?.content || '')
-
-// Parse project items from section content: "name|url|description" per line
-const projectItems = computed(() => {
-  const section = byType.value['project']
-  if (!section) return []
-  return section.content.split('\n').map(line => {
-    const parts = line.split('|').map(s => s.trim())
-    return { name: parts[0] || '', url: parts[1] || '', description: parts[2] || '' }
-  }).filter(item => item.name)
-})
 
 </script>
 
@@ -178,74 +163,34 @@ const projectItems = computed(() => {
         </div>
       </div>
 
-      <!-- Card grid -->
-      <div class="bento-grid">
-        <!-- Row 1: Projects | Currently -->
-        <AboutCard v-if="projectItems.length" :title="t('about.card.projects')" :delay="300">
-          <div class="space-y-4">
-            <div v-for="proj in projectItems" :key="proj.name" class="project-item">
-              <div class="flex items-center gap-2.5 mb-1">
-                <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" :style="{ color: 'var(--color-accent, #ff643e)' }">
-                  <path d="M12 2L17.5 5.5V12.5L12 16L6.5 12.5V5.5L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-                  <path d="M12 8L15.5 10V14L12 16L8.5 14V10L12 8Z" fill="currentColor" opacity="0.2"/>
-                </svg>
-                <a
-                  v-if="proj.url"
-                  :href="proj.url"
-                  class="font-semibold hover:underline"
-                  :style="{ color: 'var(--color-text-primary)' }"
-                >{{ proj.name }}</a>
-                <span v-else class="font-semibold" :style="{ color: 'var(--color-text-primary)' }">{{ proj.name }}</span>
-              </div>
-              <p class="text-sm" :style="{ color: 'var(--color-text-secondary)' }">
-                {{ proj.description }}
-              </p>
-            </div>
-          </div>
-        </AboutCard>
+      <!-- Full-width cards (position 0–9) -->
+      <div v-if="fullWidthCards.length" class="space-y-4 mb-4">
+        <AboutSectionCard
+          v-for="(section, i) in fullWidthCards"
+          :key="section.id"
+          :section="section"
+          :delay="300 + i * 50"
+        />
+      </div>
 
-        <AboutCard
-          v-if="currentlyItems.length"
-          :title="t('about.card.currently')"
-          :delay="350"
-        >
-          <div class="space-y-2">
-            <div
-              v-for="(item, i) in currentlyItems"
-              :key="i"
-              class="flex items-baseline gap-3 pl-3 py-1.5 rounded-lg"
-              :style="{ borderLeft: '2px solid var(--color-accent, #ff643e)', background: 'var(--color-bg-tertiary)' }"
-            >
-              <span class="text-xs font-bold uppercase tracking-wider shrink-0" :style="{ color: 'var(--color-accent, #ff643e)' }">{{ item.label }}</span>
-              <span v-if="item.value" class="text-sm" :style="{ color: 'var(--color-text-primary)' }">{{ item.value }}</span>
-            </div>
-          </div>
-        </AboutCard>
-
-        <!-- Row 4: Beyond Code | Contact -->
-        <AboutCard
-          :title="t('about.card.beyondCode')"
-          :summary="t('about.card.beyondCodeSummary')"
-          :expandable="true"
-          :delay="400"
-        >
-          <div
-            class="section-content text-sm leading-relaxed"
-            :style="{ color: 'var(--color-text-primary)' }"
-            v-html="bySlug['what']?.content || ''"
-          ></div>
-        </AboutCard>
-
-        <AboutCard
-          :title="t('about.card.contact')"
-          :delay="450"
-        >
-          <div
-            class="section-content text-sm leading-relaxed"
-            :style="{ color: 'var(--color-text-primary)' }"
-            v-html="bySlug['where']?.content || ''"
-          ></div>
-        </AboutCard>
+      <!-- Two-column grid (position 10–19 left, 20–29 right) -->
+      <div v-if="leftColumnCards.length || rightColumnCards.length" class="bento-grid">
+        <div class="space-y-4">
+          <AboutSectionCard
+            v-for="(section, i) in leftColumnCards"
+            :key="section.id"
+            :section="section"
+            :delay="400 + i * 50"
+          />
+        </div>
+        <div class="space-y-4">
+          <AboutSectionCard
+            v-for="(section, i) in rightColumnCards"
+            :key="section.id"
+            :section="section"
+            :delay="400 + i * 50"
+          />
+        </div>
       </div>
     </template>
   </div>
@@ -289,33 +234,10 @@ const projectItems = computed(() => {
   white-space: nowrap;
 }
 
-/* Section content styles */
-.section-content :deep(p + p) {
-  margin-top: 0.75em;
-}
-.section-content :deep(a) {
-  color: var(--color-accent, #ff643e);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-.section-content :deep(a:hover) {
-  opacity: 0.8;
-}
-
 /* Tech pills */
 .tech-pill:hover {
   background: color-mix(in srgb, var(--color-accent, #ff643e) 15%, var(--color-bg-tertiary)) !important;
   transform: translateY(-1px);
 }
 
-/* Project items */
-.project-item {
-  padding: 0.75rem;
-  border-radius: 0.5rem;
-  background: var(--color-bg-tertiary);
-  transition: transform 0.2s ease;
-}
-.project-item:hover {
-  transform: translateX(4px);
-}
 </style>
