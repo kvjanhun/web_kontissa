@@ -36,6 +36,55 @@ TELEGRAM_BOT_TOKEN="..."
 TELEGRAM_CHAT_ID="..."
 ```
 
+## Database Backup & Restore
+
+Litestream continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup` bucket, `eu-central-003` region). Config: `server/observability/litestream.yml`. Credentials in `.env` on the NUC (`B2_KEY_ID`, `B2_APP_KEY`).
+
+### Restore from backup
+
+```bash
+# 1. Install litestream (if not available via Docker)
+docker pull litestream/litestream:0.3
+
+# 2. Stop the web container to avoid writes during restore
+docker compose stop web
+
+# 3. Restore the database
+docker run --rm \
+  -e LITESTREAM_ACCESS_KEY_ID="$B2_KEY_ID" \
+  -e LITESTREAM_SECRET_ACCESS_KEY="$B2_APP_KEY" \
+  -v /home/kvjanhun/Projects/web_kontissa/app/data:/data \
+  litestream/litestream:0.3 \
+  restore -o /data/site.db \
+  -endpoint https://s3.eu-central-003.backblazeb2.com \
+  s3://erezac-db-backup/site.db
+
+# 4. Optionally restore to a specific point in time
+#    (within the 72h WAL retention window)
+docker run --rm \
+  -e LITESTREAM_ACCESS_KEY_ID="$B2_KEY_ID" \
+  -e LITESTREAM_SECRET_ACCESS_KEY="$B2_APP_KEY" \
+  -v /home/kvjanhun/Projects/web_kontissa/app/data:/data \
+  litestream/litestream:0.3 \
+  restore -o /data/site.db \
+  -endpoint https://s3.eu-central-003.backblazeb2.com \
+  -timestamp "2026-03-15T12:00:00Z" \
+  s3://erezac-db-backup/site.db
+
+# 5. Restart everything
+docker compose up -d
+```
+
+### Verify backup is working
+
+```bash
+# Check litestream logs
+docker logs web_kontissa-litestream-1
+
+# Browse the bucket in Backblaze dashboard or via B2 CLI
+b2 ls erezac-db-backup site.db/
+```
+
 ## Deploying changes
 
 ```bash
