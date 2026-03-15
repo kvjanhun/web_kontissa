@@ -19,7 +19,7 @@ onMounted(() => {
 <template>
   <div class="hero mb-8">
     <div class="flex flex-col items-center md:flex-row md:items-start md:gap-8 md:justify-center">
-      <div class="mb-5 md:mb-0 shrink-0" aria-hidden="true">
+      <div class="hidden md:block md:mb-0 shrink-0" aria-hidden="true">
         <svg width="120" height="120" viewBox="0 0 120 120" fill="none">
           <rect x="10" y="10" width="100" height="100" rx="16" fill="var(--color-text-primary)" opacity="0.06"/>
           <path d="M45 40L25 60L45 80" stroke="var(--color-accent, #ff643e)" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/>
