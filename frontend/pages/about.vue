@@ -22,6 +22,7 @@ const { data: sections, pending, error, refresh } = await useFetch('/api/section
 
 // Tech pills are language-independent — always fetch from EN
 const { data: enSections } = await useFetch('/api/sections', {
+  key: 'sections-en-tech',
   query: { locale: 'en' },
   default: () => [],
 })
