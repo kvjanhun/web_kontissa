@@ -13,8 +13,6 @@
 
   "footer.lastUpdated": "Last updated: {date}",
 
-  "home.heading": "Konsta Janhunen",
-  "home.subtitle": "Developer & tinkerer",
   "home.aboutMe": "About me",
   "home.getInTouch": "Get in touch",
   "home.metaTitle": "erez.ac \u2014 Konsta Janhunen",
@@ -22,9 +20,28 @@
 
   "about.heading": "About",
   "about.metaTitle": "About \u2014 erez.ac",
-  "about.metaDescription": "About Konsta Janhunen \u2014 Integration developer at Digia, CS student, and technology enthusiast.",
+  "about.metaDescription": "About Konsta Janhunen \u2014 Full-stack developer, CS student, and technology enthusiast.",
+  "about.heroLabel": "Full-Stack Developer",
+
+  "hero.tagline.1": "I make web.",
+  "hero.tagline.2": "Developer & tinkerer.",
+  "hero.tagline.3": "Code, coffee & curiosity.",
+  "hero.tagline.4": "Making the web do things.",
+  "hero.tagline.5": "Turning ideas into practice.",
+
   "about.loadError": "Failed to load content.",
   "about.loadErrorHint": "Please try refreshing the page.",
+  "about.tech.frontend": "Frontend",
+  "about.tech.backend": "Backend",
+  "about.tech.infra": "Infrastructure",
+  "about.tech.ai": "AI",
+  "about.tech.other": "Other",
+  "about.card.techStack": "Tech Stack",
+  "about.card.projects": "Projects",
+  "about.card.currently": "Currently",
+  "about.card.beyondCode": "Beyond Code",
+  "about.card.beyondCodeSummary": "Gaming, puzzles & a flat-coated retriever",
+  "about.card.contact": "Get in Touch",
 
   "contact.heading": "Contact",
   "contact.metaTitle": "Contact \u2014 erez.ac",

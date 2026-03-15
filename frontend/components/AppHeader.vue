@@ -30,23 +30,33 @@ function handleDropdownKeydown(e) {
   <header
     class="sticky top-0 z-50"
     :style="{
-      backgroundColor: 'var(--color-header-bg)',
-      borderBottom: '2px solid var(--color-header-border)',
+      backgroundColor: 'var(--color-bg-primary)',
       paddingTop: 'env(safe-area-inset-top)',
     }"
   >
     <div class="px-6 h-16 flex justify-between items-center">
     <div class="flex gap-6 items-center">
-      <NuxtLink to="/" class="!text-white text-2xl font-normal tracking-tight">erez.ac</NuxtLink>
+      <NuxtLink
+        to="/"
+        class="text-2xl font-normal tracking-tight"
+        :style="{
+          color: 'var(--color-text-primary)',
+          textDecoration: 'underline',
+          textDecorationColor: 'var(--color-accent, #ff643e)',
+          textDecorationThickness: '2px',
+          textUnderlineOffset: '4px',
+        }"
+      >erez.ac</NuxtLink>
     </div>
 
     <div class="flex items-center gap-2">
       <LangToggle />
-      <ThemeToggle class="text-stone-400" />
+      <ThemeToggle />
 
       <!-- Hamburger — always visible -->
       <button
-        class="p-2 text-stone-400 hover:text-white"
+        class="p-2 transition-colors duration-200"
+        :style="{ color: menuOpen ? 'var(--color-accent, #ff643e)' : 'var(--color-text-secondary)' }"
         @click="toggleMenu"
         :aria-label="t('nav.toggleMenu')"
         :aria-expanded="menuOpen"
@@ -59,14 +69,13 @@ function handleDropdownKeydown(e) {
     </div>
     </div>
 
-    <!-- Dropdown nav — universal (desktop + mobile) -->
+    <!-- Dropdown nav -->
     <nav
       v-if="menuOpen"
-      class="absolute top-full right-0 flex flex-col py-2 shadow-lg rounded-bl-lg min-w-44"
+      class="absolute top-full right-0 flex flex-col py-2 rounded-br-lg min-w-33 text-right"
       :style="{
-        backgroundColor: 'var(--color-header-bg)',
-        borderBottom: '2px solid var(--color-header-border)',
-        borderLeft: '2px solid var(--color-header-border)'
+        backgroundColor: 'var(--color-bg-primary)',
+        border: '2px solid var(--color-accent, #ff643e)',
       }"
       aria-label="Main"
       @keydown="handleDropdownKeydown"
@@ -75,7 +84,7 @@ function handleDropdownKeydown(e) {
         v-for="link in navLinks"
         :key="link.to"
         :to="link.action ? '' : link.to"
-        class="!text-stone-400 px-6 py-3 text-sm transition-colors duration-200 hover:!text-accent hover:bg-white/10"
+        class="px-6 py-3 text-sm transition-colors duration-200 cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-accent,#ff643e)]"
         @click.prevent="closeMenu(); link.action ? link.action() : router.push(link.to)"
       >
         {{ t(link.labelKey) }}

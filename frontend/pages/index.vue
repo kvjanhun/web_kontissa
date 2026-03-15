@@ -12,10 +12,10 @@ useHead({
 </script>
 
 <template>
-  <div class="flex flex-col items-center py-12">
-    <h1 class="text-5xl font-light mb-2" :style="{ color: 'var(--color-text-primary)' }">{{ t('home.heading') }}</h1>
-    <p class="text-lg mb-10" :style="{ color: 'var(--color-text-secondary)' }">{{ t('home.subtitle') }}</p>
+  <div>
+    <HeroBanner />
 
+    <div class="flex flex-col items-center">
     <div class="w-full max-w-2xl mb-10">
       <TerminalWindow />
     </div>
@@ -35,5 +35,7 @@ useHead({
         {{ t('home.getInTouch') }}
       </NuxtLink>
     </div>
+    </div>
   </div>
 </template>
+
