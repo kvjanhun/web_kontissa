@@ -2,7 +2,10 @@ import time
 import xml.etree.ElementTree as ET
 
 import requests
+import structlog
 from flask import Blueprint, jsonify
+
+logger = structlog.get_logger(__name__)
 
 weather_bp = Blueprint('weather', __name__)
 
@@ -178,7 +181,8 @@ def weather_route():
     try:
         data = _fetch_weather()
         return jsonify(data)
-    except Exception as e:
+    except Exception:
+        logger.warning("fmi_weather_failed", exc_info=True, has_stale_cache=_cache["data"] is not None)
         if _cache["data"]:
             return jsonify(_cache["data"])
-        return jsonify({"error": str(e)}), 502
+        return jsonify({"error": "Weather data unavailable"}), 502

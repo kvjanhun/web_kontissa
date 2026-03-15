@@ -2,10 +2,13 @@ import os
 import sys
 import time
 
+import structlog
 from flask import Blueprint, jsonify, current_app
 from app.models import db, User, Recipe, Section, BlockedWord, PageViewEvent
 from app.decorators import admin_required
 from app import _stats
+
+logger = structlog.get_logger(__name__)
 
 health_bp = Blueprint('health', __name__)
 
@@ -67,6 +70,7 @@ def admin_health():
         try:
             table_counts[name] = db.session.query(model).count()
         except Exception:
+            logger.error("table_count_failed", table=name, exc_info=True)
             table_counts[name] = None
 
     return jsonify({
