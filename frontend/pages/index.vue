@@ -16,7 +16,7 @@ useHead({
     <HeroBanner />
 
     <div class="flex flex-col items-center">
-    <div class="w-full max-w-2xl mb-10">
+    <div class="w-full mb-10">
       <TerminalWindow />
     </div>
 

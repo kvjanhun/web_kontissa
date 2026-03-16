@@ -102,7 +102,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto py-8 px-4">
+  <div class="py-8">
     <h1 class="text-3xl font-light mb-6" :style="{ color: 'var(--color-text-primary)' }">
       {{ isEdit ? t('recipeForm.editHeading') : t('recipeForm.newHeading') }}
     </h1>

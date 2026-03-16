@@ -54,7 +54,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto py-8 px-4">
+  <div class="py-8">
     <div class="flex justify-between items-center mb-6">
       <h1 class="text-3xl font-light" :style="{ color: 'var(--color-text-primary)' }">{{ t('recipes.heading') }}</h1>
       <NuxtLink
