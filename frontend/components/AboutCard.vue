@@ -11,37 +11,15 @@ const props = defineProps({
 const isOpen = ref(props.startOpen || !props.expandable)
 const visible = ref(false)
 const cardRef = ref(null)
-const dropdownMaxHeight = ref('60vh')
-const dropdownRef = ref(null)
 
-async function toggle() {
+function toggle() {
   if (!props.expandable) return
   isOpen.value = !isOpen.value
-  if (isOpen.value) {
-    await nextTick()
-    if (!dropdownRef.value || !cardRef.value) return
-    const dropdownHeight = dropdownRef.value.scrollHeight
-    dropdownMaxHeight.value = dropdownHeight + 'px'
-
-    // Pad about-page only by how much the dropdown extends past its natural bottom
-    const container = cardRef.value.closest('.about-page')
-    if (container) {
-      const cardAbsBottom = cardRef.value.getBoundingClientRect().bottom + window.scrollY
-      const containerAbsBottom = container.getBoundingClientRect().bottom + window.scrollY
-      const overflow = (cardAbsBottom + dropdownHeight) - containerAbsBottom + 16
-      if (overflow > 0) container.style.paddingBottom = overflow + 'px'
-    }
-  } else {
-    const container = cardRef.value?.closest('.about-page')
-    if (container) container.style.paddingBottom = ''
-  }
 }
 
 function close() {
   if (props.expandable) {
     isOpen.value = false
-    const container = cardRef.value?.closest('.about-page')
-    if (container) container.style.paddingBottom = ''
   }
 }
 
@@ -92,13 +70,11 @@ onUnmounted(() => {
       'about-card--accent': accent,
       'about-card--expandable': expandable,
       'about-card--open': expandable && isOpen,
-      'rounded-xl': !(expandable && isOpen),
-      'rounded-t-xl rounded-b-none': expandable && isOpen,
+      'rounded-xl': true,
     }"
     :style="{
       background: 'var(--color-bg-secondary)',
       border: '1px solid var(--color-border)',
-      borderBottom: expandable && isOpen ? 'none' : '1px solid var(--color-border)',
       cursor: expandable ? 'pointer' : 'default'
     }"
     @click="expandable && toggle()"
@@ -134,27 +110,8 @@ onUnmounted(() => {
       </div>
     </component>
 
-    <!-- Expandable: absolute overlay so it doesn't push layout -->
-    <div
-      v-if="expandable && isOpen"
-      ref="dropdownRef"
-      class="about-card__dropdown"
-      @click.stop
-      :style="{
-        background: 'var(--color-bg-secondary)',
-        borderLeft: '1px solid var(--color-border)',
-        borderRight: '1px solid var(--color-border)',
-        borderBottom: '1px solid var(--color-border)',
-        maxHeight: dropdownMaxHeight
-      }"
-    >
-      <div class="px-5 py-4">
-        <slot />
-      </div>
-    </div>
-
-    <!-- Non-expandable: normal flow -->
-    <div v-if="!expandable" class="px-5 pb-5" :class="{ 'pt-4': !title }">
+    <!-- Content -->
+    <div v-if="!expandable || isOpen" class="px-5 pb-5" :class="{ 'pt-4': !title }" @click.stop>
       <slot />
     </div>
   </article>
@@ -176,30 +133,5 @@ onUnmounted(() => {
 }
 .about-card--accent {
   border-color: color-mix(in srgb, var(--color-accent, #ff643e) 30%, transparent) !important;
-}
-.about-card--open {
-  z-index: 10;
-}
-
-.about-card__dropdown {
-  position: absolute;
-  top: 100%;
-  left: -1px;
-  right: -1px;
-  border-radius: 0 0 0.75rem 0.75rem;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  overflow-y: auto;
-  animation: dropdownIn 0.2s ease;
-}
-
-@keyframes dropdownIn {
-  from {
-    opacity: 0;
-    transform: translateY(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }
 </style>
