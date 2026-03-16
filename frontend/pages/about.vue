@@ -22,7 +22,7 @@ const { data: sections, pending, error, refresh } = await useAsyncData(
 
 // Tech pills are language-independent — always fetch from EN.
 // Multiple pills sections each represent one category (slug = category key).
-const { data: enSections } = await useFetch('/api/sections', {
+const { data: enSections, refresh: refreshEnSections } = await useFetch('/api/sections', {
   key: 'sections-en-tech',
   query: { locale: 'en' },
   default: () => [],
@@ -37,7 +37,7 @@ onMounted(async () => {
   if (!sections.value.length) {
     retrying.value = true
     error.value = null
-    await refresh()
+    await Promise.all([refresh(), refreshEnSections()])
     retrying.value = false
   }
 })
