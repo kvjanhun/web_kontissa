@@ -28,8 +28,11 @@ describe('useAuthStore — checkAuth', () => {
     expect(auth.isAuthenticated).toBe(true)
   })
 
-  it('clears user when /api/me returns 401', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+  it('clears user when /api/me returns null (not authenticated)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve(null),
+    }))
     const auth = useAuthStore()
     auth.user = { id: 1, role: 'user' }
     await auth.checkAuth()

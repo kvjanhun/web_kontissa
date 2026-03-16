@@ -22,12 +22,12 @@ const currentlyItems = computed(() => {
   }).filter(item => item.label)
 })
 
-// Parse "name|url|description" lines for 'project' type
+// Parse "name|url|description|icon" lines for 'project' type
 const projectItems = computed(() => {
   if (props.section.section_type !== 'project') return []
   return props.section.content.split('\n').map(line => {
     const parts = line.split('|').map(s => s.trim())
-    return { name: parts[0] || '', url: parts[1] || '', description: parts[2] || '' }
+    return { name: parts[0] || '', url: parts[1] || '', description: parts[2] || '', icon: parts[3] || 'code' }
   }).filter(item => item.name)
 })
 
@@ -52,8 +52,40 @@ const isExpandable = computed(() => props.section.section_type === 'text' && pro
       <div v-for="proj in projectItems" :key="proj.name" class="project-item">
         <div class="flex items-center gap-2.5 mb-1">
           <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" :style="{ color: 'var(--color-accent, #ff643e)' }">
-            <path d="M12 2L17.5 5.5V12.5L12 16L6.5 12.5V5.5L12 2Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/>
-            <path d="M12 8L15.5 10V14L12 16L8.5 14V10L12 8Z" fill="currentColor" opacity="0.2"/>
+            <!-- puzzle -->
+            <template v-if="proj.icon === 'puzzle'">
+              <path d="M12 2L14.5 7H9.5L12 2Z" fill="currentColor" opacity="0.3"/>
+              <path d="M5 8h14v10a2 2 0 01-2 2H7a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <path d="M9 8V6a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+              <circle cx="12" cy="13" r="2" fill="currentColor" opacity="0.5"/>
+            </template>
+            <!-- server -->
+            <template v-else-if="proj.icon === 'server'">
+              <rect x="3" y="4" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <rect x="3" y="10" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <rect x="3" y="16" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <circle cx="7" cy="6" r="0.8" fill="currentColor"/>
+              <circle cx="7" cy="12" r="0.8" fill="currentColor"/>
+              <circle cx="7" cy="18" r="0.8" fill="currentColor"/>
+            </template>
+            <!-- globe -->
+            <template v-else-if="proj.icon === 'globe'">
+              <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <path d="M12 3c-2.5 3-4 5.5-4 9s1.5 6 4 9" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <path d="M12 3c2.5 3 4 5.5 4 9s-1.5 6-4 9" stroke="currentColor" stroke-width="1.5" fill="none"/>
+              <path d="M3 12h18" stroke="currentColor" stroke-width="1.5"/>
+            </template>
+            <!-- star -->
+            <template v-else-if="proj.icon === 'star'">
+              <path d="M12 2l2.9 6.1L22 9.3l-5 4.9 1.2 7-6.2-3.3L5.8 21.2l1.2-7-5-4.9 7.1-1.2L12 2z" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linejoin="round"/>
+              <path d="M12 2l2.9 6.1L22 9.3l-5 4.9 1.2 7-6.2-3.3L5.8 21.2l1.2-7-5-4.9 7.1-1.2L12 2z" fill="currentColor" opacity="0.15"/>
+            </template>
+            <!-- code (default) -->
+            <template v-else>
+              <path d="M8 6L3 12l5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <path d="M16 6l5 6-5 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+              <path d="M13 4l-2 16" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" opacity="0.5"/>
+            </template>
           </svg>
           <a
             v-if="proj.url"

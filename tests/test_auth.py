@@ -71,4 +71,5 @@ class TestMe:
 
     def test_me_not_authenticated(self, client, app):
         res = client.get("/api/me")
-        assert res.status_code == 401
+        assert res.status_code == 200
+        assert res.get_json() is None
