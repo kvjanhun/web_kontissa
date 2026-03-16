@@ -6,7 +6,7 @@
   "nav.admin": "Hallinta",
   "nav.login": "Kirjaudu",
   "nav.logout": "Kirjaudu ulos",
-  "nav.toggleMenu": "Vaihda valikko",
+  "nav.toggleMenu": "Käytä valikkoa",
 
   "theme.switchToLight": "Vaihda vaaleaan tilaan",
   "theme.switchToDark": "Vaihda tummaan tilaan",
@@ -16,16 +16,16 @@
   "home.aboutMe": "Tietoa minusta",
   "home.getInTouch": "Ota yhteytt\u00e4",
   "home.metaTitle": "erez.ac \u2014 Konsta Janhunen",
-  "home.metaDescription": "Konsta Janhunen \u2014 Kehitt\u00e4j\u00e4 & puuhastelija. Integraatiokehitt\u00e4j\u00e4, tietojenk\u00e4sittelytieteen opiskelija ja teknologiaintoilija.",
+  "home.metaDescription": "Konsta Janhunen \u2014 Full-stack-kehitt\u00e4j\u00e4 ja teknologiaintoilija.",
 
   "about.heading": "Tietoa",
   "about.metaTitle": "Tietoa \u2014 erez.ac",
-  "about.metaDescription": "Tietoa Konsta Janhusesta \u2014 Full-stack-kehitt\u00e4j\u00e4, tietojenk\u00e4sittelytieteen opiskelija ja teknologiaintoilija.",
+  "about.metaDescription": "Tietoa Konsta Janhusesta \u2014 Full-stack-kehitt\u00e4j\u00e4 ja teknologiaintoilija.",
   "about.heroLabel": "Full-Stack-kehitt\u00e4j\u00e4",
 
   "hero.tagline.1": "Webin tekij\u00e4.",
   "hero.tagline.2": "Kehitt\u00e4j\u00e4 & puuhastelija.",
-  "hero.tagline.3": "Koodia, kahvia & uteliaisuutta.",
+  "hero.tagline.3": "Konstailematonta koodia.",
   "hero.tagline.4": "Laitan ATK\u003an tekem\u00e4\u00e4n asioita.",
   "hero.tagline.5": "Ideoista k\u00e4yt\u00e4nt\u00f6\u00f6n.",
 
@@ -33,7 +33,7 @@
   "about.loadErrorHint": "Yrit\u00e4 p\u00e4ivitt\u00e4\u00e4 sivu.",
   "about.tech.frontend": "Frontend",
   "about.tech.backend": "Backend",
-  "about.tech.infra": "Infrastruktuuri",
+  "about.tech.infra": "Infra",
   "about.tech.ai": "Tekoäly",
   "about.tech.other": "Muut",
   "about.card.techStack": "Teknologiat",
@@ -114,7 +114,7 @@
   "recipeForm.notFound": "Resepti\u00e4 ei l\u00f6ytynyt",
   "recipeForm.saveError": "Reseptin tallentaminen ep\u00e4onnistui",
 
-  "title.home": "erez.ac",
+  "title.home": "Konsta Janhunen - erez.ac",
   "title.about": "Tietoa - erez.ac",
   "title.contact": "Yhteystiedot - erez.ac",
   "title.login": "Kirjaudu - erez.ac",

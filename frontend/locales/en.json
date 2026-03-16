@@ -16,17 +16,17 @@
   "home.aboutMe": "About me",
   "home.getInTouch": "Get in touch",
   "home.metaTitle": "erez.ac \u2014 Konsta Janhunen",
-  "home.metaDescription": "Konsta Janhunen \u2014 Developer & tinkerer. Integration developer, CS student, and technology enthusiast.",
+  "home.metaDescription": "Konsta Janhunen \u2014 Full-stack developer and technology enthusiast.",
 
   "about.heading": "About",
   "about.metaTitle": "About \u2014 erez.ac",
-  "about.metaDescription": "About Konsta Janhunen \u2014 Full-stack developer, CS student, and technology enthusiast.",
+  "about.metaDescription": "About Konsta Janhunen \u2014 Full-stack developer and technology enthusiast.",
   "about.heroLabel": "Full-Stack Developer",
 
   "hero.tagline.1": "I make web.",
   "hero.tagline.2": "Developer & tinkerer.",
-  "hero.tagline.3": "Code, coffee & curiosity.",
-  "hero.tagline.4": "Making the web do things.",
+  "hero.tagline.3": "Kode, koffee & Konsta.",
+  "hero.tagline.4": "Making computers do things.",
   "hero.tagline.5": "Turning ideas into practice.",
 
   "about.loadError": "Failed to load content.",
@@ -114,7 +114,7 @@
   "recipeForm.notFound": "Recipe not found",
   "recipeForm.saveError": "Failed to save recipe",
 
-  "title.home": "erez.ac",
+  "title.home": "Konsta Janhunen - erez.ac",
   "title.about": "About - erez.ac",
   "title.contact": "Contact - erez.ac",
   "title.login": "Login - erez.ac",
