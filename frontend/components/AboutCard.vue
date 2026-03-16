@@ -11,16 +11,37 @@ const props = defineProps({
 const isOpen = ref(props.startOpen || !props.expandable)
 const visible = ref(false)
 const cardRef = ref(null)
+const dropdownMaxHeight = ref('60vh')
+const dropdownRef = ref(null)
 
-function toggle() {
-  if (props.expandable) {
-    isOpen.value = !isOpen.value
+async function toggle() {
+  if (!props.expandable) return
+  isOpen.value = !isOpen.value
+  if (isOpen.value) {
+    await nextTick()
+    if (!dropdownRef.value || !cardRef.value) return
+    const dropdownHeight = dropdownRef.value.scrollHeight
+    dropdownMaxHeight.value = dropdownHeight + 'px'
+
+    // Pad about-page only by how much the dropdown extends past its natural bottom
+    const container = cardRef.value.closest('.about-page')
+    if (container) {
+      const cardAbsBottom = cardRef.value.getBoundingClientRect().bottom + window.scrollY
+      const containerAbsBottom = container.getBoundingClientRect().bottom + window.scrollY
+      const overflow = (cardAbsBottom + dropdownHeight) - containerAbsBottom + 16
+      if (overflow > 0) container.style.paddingBottom = overflow + 'px'
+    }
+  } else {
+    const container = cardRef.value?.closest('.about-page')
+    if (container) container.style.paddingBottom = ''
   }
 }
 
 function close() {
   if (props.expandable) {
     isOpen.value = false
+    const container = cardRef.value?.closest('.about-page')
+    if (container) container.style.paddingBottom = ''
   }
 }
 
@@ -65,25 +86,29 @@ onUnmounted(() => {
 <template>
   <article
     ref="cardRef"
-    class="about-card rounded-xl overflow-visible transition-all duration-500"
+    class="about-card overflow-visible transition-all duration-500"
     :class="{
       'about-card--visible': visible,
       'about-card--accent': accent,
       'about-card--expandable': expandable,
-      'about-card--open': expandable && isOpen
+      'about-card--open': expandable && isOpen,
+      'rounded-xl': !(expandable && isOpen),
+      'rounded-t-xl rounded-b-none': expandable && isOpen,
     }"
     :style="{
       background: 'var(--color-bg-secondary)',
-      border: '1px solid var(--color-border)'
+      border: '1px solid var(--color-border)',
+      borderBottom: expandable && isOpen ? 'none' : '1px solid var(--color-border)',
+      cursor: expandable ? 'pointer' : 'default'
     }"
+    @click="expandable && toggle()"
   >
     <component
       :is="expandable ? 'button' : 'div'"
       class="w-full text-left"
-      :class="{ 'cursor-pointer': expandable }"
       :style="{ background: 'transparent' }"
       :aria-expanded="expandable ? isOpen : undefined"
-      @click="toggle"
+      @click.stop="expandable && toggle()"
     >
       <div v-if="title" class="px-5 pt-4" :class="{ 'pb-3': !expandable || isOpen, 'pb-4': expandable && !isOpen }">
         <div class="flex items-center justify-between gap-2">
@@ -112,11 +137,15 @@ onUnmounted(() => {
     <!-- Expandable: absolute overlay so it doesn't push layout -->
     <div
       v-if="expandable && isOpen"
+      ref="dropdownRef"
       class="about-card__dropdown"
+      @click.stop
       :style="{
         background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-border)',
-        borderTop: 'none'
+        borderLeft: '1px solid var(--color-border)',
+        borderRight: '1px solid var(--color-border)',
+        borderBottom: '1px solid var(--color-border)',
+        maxHeight: dropdownMaxHeight
       }"
     >
       <div class="px-5 py-4">
@@ -159,7 +188,6 @@ onUnmounted(() => {
   right: -1px;
   border-radius: 0 0 0.75rem 0.75rem;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-  max-height: 60vh;
   overflow-y: auto;
   animation: dropdownIn 0.2s ease;
 }
