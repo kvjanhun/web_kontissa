@@ -81,8 +81,6 @@ async function runBootSequence() {
   const bootLines = [
     'Welcome to erez.ac (GNU/Linux 5.14.0-el9 x86_64)',
     '',
-    ' * Server: Intel NUC11ATKC2, Vantaa',
-    ' * Stack:  Flask 3.1 + Nuxt 3 + SQLite',
     ' * Type <span class="text-term-user">help</span> for available commands',
     '',
     `Last login: ${dateStr} from visitor`,
@@ -96,6 +94,28 @@ async function runBootSequence() {
   pushLine('', 'boot')
   hasBooted = true
   isBooting.value = false
+}
+
+async function autoTypeCommand(command) {
+  if (prefersReducedMotion) {
+    await executeCommand(command)
+    return
+  }
+
+  await delay(600)
+
+  for (let i = 0; i < command.length; i++) {
+    currentInput.value += command[i]
+    let pause = 25 + Math.random() * 45
+    if (command[i] === ' ') pause += 40 + Math.random() * 60
+    else if (Math.random() < 0.1) pause += 80 + Math.random() * 80
+    await delay(pause)
+  }
+
+  await delay(300)
+  const cmd = currentInput.value
+  currentInput.value = ''
+  await executeCommand(cmd)
 }
 
 // --- Command handlers ---
@@ -398,6 +418,7 @@ export function useTerminal() {
     isProcessing,
     executeCommand,
     runBootSequence,
+    autoTypeCommand,
     historyUp,
     historyDown,
   }
