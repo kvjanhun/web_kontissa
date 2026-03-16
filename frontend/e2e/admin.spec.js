@@ -38,7 +38,7 @@ test.describe('Admin Dashboard', () => {
     await expect(adminPage).toHaveURL('/admin', { timeout: 10000 })
 
     await adminPage.locator('button').filter({ hasText: /Health|Terveys/ }).click()
-    // Health tab shows the Python label row
-    await expect(adminPage.getByText('Python', { exact: true })).toBeVisible({ timeout: 10000 })
+    // Health tab shows the Python label row — scope to panel to avoid matching Sections tab
+    await expect(adminPage.locator('#panel-health').getByText('Python', { exact: true })).toBeVisible({ timeout: 10000 })
   })
 })
