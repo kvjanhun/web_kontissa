@@ -6,6 +6,7 @@ const {
   isProcessing,
   executeCommand,
   runBootSequence,
+  autoTypeCommand,
   historyUp,
   historyDown,
 } = useTerminal()
@@ -75,10 +76,14 @@ onMounted(async () => {
     resizeObserver = new ResizeObserver(updateScrollMetrics)
     resizeObserver.observe(scrollContainer.value)
   }
+  const firstBoot = !outputLines.value.length
   await runBootSequence()
   scrollToBottom()
   if (window.matchMedia('(pointer: fine)').matches) {
     focusInput()
+  }
+  if (firstBoot) {
+    await autoTypeCommand('cowsay You can actually type here, you know?')
   }
 })
 
