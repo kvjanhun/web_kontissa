@@ -41,8 +41,6 @@ function handleDropdownKeydown(e) {
         class="text-2xl font-normal tracking-tight"
         :style="{
           color: 'var(--color-text-primary)',
-          textDecoration: 'underline',
-          textDecorationColor: 'var(--color-accent, #ff643e)',
           textDecorationThickness: '2px',
           textUnderlineOffset: '4px',
         }"
