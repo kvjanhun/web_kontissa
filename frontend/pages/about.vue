@@ -121,15 +121,15 @@ const introText = computed(() => byType.value['intro']?.content || '')
         <div
           v-for="(cat, ci) in techCategories"
           :key="cat.label"
-          class="tech-group"
+          class="tech-row"
           :style="{ animationDelay: (ci * 80) + 'ms' }"
         >
           <span class="tech-label" :style="{ color: 'var(--color-accent, #ff643e)' }">{{ cat.label }}</span>
-          <div class="flex flex-wrap gap-2">
+          <div class="tech-pills">
             <span
               v-for="pill in cat.items"
               :key="pill"
-              class="tech-pill px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200"
+              class="tech-pill px-3 py-1.5 rounded-lg text-sm font-medium transition-all duration-200 shrink-0"
               :style="{
                 background: 'var(--color-bg-tertiary)',
                 color: 'var(--color-text-primary)',
@@ -191,17 +191,43 @@ const introText = computed(() => byType.value['intro']?.content || '')
 /* Tech section — frameless, accent dividers */
 .tech-section {
   display: flex;
-  flex-wrap: wrap;
-  gap: 1.25rem 2rem;
+  flex-direction: column;
+  gap: 0.75rem;
   padding: 1.25rem 0;
 }
-.tech-group {
+@media (min-width: 768px) {
+  .tech-section {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1.25rem 2rem;
+  }
+}
+.tech-row {
   display: flex;
-  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  overflow-x: auto;
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tech-row::-webkit-scrollbar {
+  display: none;
+}
+@media (min-width: 768px) {
+  .tech-row {
+    flex-direction: column;
+    align-items: flex-start;
+    overflow-x: visible;
+  }
+}
+.tech-pills {
+  display: flex;
   gap: 0.5rem;
 }
-.tech-group .flex {
-  flex-wrap: wrap;
+@media (min-width: 768px) {
+  .tech-pills {
+    flex-wrap: wrap;
+  }
 }
 .tech-label {
   font-size: 0.7rem;
