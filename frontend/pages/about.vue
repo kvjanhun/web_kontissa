@@ -27,14 +27,19 @@ const { data: enSections } = await useFetch('/api/sections', {
   default: () => [],
 })
 
-if (import.meta.client && error.value && !sections.value.length) {
-  error.value = null
-  retrying.value = true
-  await refresh()
-  retrying.value = false
-}
-
 const loading = computed(() => pending.value || retrying.value)
+
+// SSG builds without Flask running, so sections fetch fails at build time.
+// Retry after mount (not during setup) to avoid hydration mismatch between
+// the empty pre-rendered HTML and client-rendered content.
+onMounted(async () => {
+  if (!sections.value.length) {
+    retrying.value = true
+    error.value = null
+    await refresh()
+    retrying.value = false
+  }
+})
 
 // Look up sections by type — admin only needs to pick the right type
 const byType = computed(() => {
