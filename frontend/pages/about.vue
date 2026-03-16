@@ -27,7 +27,7 @@ const { data: enSections } = await useFetch('/api/sections', {
   default: () => [],
 })
 
-const loading = computed(() => pending.value || retrying.value)
+const loading = computed(() => (pending.value || retrying.value) && !sections.value.length)
 
 // SSG builds without Flask running, so sections fetch fails at build time.
 // Retry after mount (not during setup) to avoid hydration mismatch between
