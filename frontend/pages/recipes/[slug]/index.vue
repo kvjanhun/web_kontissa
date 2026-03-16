@@ -82,7 +82,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto py-8 px-4">
+  <div class="py-8">
     <p
       v-if="loading"
       class="text-center py-12"

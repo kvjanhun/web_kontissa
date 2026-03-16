@@ -33,7 +33,7 @@ function selectTab(key) {
 </script>
 
 <template>
-  <div class="max-w-3xl mx-auto mt-8">
+  <div class="mt-8">
     <h1 class="text-3xl font-light mb-8" :style="{ color: 'var(--color-text-primary)' }">{{ t('admin.heading') }}</h1>
 
     <!-- Tab bar -->

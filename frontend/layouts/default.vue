@@ -26,11 +26,13 @@ onMounted(async () => {
   <a href="#main-content" class="skip-link">Skip to content</a>
   <div class="flex flex-col min-h-screen">
     <AppHeader />
-    <main id="main-content" class="grow p-6" :style="{
+    <main id="main-content" class="grow" :style="{
       backgroundColor: 'var(--color-bg-primary)',
       color: 'var(--color-text-primary)',
     }">
-      <slot />
+      <div class="max-w-3xl mx-auto px-6 py-6">
+        <slot />
+      </div>
     </main>
     <AppFooter :update-date="updateDate" />
   </div>
