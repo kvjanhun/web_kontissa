@@ -43,4 +43,4 @@ def api_logout():
 def api_me():
     if current_user.is_authenticated:
         return jsonify(current_user.to_dict())
-    return jsonify({"error": "Not authenticated"}), 401
+    return jsonify(None)

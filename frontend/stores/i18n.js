@@ -6,21 +6,10 @@ import fi from '~/locales/fi.json'
 const messages = { en, fi }
 const supportedLocales = ['en', 'fi']
 
-function detectLocale() {
-  if (typeof window === 'undefined') return 'en'
-  const stored = localStorage.getItem('locale')
-  if (stored && supportedLocales.includes(stored)) return stored
-  const browserLang = navigator.language?.slice(0, 2)
-  if (supportedLocales.includes(browserLang)) return browserLang
-  return 'en'
-}
-
 export const useI18nStore = defineStore('i18n', () => {
-  const locale = ref(detectLocale())
-
-  if (typeof window !== 'undefined') {
-    document.documentElement.lang = locale.value
-  }
+  // Always initialize with 'en' for SSR compatibility.
+  // The locale.client.js plugin restores the user's preference after hydration.
+  const locale = ref('en')
 
   function t(key, params) {
     let str = messages[locale.value]?.[key] || messages.en[key] || key

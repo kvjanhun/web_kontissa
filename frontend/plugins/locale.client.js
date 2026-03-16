@@ -1,10 +1,25 @@
-// Restore locale from localStorage after SSR hydration.
-// Nuxt serializes Pinia state from the server (always 'en') into the page
-// payload, which overwrites the client-side detectLocale() result on hydration.
-export default defineNuxtPlugin(() => {
-  const i18nStore = useI18nStore()
+// Restore user's locale preference after hydration.
+//
+// SSR always renders with 'en' (the i18n store default). On the client,
+// we detect the preferred locale from localStorage or browser language
+// and apply it AFTER hydration to avoid mismatches between server HTML
+// and client rendering.
+const supportedLocales = ['en', 'fi']
+
+function detectLocale() {
   const stored = localStorage.getItem('locale')
-  if (stored && stored !== i18nStore.locale) {
-    i18nStore.setLocale(stored)
-  }
+  if (stored && supportedLocales.includes(stored)) return stored
+  const browserLang = navigator.language?.slice(0, 2)
+  if (supportedLocales.includes(browserLang)) return browserLang
+  return 'en'
+}
+
+export default defineNuxtPlugin((nuxtApp) => {
+  nuxtApp.hook('app:mounted', () => {
+    const i18nStore = useI18nStore()
+    const preferred = detectLocale()
+    if (preferred !== i18nStore.locale) {
+      i18nStore.setLocale(preferred)
+    }
+  })
 })

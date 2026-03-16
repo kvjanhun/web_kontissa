@@ -14,11 +14,11 @@ useHead({
 
 const retrying = ref(false)
 
-const { data: sections, pending, error, refresh } = await useFetch('/api/sections', {
-  query: { locale },
-  default: () => [],
-  watch: [locale],
-})
+const { data: sections, pending, error, refresh } = await useAsyncData(
+  'about-sections',
+  () => $fetch('/api/sections', { query: { locale: locale.value } }),
+  { default: () => [], watch: [locale] }
+)
 
 // Tech pills are language-independent — always fetch from EN
 const { data: enSections } = await useFetch('/api/sections', {

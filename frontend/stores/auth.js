@@ -31,9 +31,7 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const res = await fetch('/api/me')
       if (res.ok) {
-        user.value = await res.json()
-      } else {
-        user.value = null
+        user.value = await res.json()  // null when not authenticated
       }
     } catch {
       user.value = null

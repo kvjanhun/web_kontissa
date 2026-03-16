@@ -65,17 +65,16 @@ describe('useI18nStore — setLocale', () => {
   })
 })
 
-describe('useI18nStore — locale detection', () => {
-  it('reads locale from localStorage on init', () => {
+describe('useI18nStore — locale initialization', () => {
+  it('always initializes with en for SSR compatibility', () => {
     localStorage.setItem('locale', 'fi')
     const i18n = useI18nStore()
-    expect(i18n.locale).toBe('fi')
+    // Store always starts as 'en' — locale.client.js plugin handles restoration
+    expect(i18n.locale).toBe('en')
   })
 
-  it('defaults to en when localStorage is empty and browser lang unsupported', () => {
+  it('defaults to en when localStorage is empty', () => {
     const i18n = useI18nStore()
-    // In jsdom, navigator.language is typically 'en', which is supported.
-    // Verify locale is either 'en' or 'fi' — always a valid value.
-    expect(['en', 'fi']).toContain(i18n.locale)
+    expect(i18n.locale).toBe('en')
   })
 })
