@@ -22,6 +22,9 @@ export default defineNuxtConfig({
   // Tailwind CSS 4 via Vite plugin
   vite: {
     plugins: [tailwindcss()],
+    define: {
+      __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: true,
+    },
   },
 
   // Global CSS
@@ -30,7 +33,7 @@ export default defineNuxtConfig({
   // Default app head
   app: {
     head: {
-      htmlAttrs: { lang: 'en' },
+      htmlAttrs: { lang: 'en', 'data-allow-mismatch': 'class' },
       charset: 'utf-8',
       viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
       title: 'erez.ac - Konsta Janhunen',
