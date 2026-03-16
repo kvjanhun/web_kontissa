@@ -64,7 +64,7 @@ onUnmounted(() => {
 <template>
   <article
     ref="cardRef"
-    class="about-card overflow-visible transition-all duration-500"
+    class="about-card overflow-hidden transition-all duration-500"
     :class="{
       'about-card--visible': visible,
       'about-card--accent': accent,
