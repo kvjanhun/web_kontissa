@@ -163,7 +163,8 @@ function placeholderFor(type) {
 // Inline position update — fires on placement dropdown or position number change
 async function updatePosition(section, newPosition) {
   clearMessages()
-  if (newPosition < 0 || newPosition > 29) { error.value = 'Position must be 0–29'; return }
+  if (newPosition < 0) { error.value = 'Position must be >= 0'; return }
+  if (isCardType(section.section_type) && newPosition > 29) { error.value = 'Position must be 0–29'; return }
   const res = await fetch(`/api/sections/${section.id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
@@ -272,6 +273,17 @@ async function toggleCollapsible(section) {
                 :value="section.position ?? 0"
                 min="0"
                 max="29"
+                @change="updatePosition(section, parseInt($event.target.value))"
+                class="text-xs w-12 px-1.5 py-1 rounded outline-none text-center"
+                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
+              />
+            </template>
+            <template v-if="section.section_type === 'pills'">
+              <span class="text-xs" :style="{ color: 'var(--color-text-tertiary)' }">order</span>
+              <input
+                type="number"
+                :value="section.position ?? 0"
+                min="0"
                 @change="updatePosition(section, parseInt($event.target.value))"
                 class="text-xs w-12 px-1.5 py-1 rounded outline-none text-center"
                 :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"

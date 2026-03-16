@@ -20,7 +20,8 @@ const { data: sections, pending, error, refresh } = await useAsyncData(
   { default: () => [], watch: [locale] }
 )
 
-// Tech pills are language-independent — always fetch from EN
+// Tech pills are language-independent — always fetch from EN.
+// Multiple pills sections each represent one category (slug = category key).
 const { data: enSections } = await useFetch('/api/sections', {
   key: 'sections-en-tech',
   query: { locale: 'en' },
@@ -62,46 +63,17 @@ const fullWidthCards = computed(() => cardSections.value.filter(s => (s.position
 const leftColumnCards = computed(() => cardSections.value.filter(s => (s.position ?? 0) >= 10 && (s.position ?? 0) < 20))
 const rightColumnCards = computed(() => cardSections.value.filter(s => (s.position ?? 0) >= 20 && (s.position ?? 0) < 30))
 
-const enByType = computed(() => {
-  const map = {}
-  for (const s of enSections.value) map[s.section_type] = s
-  return map
-})
-
-// Categorize tech pills from the flat API list (case-sensitive to match DB)
-const TECH_CATEGORIES = [
-  { labelKey: 'about.tech.frontend', items: ['Nuxt', 'Vue.js', 'JavaScript', 'Tailwind CSS'] },
-  { labelKey: 'about.tech.backend', items: ['Python', 'Flask', 'SQLite', 'Gunicorn'] },
-  { labelKey: 'about.tech.infra', items: ['Docker', 'Nginx', 'nginx', 'Linux', 'RHEL', 'Bash', 'Git', 'GnuPG'] },
-  { labelKey: 'about.tech.ai', items: ['Claude'] }
-]
-
+// Tech categories are data-driven: each pills section is one category.
+// slug = category key (maps to locale key about.tech.{slug}), content = comma-separated items.
+// Ordered by position, then id.
 const techCategories = computed(() => {
-  const section = enByType.value['pills']
-  if (!section) return []
-  const available = new Set(section.content.split(',').map(s => s.trim()).filter(Boolean))
-  const cats = []
-  const placed = new Set()
-
-  for (const cat of TECH_CATEGORIES) {
-    const items = cat.items.filter(i => available.has(i))
-    if (items.length) {
-      cats.push({ label: t(cat.labelKey), items })
-      items.forEach(i => placed.add(i))
-    }
-  }
-
-  const uncategorized = [...available].filter(i => !placed.has(i))
-  if (uncategorized.length) {
-    const last = cats[cats.length - 1]
-    if (last) {
-      last.items.push(...uncategorized)
-    } else {
-      cats.push({ label: t('about.tech.other'), items: uncategorized })
-    }
-  }
-
-  return cats
+  return enSections.value
+    .filter(s => s.section_type === 'pills')
+    .map(s => ({
+      label: t(`about.tech.${s.slug}`) || s.title,
+      items: s.content.split(',').map(i => i.trim()).filter(Boolean),
+    }))
+    .filter(cat => cat.items.length)
 })
 
 const quoteText = computed(() => byType.value['quote']?.content || '')
