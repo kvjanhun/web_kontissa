@@ -22,9 +22,6 @@ export default defineNuxtConfig({
   // Tailwind CSS 4 via Vite plugin
   vite: {
     plugins: [tailwindcss()],
-    define: {
-      __VUE_PROD_HYDRATION_MISMATCH_DETAILS__: true,
-    },
   },
 
   // Global CSS
