@@ -35,9 +35,9 @@ export default defineNuxtConfig({
       viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
       title: 'erez.ac - Konsta Janhunen',
       meta: [
-        { name: 'description', content: 'Konsta Janhunen — Developer & tinkerer. Integration developer, CS student, and technology enthusiast.' },
+        { name: 'description', content: 'Konsta Janhunen — Developer, tinkerer, technology enthusiast.' },
         { property: 'og:title', content: 'erez.ac — Konsta Janhunen' },
-        { property: 'og:description', content: 'Developer & tinkerer. Integration developer, CS student, and technology enthusiast.' },
+        { property: 'og:description', content: 'Developer & tinkerer. Full-stack developer, and technology enthusiast.' },
         { property: 'og:url', content: 'https://erez.ac' },
         { property: 'og:type', content: 'website' },
       ],

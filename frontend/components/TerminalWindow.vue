@@ -101,29 +101,31 @@ onBeforeUnmount(() => {
       <!-- Scrollable content -->
       <div
         ref="scrollContainer"
-        class="font-mono text-sm text-white p-4 h-[340px] overflow-y-scroll pr-6"
+        class="font-mono text-sm text-white p-4 h-[340px] overflow-y-scroll overflow-x-auto pr-6"
         style="-ms-overflow-style: none; scrollbar-width: none;"
         role="log"
         aria-live="polite"
         @scroll="updateScrollMetrics"
       >
-        <!-- Output lines -->
-        <div
-          v-for="(line, i) in outputLines"
-          :key="i"
-          v-html="line.html"
-        />
+        <div class="min-w-max">
+          <!-- Output lines -->
+          <div
+            v-for="(line, i) in outputLines"
+            :key="i"
+            v-html="line.html"
+          />
 
-        <!-- Active prompt (when not booting) -->
-        <div v-if="!isBooting" class="flex font-mono">
-          <span class="flex text-gray-300 shrink-0">
-            <span class="text-term-user">konsta@erez.ac</span>
-            <span>:</span>
-            <span class="text-term-dir">~</span>
-            <span class="mr-[1ch]">$</span>
-          </span>
-          <span class="text-white whitespace-pre">{{ currentInput }}</span>
-          <span class="block self-center h-[1em] w-[0.6em] cursor-blink shrink-0"></span>
+          <!-- Active prompt (when not booting) -->
+          <div v-if="!isBooting" class="flex font-mono">
+            <span class="flex text-gray-300 shrink-0">
+              <span class="text-term-user">konsta@erez.ac</span>
+              <span>:</span>
+              <span class="text-term-dir">~</span>
+              <span class="mr-[1ch]">$</span>
+            </span>
+            <span class="text-white whitespace-pre">{{ currentInput }}</span>
+            <span class="block self-center h-[1em] w-[0.6em] cursor-blink shrink-0"></span>
+          </div>
         </div>
       </div>
 

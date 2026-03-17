@@ -123,16 +123,16 @@ async function autoTypeCommand(command) {
 function handleHelp() {
   pushLine(
     '<table class="text-sm">' +
-    '<tr><td class="pr-4 text-term-user">help</td><td class="text-gray-300">Show available commands</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">skills</td><td class="text-gray-300">Technical skills</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">fetch</td><td class="text-gray-300">System info</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">cowthink &lt;msg&gt;</td><td class="text-gray-300">ASCII cow thinks your message</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">echo &lt;text&gt;</td><td class="text-gray-300">Print text</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">date</td><td class="text-gray-300">Current date and time</td></tr>' +
-    '<tr><td class="pr-4 text-term-user">clear</td><td class="text-gray-300">Clear terminal</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">help</td><td class="text-gray-300">Show available commands</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">skills</td><td class="text-gray-300">Technical skills</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">fetch</td><td class="text-gray-300">System info</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">cowthink &lt;msg&gt;</td><td class="text-gray-300">ASCII cow thinks your message</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">echo &lt;text&gt;</td><td class="text-gray-300">Print text</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">date</td><td class="text-gray-300">Current date and time</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">clear</td><td class="text-gray-300">Clear terminal</td></tr>' +
     '</table>'
   )
 }
@@ -175,7 +175,7 @@ function handleAbout() {
     '<div class="text-gray-300 mt-1">Software developer based in Helsinki, Finland.</div>' +
     '<div class="text-gray-300">Building things with Python, JavaScript, and whatever gets the job done.</div>' +
     '<div class="mt-2">' +
-    '<a href="https://github.com/kvjanhun" class="text-accent hover:underline" target="_blank" rel="noopener">github.com/kvjanhun</a>' +
+    '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">github.com/kvjanhun</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
     '<a href="https://linkedin.com/in/kvjanhun" class="text-term-dir hover:underline" target="_blank" rel="noopener">linkedin.com/in/kvjanhun</a>' +
     '</div>' +
@@ -183,23 +183,60 @@ function handleAbout() {
   )
 }
 
-function handleFetch() {
-  const { isDark } = useDarkModeStore()
+function formatUptime(seconds) {
+  const d = Math.floor(seconds / 86400)
+  const h = Math.floor((seconds % 86400) / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  if (d > 0) return `${d}d ${h}h ${m}m`
+  if (h > 0) return `${h}h ${m}m`
+  return `${m}m`
+}
+
+async function handleFetch() {
   const logo = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192.3 146" class="w-20 shrink-0" aria-hidden="true"><path fill="#e00" d="m128,84c12.5,0 30.6-2.6 30.6-17.5a19.53,19.53 0 0 0-0.3-3.4L150.9,30.7C149.2,23.6 147.7,20.3 135.2,14.1 125.5,9.1 104.4,1 98.1,1 92.2,1 90.5,8.5 83.6,8.5 76.9,8.5 72,2.9 65.7,2.9c-6,0-9.9,4.1-12.9,12.5 0,0-8.4,23.7-9.5,27.2a6.15,6.15 0 0 0-0.2,1.9C43,53.7 79.3,83.9 128,84m32.5-11.4c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5-7.3C22.8,52.5 1,55.5 1,74.7 1,106.2 75.6,145 134.6,145c45.3,0 56.7-20.5 56.7-36.7 0-12.7-11-27.1-30.8-35.7"/><path fill="#600" d="m160.5,72.6c1.7,8.2 1.7,9.1 1.7,10.1 0,14-15.7,21.8-36.4,21.8C79,104.5 38.1,77.1 38.1,59a18.35,18.35 0 0 1 1.5-7.3l3.7-9.1a6.15,6.15 0 0 0-0.2,1.9c0,9.2 36.3,39.4 84.9,39.4 12.5,0 30.6-2.6 30.6-17.5A19.53,19.53 0 0 0 158.3,63Z"/></svg>'
 
+  let uptime = '?'
+  let disk = '?'
+  let memory = '?'
+  let load = '?'
+
+  try {
+    const res = await fetch('/api/server-info')
+    const data = await res.json()
+    if (data.uptime_seconds != null) uptime = formatUptime(data.uptime_seconds)
+    if (data.disk_used_percent != null) disk = `${data.disk_used_percent}% used`
+    if (data.memory_total_mb != null) {
+      const used = data.memory_used_mb != null ? (data.memory_used_mb / 1024).toFixed(1) : '?'
+      const total = (data.memory_total_mb / 1024).toFixed(1)
+      memory = `${used} / ${total} GiB`
+    } else if (data.memory_used_mb != null) {
+      memory = `${data.memory_used_mb} MB`
+    }
+    if (data.load_1min != null) load = data.load_1min.toFixed(2)
+  } catch {
+    // non-fatal — display '?' for live fields
+  }
+
+  const style = getComputedStyle(document.documentElement)
+  const cv = (v) => style.getPropertyValue(v).trim()
+  const swatches = [
+    '--color-term-rose', '--color-term-sand', '--color-term-amber', '--color-term-user',
+    '--color-term-sage', '--color-term-dir', '--color-text-secondary', '--color-text-primary',
+  ].map(v => `<span style="color:${cv(v)}">███</span>`).join('')
+
   const info = [
-    '<span class="text-red-400 font-bold">konsta</span><span class="text-gray-300">@</span><span class="text-red-400 font-bold">erez.ac</span>',
+    '<span class="text-term-user font-bold">konsta</span><span class="text-gray-300">@</span><span class="text-term-user font-bold">erez.ac</span>',
     '<span class="text-gray-500">─────────────────────────────────────</span>',
     `<span class="text-term-dir">OS</span>       <span class="text-gray-300">RHEL 9 (5.14.0-el9 x86_64)</span>`,
-    `<span class="text-term-dir">Host</span>     <span class="text-gray-300">Intel NUC11ATKC2, Vantaa</span>`,
     `<span class="text-term-dir">CPU</span>      <span class="text-gray-300">Intel Celeron N4505 @ 2.00GHz</span>`,
-    `<span class="text-term-dir">Memory</span>   <span class="text-gray-300">7.3 GiB</span>`,
-    `<span class="text-term-dir">Disk</span>     <span class="text-gray-300">70G (31% used)</span>`,
-    `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">49 weeks</span>`,
-    `<span class="text-term-dir">Docker</span>   <span class="text-gray-300">28.0.4</span>`,
-    `<span class="text-term-dir">Stack</span>    <span class="text-gray-300">Flask 3.1 / Vue 3 / SQLite</span>`,
-    `<span class="text-term-dir">Theme</span>    <span class="text-gray-300">${isDark.value ? 'Dark' : 'Light'} mode</span>`,
+    `<span class="text-term-dir">Memory</span>   <span class="text-gray-300">${escapeHtml(memory)}</span>`,
+    `<span class="text-term-dir">Disk</span>     <span class="text-gray-300">${escapeHtml(disk)}</span>`,
+    `<span class="text-term-dir">Load</span>     <span class="text-gray-300">${escapeHtml(load)}</span>`,
+    `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">${escapeHtml(uptime)}</span>`,
+    `<span class="text-term-dir">Theme</span>    <span class="text-gray-300">${document.documentElement.classList.contains('dark') ? 'Dark' : 'Light'} mode</span>`,
     `<span class="text-term-dir">Font</span>     <span class="text-gray-300">Ubuntu Mono / DM Sans</span>`,
+    '',
+    swatches,
   ]
 
   pushLine(
@@ -266,11 +303,11 @@ async function handleCowsay(argsArray, think = false) {
 function handleSkills() {
   pushLine(
     '<div class="my-1 text-sm space-y-1.5">' +
-    '<div><span class="text-term-user font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
-    '<div><span class="text-term-dir font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
-    '<div><span class="text-accent font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
-    '<div><span class="text-purple-400 font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
-    '<div><span class="text-yellow-400 font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
+    '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
+    '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
+    '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
+    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
+    '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
     '</div>'
   )
 }
@@ -329,7 +366,7 @@ async function executeCommand(input) {
     try {
       const text = getCommandText(leftCmd, leftArgs)
       if (text === null) {
-        pushLine(`<span class="text-red-400">bash: ${escapeHtml(leftCmd)}: cannot pipe output</span>`)
+        pushLine(`<span class="text-red-400">sh: ${escapeHtml(leftCmd)}: cannot pipe output</span>`)
         return
       }
       // Prepend piped text to cowsay args (flags first, then text)
@@ -358,7 +395,7 @@ async function executeCommand(input) {
         handleAbout()
         break
       case 'fetch':
-        handleFetch()
+        await handleFetch()
         break
       case 'skills':
         handleSkills()
@@ -380,7 +417,7 @@ async function executeCommand(input) {
         break
       default: {
         const suggestion = findClosestCommand(cmd)
-        pushLine(`<span class="text-red-400">bash: ${escapeHtml(cmd)}: command not found</span>`)
+        pushLine(`<span class="text-red-400">sh: ${escapeHtml(cmd)}: command not found</span>`)
         if (suggestion) {
           pushLine(`<span class="text-gray-400">Did you mean: <span class="text-term-user">${suggestion}</span>?</span>`)
         }

@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import urllib.request
 
 import structlog
 from flask import Blueprint, jsonify, current_app
@@ -11,6 +12,8 @@ from app import _stats
 logger = structlog.get_logger(__name__)
 
 health_bp = Blueprint('health', __name__)
+
+_NODE_EXPORTER_URL = os.environ.get("NODE_EXPORTER_URL", "").rstrip("/")
 
 
 def _read_os_info():
@@ -35,6 +38,90 @@ def _read_vm_rss():
     except (OSError, IOError, ValueError):
         pass
     return None
+
+
+def _query_node_exporter():
+    """Fetch host-level stats from node_exporter /metrics. Returns dict or None."""
+    if not _NODE_EXPORTER_URL:
+        return None
+    try:
+        with urllib.request.urlopen(f"{_NODE_EXPORTER_URL}/metrics", timeout=2) as resp:
+            text = resp.read().decode("utf-8")
+    except Exception:
+        logger.warning("node_exporter_unreachable", url=_NODE_EXPORTER_URL)
+        return None
+
+    result = {}
+    for line in text.splitlines():
+        if line.startswith("#") or not line.strip():
+            continue
+        try:
+            if line.startswith("node_boot_time_seconds "):
+                result["boot_time"] = float(line.split()[1])
+            elif line.startswith("node_memory_MemTotal_bytes "):
+                result["mem_total"] = float(line.split()[1])
+            elif line.startswith("node_memory_MemAvailable_bytes "):
+                result["mem_available"] = float(line.split()[1])
+            elif line.startswith("node_filesystem_size_bytes{") and 'mountpoint="/"' in line:
+                result["fs_size"] = float(line.split()[-1])
+            elif line.startswith("node_filesystem_avail_bytes{") and 'mountpoint="/"' in line:
+                result["fs_avail"] = float(line.split()[-1])
+            elif line.startswith("node_load1 "):
+                result["load_1min"] = float(line.split()[1])
+        except (IndexError, ValueError):
+            pass
+
+    return result or None
+
+
+@health_bp.route("/api/server-info")
+def server_info():
+    node = _query_node_exporter()
+
+    # Uptime: system boot time from node_exporter, else Flask process start
+    if node and "boot_time" in node:
+        uptime_seconds = round(time.time() - node["boot_time"], 1)
+    else:
+        uptime_seconds = round(time.time() - _stats["start_time"], 1)
+
+    # Disk: host filesystem from node_exporter, else container statvfs
+    disk_used_percent = None
+    if node and "fs_size" in node and "fs_avail" in node and node["fs_size"] > 0:
+        disk_used_percent = round((node["fs_size"] - node["fs_avail"]) / node["fs_size"] * 100, 1)
+    else:
+        try:
+            stat = os.statvfs("/")
+            total = stat.f_frsize * stat.f_blocks
+            free = stat.f_frsize * stat.f_bavail
+            if total > 0:
+                disk_used_percent = round((total - free) / total * 100, 1)
+        except (OSError, AttributeError):
+            pass
+
+    # Memory: host total/used from node_exporter, else process RSS
+    memory_total_mb = None
+    memory_used_mb = None
+    if node and "mem_total" in node:
+        memory_total_mb = round(node["mem_total"] / (1024 * 1024))
+        if "mem_available" in node:
+            memory_used_mb = round((node["mem_total"] - node["mem_available"]) / (1024 * 1024))
+    else:
+        rss = _read_vm_rss()
+        if rss is not None:
+            memory_used_mb = round(rss / (1024 * 1024), 1)
+
+    load_1min = None
+    if node and "load_1min" in node:
+        load_1min = round(node["load_1min"], 2)
+
+    return jsonify({
+        "uptime_seconds": uptime_seconds,
+        "request_count": _stats["requests"],
+        "disk_used_percent": disk_used_percent,
+        "memory_total_mb": memory_total_mb,
+        "memory_used_mb": memory_used_mb,
+        "load_1min": load_1min,
+    })
 
 
 @health_bp.route("/api/admin/health")
