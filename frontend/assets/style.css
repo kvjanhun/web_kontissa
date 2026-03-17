@@ -58,8 +58,12 @@
   --color-accent: #ff643e;
   --color-accent-soft: #fff0eb;
   --color-term-bg: #0a0a0a;
-  --color-term-user: #7eda28;
-  --color-term-dir: #6294cd;
+  --color-term-user: #ff643e;
+  --color-term-dir: #a8a29e;
+  --color-term-amber: #d4a56a;
+  --color-term-sage: #8aaa9e;
+  --color-term-rose: #c49080;
+  --color-term-sand: #c8b89a;
   --font-sans: "DM Sans", sans-serif;
   --font-mono: "Ubuntu Mono", monospace;
 }

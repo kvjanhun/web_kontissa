@@ -101,22 +101,21 @@ onUnmounted(() => {
           <h2 class="text-base font-semibold tracking-wide uppercase m-0" :style="{ color: 'var(--color-accent, #ff643e)' }">
             {{ title }}
           </h2>
-          <div v-if="expandable" class="flex items-center gap-1.5">
-            <span
-              v-if="!isOpen"
-              class="text-xs"
-              :style="{ color: 'var(--color-text-tertiary)' }"
-            >{{ summary || 'Read more' }}</span>
-            <svg
-              class="shrink-0 transition-transform duration-300"
-              :class="{ 'rotate-180': isOpen }"
-              width="14" height="14" viewBox="0 0 16 16" fill="none"
-              :style="{ color: 'var(--color-text-tertiary)' }"
-            >
-              <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            </svg>
-          </div>
+          <svg
+            v-if="expandable"
+            class="shrink-0 transition-transform duration-300"
+            :class="{ 'rotate-180': isOpen }"
+            width="14" height="14" viewBox="0 0 16 16" fill="none"
+            :style="{ color: 'var(--color-text-tertiary)' }"
+          >
+            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </div>
+        <p
+          v-if="expandable && !isOpen && summary"
+          class="text-xs mt-1 mb-0 line-clamp-2"
+          :style="{ color: 'var(--color-text-tertiary)' }"
+        >{{ summary }}</p>
       </div>
     </component>
 

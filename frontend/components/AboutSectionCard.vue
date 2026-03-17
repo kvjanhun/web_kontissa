@@ -7,7 +7,7 @@ const props = defineProps({
 })
 
 // Strip markdown syntax and truncate for summary preview
-function summarize(md, maxLen = 80) {
+function summarize(md, maxLen = 100) {
   const text = md.replace(/[*_`#>~\-+]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim()
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
 }
