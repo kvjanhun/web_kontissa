@@ -54,7 +54,7 @@ class TestRateLimit:
         from app import limiter
         limiter.enabled = True
         try:
-            for _ in range(5):
+            for _ in range(3):
                 client.post("/api/login", json={"email": "x@x.com", "password": "x"})
             res = client.post("/api/login", json={"email": "x@x.com", "password": "x"})
             assert res.status_code == 429

@@ -9,7 +9,7 @@ logger = structlog.get_logger(__name__)
 
 
 @auth_bp.route("/api/login", methods=["POST"])
-@limiter.limit("5/minute")
+@limiter.limit("3/minute")
 def api_login():
     data = request.get_json()
     if not data:

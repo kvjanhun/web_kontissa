@@ -17,7 +17,7 @@ def track_pageview():
         return jsonify({"error": "path is required"}), 400
 
     path = data["path"]
-    if not path.startswith("/") or len(path) > 200:
+    if not path.startswith("/") or len(path.encode("utf-8")) > 200:
         return jsonify({"error": "path must start with / and be at most 200 chars"}), 400
 
     # Session-based dedup: only count once per browser session per path

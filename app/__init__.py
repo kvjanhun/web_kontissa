@@ -28,7 +28,16 @@ app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URI", "sqlite:////app/data/site.db"
 )
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
-app.secret_key = os.environ.get("SECRET_KEY", "dev-only-not-for-production")
+app.config["SESSION_COOKIE_SECURE"] = True
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+import sys as _sys
+app.secret_key = os.environ.get("SECRET_KEY")
+if not app.secret_key:
+    if "pytest" in _sys.modules:
+        app.secret_key = "dev-only-not-for-production"
+    else:
+        raise ValueError("SECRET_KEY environment variable is required. Set it in .env.")
 
 db.init_app(app)
 
