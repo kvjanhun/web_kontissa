@@ -1,6 +1,9 @@
+import structlog
 from flask import Blueprint, jsonify, request
 from cowsay import get_output_string, char_names, CHARS
 from cowsay.main import generate_char
+
+logger = structlog.get_logger(__name__)
 
 cowsay_bp = Blueprint('cowsay', __name__)
 
@@ -57,8 +60,9 @@ def cowsay_route():
             output = get_output_string(character, message)
 
         return jsonify({"output": output})
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    except Exception:
+        logger.exception("cowsay_error")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @cowsay_bp.route("/api/cowsay/characters")
