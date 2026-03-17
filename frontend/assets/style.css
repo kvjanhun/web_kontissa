@@ -64,6 +64,7 @@
   --color-term-sage: #8aaa9e;
   --color-term-rose: #c49080;
   --color-term-sand: #c8b89a;
+  --color-term-error: #d45c5c;
   --font-sans: "DM Sans", sans-serif;
   --font-mono: "Ubuntu Mono", monospace;
 }
