@@ -6,11 +6,13 @@ const props = defineProps({
   delay: { type: Number, default: 0 }
 })
 
-// Strip HTML and truncate for summary preview
-function summarize(html, maxLen = 80) {
-  const text = html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
+// Strip markdown syntax and truncate for summary preview
+function summarize(md, maxLen = 80) {
+  const text = md.replace(/[*_`#>~\-+]/g, '').replace(/\[([^\]]+)\]\([^)]+\)/g, '$1').replace(/\s+/g, ' ').trim()
   return text.length > maxLen ? text.slice(0, maxLen) + '...' : text
 }
+
+const renderedContent = computed(() => renderMarkdown(props.section.content))
 
 // Parse "label: value" lines for 'currently' type
 const currentlyItems = computed(() => {
@@ -119,7 +121,7 @@ const isExpandable = computed(() => props.section.section_type === 'text' && pro
       v-else
       class="section-content text-sm leading-relaxed"
       :style="{ color: 'var(--color-text-primary)' }"
-      v-html="section.content"
+      v-html="renderedContent"
     ></div>
   </AboutCard>
 </template>
@@ -137,6 +139,20 @@ const isExpandable = computed(() => props.section.section_type === 'text' && pro
 
 .section-content :deep(p + p) {
   margin-top: 0.75em;
+}
+.section-content :deep(ul),
+.section-content :deep(ol) {
+  margin: 0.5em 0 0.5em 1.25em;
+}
+.section-content :deep(li) {
+  margin: 0.25em 0;
+}
+.section-content :deep(code) {
+  font-family: var(--font-mono);
+  background: var(--color-bg-tertiary);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
 }
 .section-content :deep(a) {
   color: var(--color-accent, #ff643e);

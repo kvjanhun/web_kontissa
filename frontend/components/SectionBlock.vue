@@ -9,6 +9,8 @@ const pills = computed(() => {
   return props.section.content.split(',').map(s => s.trim()).filter(Boolean)
 })
 
+const renderedContent = computed(() => renderMarkdown(props.section.content))
+
 const currentlyItems = computed(() => {
   if (props.section.section_type !== 'currently') return []
   return props.section.content.split('\n').map(line => {
@@ -93,13 +95,27 @@ const currentlyItems = computed(() => {
       <h2 class="text-xl font-medium m-0 pb-1">{{ section.title }}</h2>
       <div :style="{ width: '3rem', height: '2px', background: 'var(--color-accent, #ff643e)', opacity: 0.6 }"></div>
     </div>
-    <div class="section-content px-5 pb-4" v-html="section.content"></div>
+    <div class="section-content px-5 pb-4" v-html="renderedContent"></div>
   </article>
 </template>
 
 <style scoped>
 .section-content :deep(p + p) {
   margin-top: 0.75em;
+}
+.section-content :deep(ul),
+.section-content :deep(ol) {
+  margin: 0.5em 0 0.5em 1.25em;
+}
+.section-content :deep(li) {
+  margin: 0.25em 0;
+}
+.section-content :deep(code) {
+  font-family: var(--font-mono);
+  background: var(--color-bg-tertiary);
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  font-size: 0.9em;
 }
 .quote-mark {
   font-size: 4rem;

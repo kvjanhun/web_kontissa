@@ -28,7 +28,7 @@ const PLACEMENT_OPTIONS = [
 ]
 
 const PLACEHOLDERS = {
-  text: 'Content (HTML)',
+  text: 'Content (Markdown). Use **bold**, *italic*, [link text](url). Blank lines create new paragraphs.',
   pills: 'Comma-separated values, e.g. Python, Flask, Vue.js',
   quote: 'A short tagline or quote',
   currently: 'One item per line, e.g.\nPlaying: Elden Ring\nReading: SICP',
