@@ -142,7 +142,7 @@ async function handleWeather() {
     const res = await fetch('/api/weather')
     const data = await res.json()
     if (data.error) {
-      pushLine('<span class="text-red-400">Weather data unavailable</span>')
+      pushLine('<span class="text-term-error">Weather data unavailable</span>')
       return
     }
     const temp = data.temperature != null ? Math.round(data.temperature) : '?'
@@ -164,7 +164,7 @@ async function handleWeather() {
       `<div class="text-gray-500 text-xs">Helsinki-Vantaa (FMI)</div>`
     )
   } catch {
-    pushLine('<span class="text-red-400">Weather data unavailable</span>')
+    pushLine('<span class="text-term-error">Weather data unavailable</span>')
   }
 }
 
@@ -276,7 +276,7 @@ async function handleCowsay(argsArray, think = false) {
       const data = await res.json()
       pushLine(`<span class="text-gray-300">${escapeHtml(data.characters.join('  '))}</span>`)
     } catch {
-      pushLine('<span class="text-red-400">Error fetching character list</span>')
+      pushLine('<span class="text-term-error">Error fetching character list</span>')
     }
     return
   }
@@ -291,12 +291,12 @@ async function handleCowsay(argsArray, think = false) {
     const res = await fetch(`/api/cowsay?${params}`)
     const data = await res.json()
     if (data.error) {
-      pushLine(`<span class="text-red-400">${escapeHtml(data.error)}</span>`)
+      pushLine(`<span class="text-term-error">${escapeHtml(data.error)}</span>`)
       return
     }
     pushLine(`<pre class="font-mono text-sm whitespace-pre m-0">${escapeHtml(data.output)}</pre>`)
   } catch {
-    pushLine('<span class="text-red-400">Error fetching cowsay</span>')
+    pushLine('<span class="text-term-error">Error fetching cowsay</span>')
   }
 }
 
@@ -366,7 +366,7 @@ async function executeCommand(input) {
     try {
       const text = getCommandText(leftCmd, leftArgs)
       if (text === null) {
-        pushLine(`<span class="text-red-400">sh: ${escapeHtml(leftCmd)}: cannot pipe output</span>`)
+        pushLine(`<span class="text-term-error">sh: ${escapeHtml(leftCmd)}: cannot pipe output</span>`)
         return
       }
       // Prepend piped text to cowsay args (flags first, then text)
@@ -417,9 +417,9 @@ async function executeCommand(input) {
         break
       default: {
         const suggestion = findClosestCommand(cmd)
-        pushLine(`<span class="text-red-400">sh: ${escapeHtml(cmd)}: command not found</span>`)
+        pushLine(`<span class="text-term-error">sh: ${escapeHtml(cmd)}: command not found</span>`)
         if (suggestion) {
-          pushLine(`<span class="text-gray-400">Did you mean: <span class="text-term-user">${suggestion}</span>?</span>`)
+          pushLine(`<span class="text-gray-400">Did you mean: <span class="text-term-amber">${suggestion}</span>?</span>`)
         }
         break
       }
