@@ -19,10 +19,10 @@ const emit = defineEmits(['close'])
         style="background: var(--color-bg-primary); border: 1px solid var(--color-border);"
         role="dialog"
         aria-modal="true"
-        aria-label="Säännöt"
+        aria-labelledby="rules-modal-title"
       >
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-semibold" style="color: var(--color-text-primary);">Ohjeet</h2>
+          <h2 id="rules-modal-title" class="text-lg font-semibold" style="color: var(--color-text-primary);">Ohjeet</h2>
           <button
             @click="emit('close')"
             class="p-1 rounded hover:bg-white/10 text-xl leading-none"

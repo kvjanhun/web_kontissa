@@ -80,6 +80,7 @@ onMounted(() => {
       />
       <select
         v-model="selectedCategory"
+        :aria-label="t('recipes.allCategories')"
         class="px-4 py-2 rounded-lg text-sm outline-none"
         :style="{
           backgroundColor: 'var(--color-input-bg)',

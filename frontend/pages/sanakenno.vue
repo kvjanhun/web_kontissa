@@ -571,7 +571,7 @@ onUnmounted(() => {
           @click="showHints = !showHints"
           :aria-expanded="showHints"
         >
-          <span v-html="HINT_SVG.bulb" class="inline-block" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
+          <span v-html="HINT_SVG.bulb" class="inline-block" aria-hidden="true" style="vertical-align: -0.15em;" /> Avut {{ showHints ? '▲' : '▼' }}
         </button>
         <div v-if="showHints" class="mt-2 p-3 rounded-lg text-sm space-y-3" style="background: var(--color-bg-secondary); border: 1px solid var(--color-border);">
 
@@ -658,6 +658,8 @@ onUnmounted(() => {
         class="text-center text-2xl mb-2 min-h-[2.5rem] font-light"
         :class="{ 'word-shake': wordShake }"
         style="font-family: var(--font-mono); letter-spacing: 0.15em;"
+        aria-live="polite"
+        aria-atomic="true"
       >
         <template v-if="currentWord">
           <template v-for="(c, i) in currentWordChars" :key="i">
@@ -771,6 +773,7 @@ onUnmounted(() => {
           <button
             v-if="foundWords.size > 6 || showAllFoundWords"
             @click="showAllFoundWords = !showAllFoundWords"
+            :aria-expanded="showAllFoundWords"
             class="text-xs"
             style="color: var(--color-text-tertiary); background: none; border: none; cursor: pointer; padding: 0;"
           >

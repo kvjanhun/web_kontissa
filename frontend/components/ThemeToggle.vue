@@ -11,6 +11,7 @@ const { t } = useI18nStore()
     class="p-2 rounded-lg transition-colors duration-200 hover:opacity-80"
     :style="{ color: 'var(--color-accent, #ff643e)' }"
     :aria-label="isDark ? t('theme.switchToLight') : t('theme.switchToDark')"
+    :aria-pressed="isDark"
   >
     <!-- Sun icon (shown in dark mode) -->
     <svg v-if="isDark" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="size-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
