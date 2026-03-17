@@ -59,6 +59,8 @@ function handleDropdownKeydown(e) {
             @click="toggleMenu"
             :aria-label="t('nav.toggleMenu')"
             :aria-expanded="menuOpen"
+            aria-haspopup="true"
+            aria-controls="main-nav"
           >
             <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
               <path v-if="!menuOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
@@ -71,6 +73,7 @@ function handleDropdownKeydown(e) {
       <!-- Dropdown nav -->
       <nav
         v-if="menuOpen"
+        id="main-nav"
         class="absolute top-full right-0 flex flex-col py-2 rounded-br-lg min-w-33 text-right"
         :style="{
           backgroundColor: 'var(--color-bg-primary)',

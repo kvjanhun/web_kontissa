@@ -36,6 +36,16 @@ function onKeydown(e) {
 }
 
 onMounted(() => {
+  const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (prefersReducedMotion) {
+    visible.value = true
+    if (props.expandable) {
+      document.addEventListener('click', onClickOutside)
+      document.addEventListener('keydown', onKeydown)
+    }
+    return
+  }
+
   const observer = new IntersectionObserver(
     ([entry]) => {
       if (entry.isIntersecting) {
