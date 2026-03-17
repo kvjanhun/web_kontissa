@@ -62,7 +62,7 @@ web_kontissa/
 
 ```bash
 # Terminal 1 — Flask API
-DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
+SECRET_KEY=dev FLASK_DEBUG=1 DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
 
 # Terminal 2 — Nuxt dev server
 cd frontend && npm run dev
