@@ -75,6 +75,11 @@
   "admin.created": "Section created",
   "admin.updated": "Section updated",
   "admin.deleted": "Section deleted",
+  "admin.hidden": "Section hidden",
+  "admin.restored": "Section restored",
+  "admin.hide": "Hide",
+  "admin.restore": "Restore",
+  "admin.hiddenSections": "Hidden sections",
 
   "recipes.heading": "Recipes",
   "recipes.newRecipe": "New Recipe",

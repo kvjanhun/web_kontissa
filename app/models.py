@@ -37,6 +37,7 @@ class Section(db.Model):
     position = db.Column(db.Integer, nullable=True, default=0)
     collapsible = db.Column(db.Boolean, nullable=False, default=False)
     locale = db.Column(db.String(5), nullable=False, default='en')
+    hidden = db.Column(db.Boolean, nullable=False, default=False)
 
     __table_args__ = (
         db.UniqueConstraint('slug', 'locale', name='uq_section_slug_locale'),
@@ -52,6 +53,7 @@ class Section(db.Model):
             "position": self.position,
             "collapsible": self.collapsible,
             "locale": self.locale,
+            "hidden": self.hidden,
         }
 
 

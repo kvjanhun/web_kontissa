@@ -2,7 +2,7 @@ import os
 from flask import Blueprint, jsonify, redirect, request, url_for, Response, send_from_directory
 from flask_login import current_user
 from .models import db, Section
-from .utils import get_latest_commit_date
+from .utils import get_latest_commit_date, get_project_stats
 from .decorators import admin_required
 from datetime import datetime
 from . import limiter
@@ -20,16 +20,32 @@ def index():
 def legacy_index():
     return redirect(url_for("core.index"), code=301)
 
-VALID_SECTION_TYPES = ("text", "pills", "quote", "currently", "intro", "project")
+VALID_SECTION_TYPES = ("text", "pills", "quote", "currently", "intro", "project", "git_stats", "timeline")
 
 @core_bp.route("/api/sections")
 def api_sections():
     locale = request.args.get("locale", "en").strip()
-    query = Section.query
+    include_hidden = request.args.get("include_hidden", "0").strip() == "1"
+
+    if include_hidden:
+        if not current_user.is_authenticated or current_user.role != "admin":
+            return jsonify({"error": "Admin required"}), 403
+        query = Section.query
+    else:
+        query = Section.query.filter_by(hidden=False)
+
     if locale:
         query = query.filter_by(locale=locale)
     sections = query.order_by(Section.position.asc(), Section.id.asc()).all()
     return jsonify([s.to_dict() for s in sections])
+
+@core_bp.route("/api/project-stats")
+def api_project_stats():
+    stats = get_project_stats()
+    if stats is None:
+        return jsonify({"error": "Stats unavailable"}), 503
+    return jsonify(stats)
+
 
 @core_bp.route("/api/meta")
 def api_meta():
@@ -80,7 +96,8 @@ def api_create_section():
     section_type = data.get("section_type", "text").strip()
     locale = data.get("locale", "en").strip()
 
-    if not title or not slug or not content:
+    # content is optional for git_stats (description only) but required for all other types
+    if not title or not slug or (not content and section_type != "git_stats"):
         return jsonify({"error": "title, slug, and content are required"}), 400
 
     if section_type not in VALID_SECTION_TYPES:
@@ -136,6 +153,8 @@ def api_update_section(section_id):
         section.locale = locale
     if "collapsible" in data:
         section.collapsible = bool(data["collapsible"])
+    if "hidden" in data:
+        section.hidden = bool(data["hidden"])
     if "position" in data:
         position = data["position"]
         if not isinstance(position, int) or position < 0 or position > 29:

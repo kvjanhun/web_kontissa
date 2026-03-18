@@ -53,7 +53,7 @@ const byType = computed(() => {
 
 // Card sections: project, currently, text — positioned by number ranges
 // 0–9 = full-width row, 10–19 = left column, 20–29 = right column
-const cardTypes = new Set(['project', 'currently', 'text'])
+const cardTypes = new Set(['project', 'currently', 'text', 'git_stats', 'timeline'])
 const cardSections = computed(() =>
   sections.value
     .filter(s => cardTypes.has(s.section_type))
@@ -78,6 +78,7 @@ const techCategories = computed(() => {
 
 const quoteText = computed(() => byType.value['quote']?.content || '')
 const introText = computed(() => byType.value['intro']?.content || '')
+
 
 </script>
 
@@ -142,33 +143,31 @@ const introText = computed(() => byType.value['intro']?.content || '')
 
       <!-- Full-width cards (position 0–9) -->
       <div v-if="fullWidthCards.length" class="space-y-4 mb-4">
-        <AboutSectionCard
-          v-for="(section, i) in fullWidthCards"
-          :key="section.id"
-          :section="section"
-          :delay="300 + i * 50"
-        />
+        <template v-for="(section, i) in fullWidthCards" :key="section.id">
+          <GitStatsSection v-if="section.section_type === 'git_stats'" :section="section" :delay="300 + i * 50" />
+          <TimelineSection v-else-if="section.section_type === 'timeline'" :section="section" :delay="300 + i * 50" />
+          <AboutSectionCard v-else :section="section" :delay="300 + i * 50" />
+        </template>
       </div>
 
       <!-- Two-column grid (position 10–19 left, 20–29 right) -->
       <div v-if="leftColumnCards.length || rightColumnCards.length" class="bento-grid">
         <div class="space-y-4">
-          <AboutSectionCard
-            v-for="(section, i) in leftColumnCards"
-            :key="section.id"
-            :section="section"
-            :delay="400 + i * 50"
-          />
+          <template v-for="(section, i) in leftColumnCards" :key="section.id">
+            <GitStatsSection v-if="section.section_type === 'git_stats'" :section="section" :delay="400 + i * 50" :compact="true" />
+            <TimelineSection v-else-if="section.section_type === 'timeline'" :section="section" :delay="400 + i * 50" />
+            <AboutSectionCard v-else :section="section" :delay="400 + i * 50" />
+          </template>
         </div>
         <div class="space-y-4">
-          <AboutSectionCard
-            v-for="(section, i) in rightColumnCards"
-            :key="section.id"
-            :section="section"
-            :delay="400 + i * 50"
-          />
+          <template v-for="(section, i) in rightColumnCards" :key="section.id">
+            <GitStatsSection v-if="section.section_type === 'git_stats'" :section="section" :delay="400 + i * 50" :compact="true" />
+            <TimelineSection v-else-if="section.section_type === 'timeline'" :section="section" :delay="400 + i * 50" />
+            <AboutSectionCard v-else :section="section" :delay="400 + i * 50" />
+          </template>
         </div>
       </div>
+
     </template>
   </div>
 </template>

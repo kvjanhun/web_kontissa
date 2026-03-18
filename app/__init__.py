@@ -83,6 +83,7 @@ def _run_migrations():
     migrations = [
         "ALTER TABLE section ADD COLUMN locale VARCHAR(5) NOT NULL DEFAULT 'en'",
         "ALTER TABLE section ADD COLUMN collapsible BOOLEAN NOT NULL DEFAULT 0",
+        "ALTER TABLE section ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0",
     ]
     for sql in migrations:
         try:
