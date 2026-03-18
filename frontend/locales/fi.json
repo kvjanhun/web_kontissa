@@ -75,6 +75,11 @@
   "admin.created": "Osio luotu",
   "admin.updated": "Osio p\u00e4ivitetty",
   "admin.deleted": "Osio poistettu",
+  "admin.hidden": "Osio piilotettu",
+  "admin.restored": "Osio palautettu",
+  "admin.hide": "Piilota",
+  "admin.restore": "Palauta",
+  "admin.hiddenSections": "Piilotetut osiot",
 
   "recipes.heading": "Reseptit",
   "recipes.newRecipe": "Uusi resepti",

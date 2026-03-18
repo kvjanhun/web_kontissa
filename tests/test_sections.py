@@ -274,6 +274,50 @@ class TestSectionType:
         assert any(s["section_type"] == "pills" for s in data)
 
 
+class TestHiddenSections:
+    def test_hidden_section_excluded_from_public(self, app, client, sample_section):
+        from app.models import db, Section
+        with app.app_context():
+            s = db.session.get(Section, sample_section["id"])
+            s.hidden = True
+            db.session.commit()
+        res = client.get("/api/sections")
+        assert res.get_json() == []
+
+    def test_include_hidden_requires_admin(self, client, sample_section):
+        res = client.get("/api/sections?include_hidden=1")
+        assert res.status_code == 403
+
+    def test_include_hidden_as_admin(self, app, logged_in_admin, sample_section):
+        from app.models import db, Section
+        with app.app_context():
+            s = db.session.get(Section, sample_section["id"])
+            s.hidden = True
+            db.session.commit()
+        res = logged_in_admin.get("/api/sections?include_hidden=1")
+        data = res.get_json()
+        assert len(data) == 1
+        assert data[0]["hidden"] is True
+
+    def test_toggle_hidden_via_put(self, logged_in_admin, sample_section):
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={"hidden": True})
+        assert res.status_code == 200
+        assert res.get_json()["hidden"] is True
+
+        res = logged_in_admin.put(f"/api/sections/{sample_section['id']}", json={"hidden": False})
+        assert res.status_code == 200
+        assert res.get_json()["hidden"] is False
+
+    def test_new_section_types_git_stats_and_timeline(self, logged_in_admin):
+        for stype in ("git_stats", "timeline"):
+            res = logged_in_admin.post("/api/sections", json={
+                "title": stype, "slug": stype, "content": "x",
+                "section_type": stype,
+            })
+            assert res.status_code == 201, f"{stype} creation failed"
+            assert res.get_json()["section_type"] == stype
+
+
 class TestDeleteSection:
     def test_delete_as_admin(self, logged_in_admin, sample_section):
         res = logged_in_admin.delete(f"/api/sections/{sample_section['id']}")

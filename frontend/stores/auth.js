@@ -7,13 +7,18 @@ export const useAuthStore = defineStore('auth', () => {
   const isAuthenticated = computed(() => user.value !== null)
 
   async function login(email, password) {
-    const res = await fetch('/api/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data.error || 'Login failed')
+    let res, data
+    try {
+      res = await fetch('/api/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      data = await res.json()
+    } catch {
+      throw new Error('Unable to reach the server')
+    }
+    if (!res.ok) throw new Error(typeof data?.error === 'string' ? data.error : 'Login failed')
     user.value = data
     return data
   }

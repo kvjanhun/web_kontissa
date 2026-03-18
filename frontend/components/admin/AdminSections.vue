@@ -6,6 +6,7 @@ const editingId = ref(null)
 const error = ref('')
 const success = ref('')
 const activeLocale = ref('en')
+const showHiddenPanel = ref(false)
 
 const TYPE_COLORS = {
   text: 'bg-stone-500/20 text-stone-400',
@@ -14,12 +15,14 @@ const TYPE_COLORS = {
   currently: 'bg-green-500/20 text-green-400',
   intro: 'bg-amber-500/20 text-amber-400',
   project: 'bg-cyan-500/20 text-cyan-400',
+  git_stats: 'bg-indigo-500/20 text-indigo-400',
+  timeline: 'bg-violet-500/20 text-violet-400',
 }
 
-const SECTION_TYPES = ['text', 'pills', 'quote', 'currently', 'intro', 'project']
+const SECTION_TYPES = ['text', 'pills', 'quote', 'currently', 'intro', 'project', 'git_stats', 'timeline']
 
 // Card types that use the position-based layout (0–9 full, 10–19 left, 20–29 right)
-const CARD_TYPES = new Set(['text', 'currently', 'project'])
+const CARD_TYPES = new Set(['text', 'currently', 'project', 'git_stats', 'timeline'])
 
 const PLACEMENT_OPTIONS = [
   { value: 'full', label: 'Full width', min: 0, max: 9 },
@@ -34,6 +37,8 @@ const PLACEHOLDERS = {
   currently: 'One item per line, e.g.\nPlaying: Elden Ring\nReading: SICP',
   intro: 'Plain text intro paragraph',
   project: 'One project per line: Name|URL|Description\ne.g. Sanakenno|/sanakenno|Finnish word puzzle game',
+  git_stats: 'Optional description shown below the title (leave empty to show only the live stats grid)',
+  timeline: 'One entry per line: YYYY-MM-DD|Title|Description\ne.g.\n2025-04-06|Born on a NUC|Flask + Docker from day one',
 }
 
 const form = ref({ title: '', slug: '', content: '', section_type: 'text', placement: 'left', collapsible: false })
@@ -51,6 +56,10 @@ function switchLocale(loc) {
   loadSections()
 }
 
+// Visible and hidden sections
+const visibleSections = computed(() => sections.value.filter(s => !s.hidden))
+const hiddenSections = computed(() => sections.value.filter(s => s.hidden))
+
 // Determine placement label from position number
 function placementFromPosition(pos) {
   if (pos == null || pos < 10) return 'full'
@@ -58,12 +67,12 @@ function placementFromPosition(pos) {
   return 'right'
 }
 
-// Find next available position in a placement range, returns null if full
+// Find next available position in a placement range (only checks visible sections)
 function nextPosition(placement, excludeId = null) {
   const opt = PLACEMENT_OPTIONS.find(o => o.value === placement)
   if (!opt) return null
   const used = new Set(
-    sections.value
+    visibleSections.value
       .filter(s => s.id !== excludeId && (s.position ?? 0) >= opt.min && (s.position ?? 0) <= opt.max)
       .map(s => s.position)
   )
@@ -77,8 +86,13 @@ function isCardType(type) {
   return CARD_TYPES.has(type)
 }
 
+// Types that use a simple order/position number (not the bento placement system)
+function isOrderedType(type) {
+  return type === 'pills'
+}
+
 async function loadSections() {
-  const res = await fetch(`/api/sections?locale=${activeLocale.value}`)
+  const res = await fetch(`/api/sections?locale=${activeLocale.value}&include_hidden=1`)
   sections.value = await res.json()
 }
 
@@ -123,7 +137,6 @@ async function saveEdit(id) {
   const payload = { ...editForm.value }
   if (payload.section_type !== 'text') delete payload.collapsible
   if (isCardType(payload.section_type)) {
-    // Keep current position if placement didn't change, otherwise assign next available
     const section = sections.value.find(s => s.id === id)
     const oldPlacement = placementFromPosition(section?.position)
     if (payload.placement !== oldPlacement) {
@@ -156,11 +169,22 @@ async function deleteSection(id) {
   await loadSections()
 }
 
+async function toggleHidden(section) {
+  clearMessages()
+  const res = await fetch(`/api/sections/${section.id}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ hidden: !section.hidden })
+  })
+  if (!res.ok) { const data = await res.json(); error.value = data.error; return }
+  success.value = section.hidden ? t('admin.restored') : t('admin.hidden')
+  await loadSections()
+}
+
 function placeholderFor(type) {
   return PLACEHOLDERS[type] || PLACEHOLDERS.text
 }
 
-// Inline position update — fires on placement dropdown or position number change
 async function updatePosition(section, newPosition) {
   clearMessages()
   if (newPosition < 0) { error.value = 'Position must be >= 0'; return }
@@ -230,7 +254,7 @@ async function toggleCollapsible(section) {
             <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
           </select>
         </div>
-        <textarea v-model="form.content" :placeholder="placeholderFor(form.section_type)" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+        <textarea v-model="form.content" :placeholder="placeholderFor(form.section_type)" :required="form.section_type !== 'git_stats'" rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <div class="flex items-center gap-4">
           <button type="submit" class="bg-accent text-white px-4 py-2 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.addSection') }}</button>
           <label v-if="form.section_type === 'text'" class="flex items-center gap-1.5 text-xs cursor-pointer" :style="{ color: 'var(--color-text-secondary)' }">
@@ -241,9 +265,9 @@ async function toggleCollapsible(section) {
       </form>
     </div>
 
-    <!-- Existing sections -->
+    <!-- Visible sections -->
     <div
-      v-for="section in sections"
+      v-for="section in visibleSections"
       :key="section.id"
       class="p-4 rounded-lg"
       :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }"
@@ -258,7 +282,7 @@ async function toggleCollapsible(section) {
               <span class="text-xs px-1.5 py-0.5 rounded-full" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
             </div>
           </div>
-          <div class="flex gap-2 items-center">
+          <div class="flex gap-2 items-center flex-wrap justify-end">
             <template v-if="isCardType(section.section_type)">
               <select
                 :value="placementFromPosition(section.position)"
@@ -278,7 +302,7 @@ async function toggleCollapsible(section) {
                 :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
               />
             </template>
-            <template v-if="section.section_type === 'pills'">
+            <template v-if="isOrderedType(section.section_type)">
               <span class="text-xs" :style="{ color: 'var(--color-text-tertiary)' }">order</span>
               <input
                 type="number"
@@ -294,6 +318,7 @@ async function toggleCollapsible(section) {
               Collapsible
             </label>
             <button @click="startEdit(section)" class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.edit') }}</button>
+            <button @click="toggleHidden(section)" class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-amber-500/10" :style="{ color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }">{{ t('admin.hide') }}</button>
             <button @click="deleteSection(section.id)" class="text-xs px-3 py-1 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.delete') }}</button>
           </div>
         </div>
@@ -329,6 +354,36 @@ async function toggleCollapsible(section) {
       </form>
     </div>
 
-    <p v-if="!sections.length" class="text-center py-8" :style="{ color: 'var(--color-text-secondary)' }">{{ t('admin.noSections') }}</p>
+    <p v-if="!visibleSections.length" class="text-center py-8" :style="{ color: 'var(--color-text-secondary)' }">{{ t('admin.noSections') }}</p>
+
+    <!-- Hidden sections panel -->
+    <div v-if="hiddenSections.length" class="rounded-lg overflow-hidden" :style="{ border: '1px solid var(--color-border)' }">
+      <button
+        class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium transition-colors duration-200 hover:bg-white/5"
+        :style="{ backgroundColor: 'var(--color-bg-secondary)', color: 'var(--color-text-secondary)' }"
+        @click="showHiddenPanel = !showHiddenPanel"
+      >
+        <span>{{ t('admin.hiddenSections') }} ({{ hiddenSections.length }})</span>
+        <span class="text-xs" :style="{ color: 'var(--color-text-tertiary)' }">{{ showHiddenPanel ? '▲' : '▼' }}</span>
+      </button>
+      <div v-if="showHiddenPanel" class="divide-y" :style="{ borderColor: 'var(--color-border)' }">
+        <div
+          v-for="section in hiddenSections"
+          :key="section.id"
+          class="px-4 py-3 flex items-center justify-between gap-3"
+          :style="{ backgroundColor: 'var(--color-bg-primary)' }"
+        >
+          <div class="min-w-0">
+            <span class="text-sm font-medium mr-2" :style="{ color: 'var(--color-text-primary)' }">{{ section.title }}</span>
+            <span class="text-xs px-1.5 py-0.5 rounded-full" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
+            <p class="text-xs truncate mt-0.5" :style="{ color: 'var(--color-text-tertiary)' }">{{ section.content.substring(0, 120) }}</p>
+          </div>
+          <div class="flex gap-2 shrink-0">
+            <button @click="toggleHidden(section)" class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-green-500/10 text-green-400" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.restore') }}</button>
+            <button @click="deleteSection(section.id)" class="text-xs px-3 py-1 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.delete') }}</button>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
