@@ -198,7 +198,8 @@ const introText = computed(() => byType.value['intro']?.content || '')
   .tech-section {
     flex-direction: row;
     flex-wrap: wrap;
-    gap: 1.25rem 2rem;
+    gap: 0.5rem 2rem;
+    padding: 0.5rem 0;
   }
 }
 .tech-row {

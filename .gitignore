@@ -34,6 +34,9 @@ frontend/playwright/.cache/
 # E2E test database
 app/data/test-e2e.db
 
+# Learning journey docs
+RF_learning_journey.md
+
 # Internal planning docs
 ROADMAP.md
 gemini_review.md
