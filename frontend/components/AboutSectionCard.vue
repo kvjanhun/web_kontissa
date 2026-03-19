@@ -53,22 +53,23 @@ const isExpandable = computed(() => props.section.section_type === 'text' && pro
     <div v-if="section.section_type === 'project'" class="space-y-4">
       <div v-for="proj in projectItems" :key="proj.name" class="project-item">
         <div class="flex items-center gap-2.5 mb-1">
-          <svg class="shrink-0" width="20" height="20" viewBox="0 0 24 24" fill="none" :style="{ color: 'var(--color-accent, #ff643e)' }">
+          <svg class="shrink-0" width="32" height="32" viewBox="0 0 24 24" fill="none" :style="{ color: 'var(--color-accent, #ff643e)' }">
             <!-- puzzle -->
             <template v-if="proj.icon === 'puzzle'">
-              <path d="M12 2L14.5 7H9.5L12 2Z" fill="currentColor" opacity="0.3"/>
-              <path d="M5 8h14v10a2 2 0 01-2 2H7a2 2 0 01-2-2V8z" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <path d="M9 8V6a3 3 0 016 0v2" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/>
-              <circle cx="12" cy="13" r="2" fill="currentColor" opacity="0.5"/>
+              <path d="M5,6 L8,6 A3,3 0 0 1 14,6 L17,6 L17,9 A3,3 0 0 1 17,15 L17,18 L5,18 L5,15 A3,3 0 0 0 5,9 Z" fill="currentColor" opacity="0.10"/>
+              <path d="M5,6 L8,6 A3,3 0 0 1 14,6 L17,6 L17,9 A3,3 0 0 1 17,15 L17,18 L5,18 L5,15 A3,3 0 0 0 5,9 Z" stroke="currentColor" stroke-width="0.75" fill="none" stroke-linejoin="round"/>
             </template>
-            <!-- server -->
-            <template v-else-if="proj.icon === 'server'">
-              <rect x="3" y="4" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <rect x="3" y="10" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <rect x="3" y="16" width="18" height="4" rx="1" stroke="currentColor" stroke-width="1.5" fill="none"/>
-              <circle cx="7" cy="6" r="0.8" fill="currentColor"/>
-              <circle cx="7" cy="12" r="0.8" fill="currentColor"/>
-              <circle cx="7" cy="18" r="0.8" fill="currentColor"/>
+            <!-- browser / website -->
+            <template v-else-if="proj.icon === 'website'">
+              <svg x="0" y="0" width="24" height="24" viewBox="0 -0.08 20 20" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M15.69,4.31H4.31A1.61,1.61,0,0,0,2.7,5.92v8a1.61,1.61,0,0,0,1.61,1.61H15.69a1.61,1.61,0,0,0,1.61-1.61v-8A1.61,1.61,0,0,0,15.69,4.31ZM4.31,4.92H15.69a1,1,0,0,1,1,1v.72H3.31V5.92A1,1,0,0,1,4.31,4.92Zm11.38,10H4.31a1,1,0,0,1-1-1V7.25H16.69v6.67A1,1,0,0,1,15.69,14.92Z"/>
+                <path d="M4.31,6.18A.34.34,0,1,0,4,5.85.34.34,0,0,0,4.31,6.18Z"/>
+                <path d="M5.16,6.18a.34.34,0,1,0-.33-.33A.34.34,0,0,0,5.16,6.18Z"/>
+                <path d="M6,6.18a.34.34,0,1,0-.33-.33A.34.34,0,0,0,6,6.18Z"/>
+                <path d="M11,10.19l-.39.88-.4-.88s0,0-.07-.07,0-.06-.08-.08h0s-.07,0-.11,0a.17.17,0,0,0-.12,0h0s-.06.06-.08.08-.06,0-.08.07l-.39.88-.39-.88A.32.32,0,0,0,8.45,10a.3.3,0,0,0-.15.4L9,12a.38.38,0,0,0,.14.14h0l.12,0,.12,0h0A.38.38,0,0,0,9.53,12l.39-.89.4.89a.38.38,0,0,0,.14.14h0a.28.28,0,0,0,.13,0l.12,0h0a.38.38,0,0,0,.14-.14l.68-1.51a.31.31,0,0,0-.16-.4A.3.3,0,0,0,11,10.19Z"/>
+                <path d="M14.42,10.19l-.39.88-.4-.88s-.05,0-.07-.07,0-.06-.08-.08h0a.17.17,0,0,0-.12,0s-.07,0-.11,0h0s-.05.05-.08.08-.06,0-.07.07l-.4.88-.39-.88a.3.3,0,0,0-.4-.15.3.3,0,0,0-.16.4L12.41,12a.38.38,0,0,0,.14.14h0l.12,0a.28.28,0,0,0,.13,0h0A.38.38,0,0,0,13,12l.4-.89.39.89a.38.38,0,0,0,.14.14h0a.31.31,0,0,0,.13,0l.12,0h0a.41.41,0,0,0,.15-.14L15,10.44a.3.3,0,0,0-.16-.4A.3.3,0,0,0,14.42,10.19Z"/>
+                <path d="M7.56,10.19l-.39.88-.39-.88a.24.24,0,0,0-.08-.06A.23.23,0,0,0,6.62,10h0a.17.17,0,0,0-.12,0s-.07,0-.11,0h0l-.08.08s-.06,0-.07.07l-.4.88-.39-.88A.3.3,0,0,0,5,10a.31.31,0,0,0-.16.4L5.55,12a.38.38,0,0,0,.14.14h0l.12,0a.28.28,0,0,0,.13,0H6A.38.38,0,0,0,6.1,12l.4-.89.39.89a.38.38,0,0,0,.14.14h0l.12,0,.12,0h0A.38.38,0,0,0,7.45,12l.67-1.51A.3.3,0,0,0,8,10,.32.32,0,0,0,7.56,10.19Z"/>
+              </svg>
             </template>
             <!-- globe -->
             <template v-else-if="proj.icon === 'globe'">
