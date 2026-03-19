@@ -2,7 +2,9 @@
 const { logout } = useAuthStore()
 const { t } = useI18nStore()
 const router = useRouter()
+const route = useRoute()
 const menuOpen = ref(false)
+const headerEl = ref(null)
 
 async function handleLogout() {
   await logout()
@@ -24,10 +26,22 @@ function handleDropdownKeydown(e) {
     closeMenu()
   }
 }
+
+function handlePointerDown(e) {
+  if (menuOpen.value && headerEl.value && !headerEl.value.contains(e.target)) {
+    closeMenu()
+  }
+}
+
+onMounted(() => document.addEventListener('pointerdown', handlePointerDown))
+onUnmounted(() => document.removeEventListener('pointerdown', handlePointerDown))
+
+watch(() => route.fullPath, closeMenu)
 </script>
 
 <template>
   <header
+    ref="headerEl"
     class="sticky top-0 z-50"
     :style="{
       backgroundColor: 'var(--color-bg-primary)',
