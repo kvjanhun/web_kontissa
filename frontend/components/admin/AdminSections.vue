@@ -86,9 +86,79 @@ function isCardType(type) {
   return CARD_TYPES.has(type)
 }
 
-// Types that use a simple order/position number (not the bento placement system)
-function isOrderedType(type) {
-  return type === 'pills'
+
+const pillsSections = computed(() =>
+  visibleSections.value
+    .filter(s => s.section_type === 'pills')
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+)
+
+const otherSections = computed(() =>
+  visibleSections.value.filter(s => s.section_type !== 'pills')
+)
+
+const cardGroups = computed(() => {
+  const cards = otherSections.value.filter(s => isCardType(s.section_type))
+  return PLACEMENT_OPTIONS
+    .map(opt => ({
+      ...opt,
+      sections: cards
+        .filter(s => { const pos = s.position ?? 0; return pos >= opt.min && pos <= opt.max })
+        .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    }))
+    .filter(g => g.sections.length > 0)
+})
+
+const singletonSections = computed(() =>
+  otherSections.value.filter(s => !isCardType(s.section_type))
+)
+
+async function moveCard(section, direction) {
+  clearMessages()
+  const placement = placementFromPosition(section.position)
+  const group = cardGroups.value.find(g => g.value === placement)
+  if (!group) return
+  const idx = group.sections.findIndex(s => s.id === section.id)
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= group.sections.length) return
+  const other = group.sections[swapIdx]
+  await Promise.all([
+    fetch(`/api/sections/${section.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: other.position ?? 0 })
+    }),
+    fetch(`/api/sections/${other.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: section.position ?? 0 })
+    })
+  ])
+  await loadSections()
+}
+
+async function movePill(section, direction) {
+  clearMessages()
+  const pills = pillsSections.value
+  const idx = pills.findIndex(s => s.id === section.id)
+  const swapIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (swapIdx < 0 || swapIdx >= pills.length) return
+  const other = pills[swapIdx]
+  const posA = section.position ?? idx
+  const posB = other.position ?? swapIdx
+  await Promise.all([
+    fetch(`/api/sections/${section.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: posB })
+    }),
+    fetch(`/api/sections/${other.id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position: posA })
+    })
+  ])
+  await loadSections()
 }
 
 async function loadSections() {
@@ -265,14 +335,13 @@ async function toggleCollapsible(section) {
       </form>
     </div>
 
-    <!-- Visible sections -->
+    <!-- Singleton sections (quote, intro) -->
     <div
-      v-for="section in visibleSections"
+      v-for="section in singletonSections"
       :key="section.id"
       class="p-4 rounded-lg"
       :style="{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)' }"
     >
-      <!-- View mode -->
       <div v-if="editingId !== section.id">
         <div class="flex justify-between items-start mb-2">
           <div>
@@ -282,41 +351,7 @@ async function toggleCollapsible(section) {
               <span class="text-xs px-1.5 py-0.5 rounded-full" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
             </div>
           </div>
-          <div class="flex gap-2 items-center flex-wrap justify-end">
-            <template v-if="isCardType(section.section_type)">
-              <select
-                :value="placementFromPosition(section.position)"
-                @change="updatePlacement(section, $event.target.value)"
-                class="text-xs px-1.5 py-1 rounded outline-none"
-                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-accent, #ff643e)' }"
-              >
-                <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-              </select>
-              <input
-                type="number"
-                :value="section.position ?? 0"
-                min="0"
-                max="29"
-                @change="updatePosition(section, parseInt($event.target.value))"
-                class="text-xs w-12 px-1.5 py-1 rounded outline-none text-center"
-                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
-              />
-            </template>
-            <template v-if="isOrderedType(section.section_type)">
-              <span class="text-xs" :style="{ color: 'var(--color-text-tertiary)' }">order</span>
-              <input
-                type="number"
-                :value="section.position ?? 0"
-                min="0"
-                @change="updatePosition(section, parseInt($event.target.value))"
-                class="text-xs w-12 px-1.5 py-1 rounded outline-none text-center"
-                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
-              />
-            </template>
-            <label v-if="section.section_type === 'text'" class="flex items-center gap-1 text-xs cursor-pointer" :style="{ color: 'var(--color-text-secondary)' }">
-              <input type="checkbox" :checked="section.collapsible" @change="toggleCollapsible(section)" class="accent-[#ff643e]" />
-              Collapsible
-            </label>
+          <div class="flex gap-2 items-center">
             <button @click="startEdit(section)" class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.edit') }}</button>
             <button @click="toggleHidden(section)" class="text-xs px-3 py-1 rounded transition-colors duration-200 hover:bg-amber-500/10" :style="{ color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }">{{ t('admin.hide') }}</button>
             <button @click="deleteSection(section.id)" class="text-xs px-3 py-1 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.delete') }}</button>
@@ -324,8 +359,6 @@ async function toggleCollapsible(section) {
         </div>
         <p class="text-sm truncate" :style="{ color: 'var(--color-text-secondary)' }">{{ section.content.substring(0, 200) }}</p>
       </div>
-
-      <!-- Edit mode -->
       <form v-else @submit.prevent="saveEdit(section.id)" class="space-y-3">
         <div class="flex flex-col sm:flex-row gap-3">
           <input v-model="editForm.title" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
@@ -333,25 +366,169 @@ async function toggleCollapsible(section) {
           <select v-model="editForm.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
             <option v-for="st in SECTION_TYPES" :key="st" :value="st">{{ st }}</option>
           </select>
-          <select
-            v-if="isCardType(editForm.section_type)"
-            v-model="editForm.placement"
-            class="px-3 py-2 rounded-lg text-sm outline-none"
-            :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"
-          >
-            <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
-          </select>
         </div>
         <textarea v-model="editForm.content" :placeholder="placeholderFor(editForm.section_type)" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
         <div class="flex gap-2 items-center">
           <button type="submit" class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.save') }}</button>
           <button type="button" @click="cancelEdit" class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.cancel') }}</button>
-          <label v-if="editForm.section_type === 'text'" class="flex items-center gap-1.5 text-xs cursor-pointer ml-2" :style="{ color: 'var(--color-text-secondary)' }">
-            <input type="checkbox" v-model="editForm.collapsible" class="accent-[#ff643e]" />
-            Collapsible
-          </label>
         </div>
       </form>
+    </div>
+
+    <!-- Pills sections group -->
+    <div v-if="pillsSections.length" class="rounded-lg overflow-hidden" :style="{ border: '1px solid var(--color-border)' }">
+      <div class="px-4 py-2.5 flex items-center gap-2 text-xs font-medium" :style="{ backgroundColor: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }">
+        <span class="px-1.5 py-0.5 rounded-full bg-blue-500/20 text-blue-400">pills</span>
+        Tech categories
+      </div>
+      <div class="divide-y" :style="{ borderColor: 'var(--color-border)' }">
+        <div
+          v-for="(section, idx) in pillsSections"
+          :key="section.id"
+          :style="{ backgroundColor: 'var(--color-bg-secondary)' }"
+        >
+          <!-- View mode -->
+          <div v-if="editingId !== section.id" class="px-3 py-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="flex flex-col gap-px shrink-0">
+                <button
+                  @click="movePill(section, 'up')"
+                  :disabled="idx === 0"
+                  class="text-xs w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed"
+                  :style="{ color: 'var(--color-text-tertiary)' }"
+                >▲</button>
+                <button
+                  @click="movePill(section, 'down')"
+                  :disabled="idx === pillsSections.length - 1"
+                  class="text-xs w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed"
+                  :style="{ color: 'var(--color-text-tertiary)' }"
+                >▼</button>
+              </div>
+              <span class="text-sm font-medium shrink-0" :style="{ color: 'var(--color-text-primary)' }">{{ section.title }}</span>
+              <span class="text-xs shrink-0 hidden sm:inline" :style="{ color: 'var(--color-text-tertiary)' }">{{ section.slug }}</span>
+              <span class="text-xs truncate flex-1 min-w-0 hidden sm:block" :style="{ color: 'var(--color-text-secondary)' }">{{ section.content }}</span>
+              <div class="flex gap-1 ml-auto shrink-0">
+                <button @click="startEdit(section)" class="text-xs px-2 py-0.5 rounded transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.edit') }}</button>
+                <button @click="toggleHidden(section)" class="text-xs px-2 py-0.5 rounded transition-colors duration-200 hover:bg-amber-500/10" :style="{ color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }">{{ t('admin.hide') }}</button>
+                <button @click="deleteSection(section.id)" class="text-xs px-2 py-0.5 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.delete') }}</button>
+              </div>
+            </div>
+            <div class="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5 pl-6 min-w-0">
+              <span class="text-xs shrink-0" :style="{ color: 'var(--color-text-tertiary)' }">{{ section.slug }}</span>
+              <span class="text-xs truncate flex-1 min-w-[8rem]" :style="{ color: 'var(--color-text-secondary)' }">{{ section.content }}</span>
+            </div>
+          </div>
+          <!-- Edit mode -->
+          <form v-else @submit.prevent="saveEdit(section.id)" class="space-y-3 p-3">
+            <div class="flex flex-col sm:flex-row gap-3">
+              <input v-model="editForm.title" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+              <input v-model="editForm.slug" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+            </div>
+            <textarea v-model="editForm.content" :placeholder="PLACEHOLDERS.pills" required rows="3" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+            <div class="flex gap-2 items-center">
+              <button type="submit" class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.save') }}</button>
+              <button type="button" @click="cancelEdit" class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.cancel') }}</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card sections grouped by placement zone -->
+    <div
+      v-for="group in cardGroups"
+      :key="group.value"
+      class="rounded-lg overflow-hidden"
+      :style="{ border: '1px solid var(--color-border)' }"
+    >
+      <div class="px-4 py-2.5 flex items-center gap-2 text-xs font-medium" :style="{ backgroundColor: 'var(--color-bg-secondary)', borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }">
+        {{ group.label }}
+      </div>
+      <div class="divide-y" :style="{ borderColor: 'var(--color-border)' }">
+        <div
+          v-for="(section, idx) in group.sections"
+          :key="section.id"
+          :style="{ backgroundColor: 'var(--color-bg-secondary)' }"
+        >
+          <!-- View mode -->
+          <div v-if="editingId !== section.id" class="px-3 py-2">
+            <div class="flex items-center gap-2 min-w-0">
+              <div class="flex flex-col gap-px shrink-0">
+                <button
+                  @click="moveCard(section, 'up')"
+                  :disabled="idx === 0"
+                  class="text-xs w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed"
+                  :style="{ color: 'var(--color-text-tertiary)' }"
+                >▲</button>
+                <button
+                  @click="moveCard(section, 'down')"
+                  :disabled="idx === group.sections.length - 1"
+                  class="text-xs w-4 h-4 flex items-center justify-center rounded transition-colors hover:bg-white/10 disabled:opacity-25 disabled:cursor-not-allowed"
+                  :style="{ color: 'var(--color-text-tertiary)' }"
+                >▼</button>
+              </div>
+              <span class="text-sm font-medium shrink-0" :style="{ color: 'var(--color-text-primary)' }">{{ section.title }}</span>
+              <span class="text-xs px-1.5 py-0.5 rounded-full shrink-0 hidden sm:inline-block" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
+              <span class="text-xs truncate flex-1 min-w-0 hidden sm:block" :style="{ color: 'var(--color-text-secondary)' }">{{ section.content.substring(0, 100) }}</span>
+              <select
+                :value="placementFromPosition(section.position)"
+                @change="updatePlacement(section, $event.target.value)"
+                class="text-xs px-1.5 py-0.5 rounded outline-none shrink-0 hidden sm:block"
+                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-accent, #ff643e)' }"
+              >
+                <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+              <label v-if="section.section_type === 'text'" class="items-center gap-1 text-xs cursor-pointer shrink-0 hidden sm:flex" :style="{ color: 'var(--color-text-secondary)' }">
+                <input type="checkbox" :checked="section.collapsible" @change="toggleCollapsible(section)" class="accent-[#ff643e]" />
+                Collapsible
+              </label>
+              <div class="flex gap-1 ml-auto shrink-0">
+                <button @click="startEdit(section)" class="text-xs px-2 py-0.5 rounded transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.edit') }}</button>
+                <button @click="toggleHidden(section)" class="text-xs px-2 py-0.5 rounded transition-colors duration-200 hover:bg-amber-500/10" :style="{ color: 'var(--color-text-tertiary)', border: '1px solid var(--color-border)' }">{{ t('admin.hide') }}</button>
+                <button @click="deleteSection(section.id)" class="text-xs px-2 py-0.5 rounded text-red-400 transition-colors duration-200 hover:bg-red-500/10" :style="{ border: '1px solid var(--color-border)' }">{{ t('admin.delete') }}</button>
+              </div>
+            </div>
+            <div class="sm:hidden flex flex-wrap items-center gap-x-2 gap-y-1 mt-0.5 pl-6 min-w-0">
+              <span class="text-xs px-1.5 py-0.5 rounded-full shrink-0" :class="TYPE_COLORS[section.section_type || 'text']">{{ section.section_type || 'text' }}</span>
+              <span class="text-xs truncate flex-1 min-w-[6rem]" :style="{ color: 'var(--color-text-secondary)' }">{{ section.content.substring(0, 100) }}</span>
+              <select
+                :value="placementFromPosition(section.position)"
+                @change="updatePlacement(section, $event.target.value)"
+                class="text-xs px-1.5 py-0.5 rounded outline-none shrink-0"
+                :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-accent, #ff643e)' }"
+              >
+                <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+              <label v-if="section.section_type === 'text'" class="flex items-center gap-1 text-xs cursor-pointer shrink-0" :style="{ color: 'var(--color-text-secondary)' }">
+                <input type="checkbox" :checked="section.collapsible" @change="toggleCollapsible(section)" class="accent-[#ff643e]" />
+                Collapsible
+              </label>
+            </div>
+          </div>
+          <!-- Edit mode -->
+          <form v-else @submit.prevent="saveEdit(section.id)" class="space-y-3 p-3">
+            <div class="flex flex-col sm:flex-row gap-3">
+              <input v-model="editForm.title" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+              <input v-model="editForm.slug" required class="flex-1 px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }" />
+              <select v-model="editForm.section_type" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
+                <option v-for="st in SECTION_TYPES" :key="st" :value="st">{{ st }}</option>
+              </select>
+              <select v-if="isCardType(editForm.section_type)" v-model="editForm.placement" class="px-3 py-2 rounded-lg text-sm outline-none" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }">
+                <option v-for="opt in PLACEMENT_OPTIONS" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+              </select>
+            </div>
+            <textarea v-model="editForm.content" :placeholder="placeholderFor(editForm.section_type)" required rows="4" class="w-full px-3 py-2 rounded-lg text-sm outline-none resize-y" :style="{ backgroundColor: 'var(--color-bg-primary)', border: '1px solid var(--color-border)', color: 'var(--color-text-primary)' }"></textarea>
+            <div class="flex gap-2 items-center">
+              <button type="submit" class="bg-accent text-white px-4 py-1.5 rounded-lg text-sm font-medium transition-opacity duration-200 hover:opacity-90">{{ t('admin.save') }}</button>
+              <button type="button" @click="cancelEdit" class="px-4 py-1.5 rounded-lg text-sm transition-colors duration-200 hover:bg-white/10" :style="{ color: 'var(--color-text-secondary)', border: '1px solid var(--color-border)' }">{{ t('admin.cancel') }}</button>
+              <label v-if="editForm.section_type === 'text'" class="flex items-center gap-1.5 text-xs cursor-pointer ml-2" :style="{ color: 'var(--color-text-secondary)' }">
+                <input type="checkbox" v-model="editForm.collapsible" class="accent-[#ff643e]" />
+                Collapsible
+              </label>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
 
     <p v-if="!visibleSections.length" class="text-center py-8" :style="{ color: 'var(--color-text-secondary)' }">{{ t('admin.noSections') }}</p>
