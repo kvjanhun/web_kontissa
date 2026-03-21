@@ -43,8 +43,8 @@ web_kontissa/
 │   ├── composables/        # Vue composables (auto-imported)
 │   ├── layouts/            # default.vue + standalone.vue
 │   ├── middleware/          # auth.global.js + pageview.global.js
-│   ├── e2e/                # Playwright E2E tests (28 tests)
-│   └── tests/unit/         # Vitest unit tests (89 tests)
+│   ├── e2e/                # Playwright E2E tests (33 tests)
+│   └── tests/unit/         # Vitest unit tests (155 tests)
 ├── app/                    # Flask backend (see app/CLAUDE.md)
 │   ├── __init__.py         # App factory, LoginManager, Limiter
 │   ├── routes.py           # Sections CRUD, meta, sitemap, static serving
@@ -52,7 +52,7 @@ web_kontissa/
 │   ├── api/                # kenno, cowsay, weather, health, pageviews
 │   ├── models.py           # All SQLAlchemy models
 │   └── wordlists/          # kotus_words.txt (101k Finnish words)
-├── tests/                  # Backend pytest (297 tests)
+├── tests/                  # Backend pytest (357 tests)
 ├── scripts/                # seed_puzzles.py, seed_e2e.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
     └── observability/      # Loki, Promtail, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
