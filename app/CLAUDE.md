@@ -20,6 +20,7 @@
 | POST | `/api/logout` | Login | End session |
 | GET | `/api/me` | Public | Current user or 401 |
 | GET | `/api/meta` | Public | Site metadata |
+| GET | `/api/project-stats` | Public | GitHub repo stats (commits, size, languages; cached 6h) |
 | GET | `/api/recipes` | Login | List (optional `?q=&category=`) |
 | GET/POST/PUT/DELETE | `/api/recipes[/<slug\|id>]` | Login | CRUD recipes |
 | GET | `/api/recipes/categories` | Login | Category list |
@@ -38,8 +39,9 @@
 | POST | `/api/kenno/achievement` | Public | Record rank achievement (session-deduped) |
 | GET | `/api/kenno/achievements` | Admin | Daily achievement counts by rank |
 | GET | `/api/kenno/combinations` | Admin | Browse bee_combinations (filterable, sortable, paginated) |
-| POST | `/api/pageview` | Public | Track page view |
-| GET | `/api/pageviews` | Admin | All page views |
+| POST | `/api/pageview` | Public | Track page view (session-deduped) |
+| GET | `/api/pageviews` | Admin | All page views (aggregated counts) |
+| GET | `/api/pageviews/events` | Admin | Time-series events (days param 1–90) |
 | GET | `/api/admin/health` | Admin | System health |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | FMI weather (Helsinki-Vantaa) |
@@ -47,7 +49,7 @@
 
 ## Models
 
-`User`, `Section` (with `section_type`: text/pills/quote/currently), `Recipe`, `Ingredient`, `Step`, `BlockedWord`, `KennoConfig`, `KennoPuzzle`, `KennoAchievement`, `KennoCombination`, `PageView`
+`User`, `Section` (with `section_type`: text/pills/quote/currently/intro/project/git_stats/timeline), `Recipe`, `Ingredient`, `Step`, `BlockedWord`, `KennoConfig`, `KennoPuzzle`, `KennoAchievement`, `KennoCombination`, `PageView`, `PageViewEvent`
 
 ## Sanakenno Backend (api/kenno.py)
 

@@ -15,7 +15,10 @@
 
 ## Components
 
-- **SectionBlock.vue**: 4 section types — `quote` (blockquote, no card), `currently` (label:value rows), `pills` (3-col grid), `text` (v-html). Card types have orange accent bar.
+- **SectionBlock.vue**: Handles `quote` (blockquote, no card), `currently` (label:value rows), `pills` (3-col grid), and a default `text` branch (v-html via `renderMarkdown`). Card types have orange accent bar. Not used for `intro`, `project`, `git_stats`, or `timeline` — those are dispatched in `pages/about.vue` to `AboutSectionCard`, `GitStatsSection`, and `TimelineSection`.
+- **AboutSectionCard.vue**: Used for `project` (name|url|description|icon lines), `currently`, `text`, and other card types in the about bento layout.
+- **GitStatsSection.vue**: Fetches `/api/project-stats` (GitHub API, cached 6h in `utils.py`) and renders commit count, repo age, size, and languages.
+- **TimelineSection.vue**: Parses `date|title|description` lines; auto-scrolling marquee animation.
 - **TerminalWindow.vue**: Interactive shell with commands (help, about, skills, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions.
 - **admin/**: AdminSections, AdminPageViews, AdminRecipes, AdminHealth, AdminKennoStats, AdminKennoPuzzleTool, AdminBlockedWords, KennoVariationsGrid, KennoWordList.
 
@@ -31,9 +34,22 @@ SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side word valida
 - **Found words**: Last 6 visible, "Kaikki ▼" expands to full alphabetical list. Re-submit flashes orange 1.5s.
 - **Touch**: `touch-action: manipulation` on root div. `touch-action: none` on honeycomb SVG.
 - **OG meta**: Set via `useHead()` — baked into pre-rendered HTML. Flask `sanakenno_page()` route removed.
-- **Favicon**: Set via `useHead()` link — Nuxt's head manager adds/removes it with page lifecycle.
+- **Favicon**: `useHead()` sets `/sanakenno-favicon-v2.png` as the icon. Nuxt's head manager swaps it in/out with the page lifecycle. `useFaviconSwap.js` no longer exists — the `useHead` approach is sufficient.
 - **Timer**: `useGameTimer.js` tracks elapsed time with pause/resume on tab visibility.
 - **Achievement tracking**: Fire-and-forget `POST /api/kenno/achievement` on each rank transition.
+
+## Composables
+
+All in `frontend/composables/` (auto-imported):
+
+- `useGameTimer.js` — elapsed timer with pause/resume on `visibilitychange`/`blur`/`pagehide`
+- `useHintData.js` — pure computeds for hint panels: `letterMap`, `unfoundLengths`, `pangramStats`, `lengthDistribution`, `pairMap`
+- `useMarkdown.js` — wraps `marked` + `DOMPurify`; exported as `renderMarkdown(source)`
+- `useNavLinks.js` — shared nav link list consumed by `AppHeader` and `AppFooter`
+- `usePageView.js` — fires `POST /api/pageview` on route change (used in `pageview.global.js`)
+- `useSanakennoLogic.js` — pure game logic: `recalcScore`, `rankForScore`, `rankThresholds`, `progressToNextRank`, `colorizeWord`, `toColumns`
+- `useTerminal.js` — terminal command registry and execution logic for `TerminalWindow.vue`
+- `useThemeColor.js` — syncs `<meta name="theme-color">` and `<html>` background via `MutationObserver`
 
 ## E2E Testing
 
@@ -41,7 +57,7 @@ SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side word valida
 - **Why `nuxt build`**: The node-server preset supports `routeRules` proxy. `nuxt generate` (static preset) uses `npx serve` which has no proxy.
 - **Hydration fixture**: `e2e/fixtures/base.js` wraps `page.goto()` with `waitForLoadState('networkidle')` to ensure Vue hydration completes before interactions.
 - **Test credentials**: `admin@test.com` / `adminpass123`, `user@test.com` / `userpass123` (seeded by `scripts/seed_e2e.py`)
-- 28 tests across 7 spec files.
+- 33 tests across 8 spec files.
 
 ## Design
 
