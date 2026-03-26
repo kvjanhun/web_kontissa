@@ -7,3 +7,12 @@ dbs:
         endpoint: https://s3.eu-central-003.backblazeb2.com
         retention: 72h
         sync-interval: 60s
+
+  - path: /sanakenno-data/sanakenno.db
+    replicas:
+      - type: s3
+        bucket: erezac-db-backup
+        path: sanakenno.db
+        endpoint: https://s3.eu-central-003.backblazeb2.com
+        retention: 72h
+        sync-interval: 60s
