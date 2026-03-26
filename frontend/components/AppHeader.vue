@@ -101,7 +101,7 @@ watch(() => route.fullPath, closeMenu)
           :key="link.to"
           :to="link.action ? '' : link.to"
           class="px-6 py-3 text-sm transition-colors duration-200 cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-accent,#ff643e)]"
-          @click.prevent="closeMenu(); link.action ? link.action() : router.push(link.to)"
+          @click.prevent="closeMenu(); link.action ? link.action() : link.external ? window.open(link.to, '_blank', 'noopener') : router.push(link.to)"
         >
           {{ t(link.labelKey) }}
         </NuxtLink>

@@ -17,7 +17,7 @@ defineProps({
       <nav class="flex flex-wrap gap-x-5 gap-y-2 text-sm mb-3" aria-label="Footer">
         <NuxtLink to="/about" class="transition-colors hover:opacity-80" :style="{ color: 'var(--color-text-secondary)' }">{{ t('nav.about') }}</NuxtLink>
         <NuxtLink to="/contact" class="transition-colors hover:opacity-80" :style="{ color: 'var(--color-text-secondary)' }">{{ t('nav.contact') }}</NuxtLink>
-        <NuxtLink to="/sanakenno" class="transition-colors hover:opacity-80" :style="{ color: 'var(--color-text-secondary)' }">{{ t('nav.sanakenno') }}</NuxtLink>
+        <a href="https://sanakenno.fi" target="_blank" rel="noopener" class="transition-colors hover:opacity-80" :style="{ color: 'var(--color-text-secondary)' }">{{ t('nav.sanakenno') }}</a>
       </nav>
 
       <!-- Row 2: last updated -->
