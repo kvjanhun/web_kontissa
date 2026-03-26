@@ -75,7 +75,7 @@ services:
     volumes:
       - ./server/observability/litestream.yml:/etc/litestream.yml:ro
       - ./app/data:/data
-      - /home/kvjanhun/Projects/sanakenno/server/data:/sanakenno-data:ro
+      - /home/kvjanhun/Projects/sanakenno/server/data:/sanakenno-data
     restart: unless-stopped
 
   grafana:
