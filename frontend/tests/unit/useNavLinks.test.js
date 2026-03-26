@@ -25,7 +25,7 @@ describe('useNavLinks', () => {
       const routes = links.map((l) => l.to)
       expect(routes).toContain('/about')
       expect(routes).toContain('/contact')
-      expect(routes).toContain('/sanakenno')
+      expect(routes).toContain('https://sanakenno.fi')
     })
 
     it('includes a login link', () => {
@@ -92,7 +92,7 @@ describe('useNavLinks', () => {
       const routes = links.map((l) => l.to)
       expect(routes).toContain('/about')
       expect(routes).toContain('/contact')
-      expect(routes).toContain('/sanakenno')
+      expect(routes).toContain('https://sanakenno.fi')
     })
   })
 
