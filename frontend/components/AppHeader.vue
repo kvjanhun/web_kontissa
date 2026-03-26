@@ -37,6 +37,17 @@ onMounted(() => document.addEventListener('pointerdown', handlePointerDown))
 onUnmounted(() => document.removeEventListener('pointerdown', handlePointerDown))
 
 watch(() => route.fullPath, closeMenu)
+
+function handleNavClick(link) {
+  closeMenu()
+  if (link.action) {
+    link.action()
+  } else if (link.external) {
+    window.open(link.to, '_blank', 'noopener')
+  } else {
+    router.push(link.to)
+  }
+}
 </script>
 
 <template>
@@ -101,7 +112,7 @@ watch(() => route.fullPath, closeMenu)
           :key="link.to"
           :to="link.action ? '' : link.to"
           class="px-6 py-3 text-sm transition-colors duration-200 cursor-pointer text-[var(--color-text-secondary)] hover:text-[var(--color-accent,#ff643e)]"
-          @click.prevent="closeMenu(); link.action ? link.action() : link.external ? window.open(link.to, '_blank', 'noopener') : router.push(link.to)"
+          @click.prevent="handleNavClick(link)"
         >
           {{ t(link.labelKey) }}
         </NuxtLink>
