@@ -15,4 +15,10 @@ COPY app/ ./app/
 COPY scripts/ ./scripts/
 COPY run.py .
 COPY --from=frontend /src/frontend/.output/public/ ./app/static/dist/
+
+RUN addgroup -S webapp && adduser -S webapp -G webapp
+RUN mkdir -p /app/data && chown -R webapp:webapp /app/data
+
+USER webapp
+
 CMD ["gunicorn", "--preload", "-w", "2", "-b", "0.0.0.0:80", "run:app"]
