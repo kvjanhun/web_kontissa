@@ -3,6 +3,10 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineNuxtConfig({
   compatibilityDate: '2025-06-01',
 
+  experimental: {
+    payloadExtraction: false,
+  },
+
   // Static site generation
   ssr: true,
   nitro: {
