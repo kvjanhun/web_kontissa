@@ -16,12 +16,12 @@ test.describe('Authentication', () => {
     await expect(page.locator('[role="alert"]')).toBeVisible()
   })
 
-  test('login succeeds and redirects to about', async ({ page }) => {
+  test('login succeeds and redirects home', async ({ page }) => {
     await page.goto('/login')
     await page.fill('input#email', 'user@test.com')
     await page.fill('input#password', 'userpass123')
     await page.click('button[type="submit"]')
-    await expect(page).toHaveURL('/about', { timeout: 10000 })
+    await expect(page).toHaveURL('/', { timeout: 10000 })
   })
 
   test('logout returns to home', async ({ page }) => {

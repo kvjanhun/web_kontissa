@@ -1,4 +1,8 @@
 <script setup>
+defineProps({
+  fill: { type: Boolean, default: false },
+})
+
 const {
   outputLines,
   currentInput,
@@ -94,14 +98,16 @@ onBeforeUnmount(() => {
 
 <template>
   <div
-    class="w-full rounded-lg overflow-hidden shadow-lg"
+    class="w-full overflow-hidden"
+    :class="fill ? 'flex flex-col h-full' : 'rounded-lg shadow-lg'"
     @click="focusInput"
   >
-    <div class="relative bg-term-bg">
+    <div class="relative bg-term-bg" :class="fill ? 'flex-1 min-h-0' : ''">
       <!-- Scrollable content -->
       <div
         ref="scrollContainer"
-        class="font-mono text-sm text-white p-4 h-[340px] overflow-y-scroll overflow-x-auto pr-6"
+        class="font-mono text-sm text-white p-4 overflow-y-scroll overflow-x-auto pr-6"
+        :class="fill ? 'h-full' : 'h-[340px]'"
         style="-ms-overflow-style: none; scrollbar-width: none;"
         role="log"
         aria-live="polite"

@@ -7,8 +7,6 @@ export function useNavLinks(handleLogout) {
 
   const navLinks = computed(() => {
     const links = [
-      { to: '/about',   labelKey: 'nav.about' },
-      { to: '/contact', labelKey: 'nav.contact' },
       { to: 'https://sanakenno.fi', labelKey: 'nav.sanakenno', external: true },
     ]
     if (isAuthenticated.value) {
