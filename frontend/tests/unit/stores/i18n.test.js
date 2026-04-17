@@ -10,13 +10,13 @@ beforeEach(() => {
 describe('useI18nStore — t()', () => {
   it('returns English translation by default', () => {
     const i18n = useI18nStore()
-    expect(i18n.t('nav.about')).toBe('About')
+    expect(i18n.t('nav.home')).toBe('Home')
   })
 
   it('returns Finnish translation when locale is fi', () => {
     const i18n = useI18nStore()
     i18n.setLocale('fi')
-    expect(i18n.t('nav.about')).toBe('Tietoa')
+    expect(i18n.t('nav.home')).toBe('Etusivu')
   })
 
   it('falls back to English when key is missing in Finnish', () => {
