@@ -95,13 +95,13 @@ function renderLinks(text) {
       <!-- Terminal pane (left on desktop, top on mobile) -->
       <section class="term-pane" aria-label="Terminal">
         <div class="term-frame">
-          <!-- ASCII banner -->
-          <pre class="term-banner" aria-label="erez.ac">███████╗██████╗ ███████╗███████╗    █████╗  ██████╗
-██╔════╝██╔══██╗██╔════╝╚══███╔╝   ██╔══██╗██╔════╝
-█████╗  ██████╔╝█████╗    ███╔╝    ███████║██║
-██╔══╝  ██╔══██╗██╔══╝   ███╔╝  ▄  ██╔══██║██║
-███████╗██║  ██║███████╗███████╗ ▀ ██║  ██║╚██████╗
-╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝  ╚═╝ ╚═════╝</pre>
+          <!-- ASCII banner — demoscene row-by-row gradient -->
+          <pre class="term-banner" aria-label="erez.ac"><span class="term-banner__row">███████╗██████╗ ███████╗███████╗    █████╗  ██████╗</span>
+<span class="term-banner__row">██╔════╝██╔══██╗██╔════╝╚══███╔╝   ██╔══██╗██╔════╝</span>
+<span class="term-banner__row">█████╗  ██████╔╝█████╗    ███╔╝    ███████║██║     </span>
+<span class="term-banner__row">██╔══╝  ██╔══██╗██╔══╝   ███╔╝  ▄  ██╔══██║██║     </span>
+<span class="term-banner__row">███████╗██║  ██║███████╗███████╗ ▀ ██║  ██║╚██████╗</span>
+<span class="term-banner__row">╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝  ╚═╝ ╚═════╝</span></pre>
 
           <!-- Interactive terminal -->
           <div class="term-live">
@@ -211,7 +211,7 @@ function renderLinks(text) {
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 380px;
+  min-height: 260px;
   background: var(--color-term-bg);
   border-radius: 8px;
   overflow: hidden;
@@ -234,11 +234,6 @@ function renderLinks(text) {
   padding: 0 1rem;
   white-space: pre;
   overflow: hidden;
-  color: transparent;
-  background: linear-gradient(120deg, #ff643e 0%, #ffb43c 55%, #ff643e 100%);
-  -webkit-background-clip: text;
-  background-clip: text;
-  text-shadow: 0 0 0 transparent;
   user-select: none;
   letter-spacing: 0;
 }
@@ -248,6 +243,15 @@ function renderLinks(text) {
     font-size: clamp(11px, 1.5vw, 18px);
   }
 }
+
+/* Classic demoscene row-gradient: each row its own phosphor hue. */
+.term-banner__row { display: block; }
+.term-banner__row:nth-child(1) { color: #8a2a18; text-shadow: 0 0 6px rgba(138, 42, 24, 0.45); }
+.term-banner__row:nth-child(2) { color: #c73a1e; text-shadow: 0 0 6px rgba(199, 58, 30, 0.45); }
+.term-banner__row:nth-child(3) { color: #ff643e; text-shadow: 0 0 8px rgba(255, 100, 62, 0.55); }
+.term-banner__row:nth-child(4) { color: #ff8b3c; text-shadow: 0 0 8px rgba(255, 139, 60, 0.55); }
+.term-banner__row:nth-child(5) { color: #ffb43c; text-shadow: 0 0 8px rgba(255, 180, 60, 0.50); }
+.term-banner__row:nth-child(6) { color: #ffd97a; text-shadow: 0 0 8px rgba(255, 217, 122, 0.45); }
 
 .term-live {
   flex: 1;
