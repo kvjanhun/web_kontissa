@@ -1,6 +1,5 @@
 {
-  "nav.about": "Tietoa",
-  "nav.contact": "Yhteystiedot",
+  "nav.home": "Etusivu",
   "nav.sanakenno": "Sanakenno",
   "nav.recipes": "Reseptit",
   "nav.admin": "Hallinta",
