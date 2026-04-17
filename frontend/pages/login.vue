@@ -23,7 +23,7 @@ async function handleSubmit() {
   loading.value = true
   try {
     await login(email.value, password.value)
-    router.push('/about')
+    router.push('/')
   } catch (e) {
     error.value = e.message
   } finally {

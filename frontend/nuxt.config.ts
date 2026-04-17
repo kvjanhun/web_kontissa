@@ -11,13 +11,15 @@ export default defineNuxtConfig({
   ssr: true,
   nitro: {
     prerender: {
-      routes: ['/', '/about', '/contact', '/login', '/sanakenno', '/200.html'],
+      routes: ['/', '/login', '/sanakenno', '/200.html'],
     },
   },
 
   routeRules: {
     '/api/**': { proxy: 'http://localhost:5001/api/**' },
     '/sitemap.xml': { proxy: 'http://localhost:5001/sitemap.xml' },
+    '/about': { redirect: '/' },
+    '/contact': { redirect: '/' },
   },
 
   // Modules
