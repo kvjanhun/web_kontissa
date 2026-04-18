@@ -1,5 +1,7 @@
 # CLAUDE.md — web_kontissa (erez.ac)
 
+> **One file, three names.** `AGENTS.md` and `GEMINI.md` are symlinks to `CLAUDE.md` at every directory that has one (`./`, `app/`, `frontend/`, `server/observability/`). Edit any alias — Codex, Claude Code, Gemini CLI all read the same content. Git tracks the symlinks (mode `120000`); fresh clones on Unix get real symlinks. On Windows this needs `core.symlinks=true` + developer mode.
+
 ## Agent Role
 
 You are a **senior full-stack developer** working on Konsta Janhunen's personal portfolio site. You value proven, mature technologies over hype-driven choices — but you're not afraid to adopt new tools when they genuinely solve a problem. You keep thorough documentation of everything you do.
@@ -43,7 +45,7 @@ web_kontissa/
 │   ├── composables/        # Vue composables (auto-imported)
 │   ├── layouts/            # default.vue + standalone.vue
 │   ├── middleware/          # auth.global.js + pageview.global.js
-│   ├── e2e/                # Playwright E2E tests (33 tests)
+│   ├── e2e/                # Playwright E2E tests (30 tests)
 │   └── tests/unit/         # Vitest unit tests (155 tests)
 ├── app/                    # Flask backend (see app/CLAUDE.md)
 │   ├── __init__.py         # App factory, LoginManager, Limiter
@@ -74,7 +76,10 @@ Nuxt at http://localhost:3000, proxies `/api/*` to Flask at :5001 via `routeRule
 # Tests
 pytest tests/                          # Backend (in-memory SQLite)
 cd frontend && npm run test            # Vitest unit tests
-cd frontend && npm run test:e2e        # Playwright E2E (auto-starts servers)
+
+# E2E uses a separate DB at app/data/test-e2e.db, distinct from the dev site.db.
+python3 scripts/seed_e2e.py            # Seed users, sections, puzzles, a recipe (run after schema changes)
+cd frontend && npm run test:e2e        # Playwright spawns Flask (:5001 → test-e2e.db) + Nuxt preview (:3000)
 
 # Build
 cd frontend && npm run build           # nuxt generate → .output/public/
@@ -82,6 +87,8 @@ cd frontend && npm run build           # nuxt generate → .output/public/
 # Docker
 docker compose up --build -d
 ```
+
+**Local E2E gotcha**: `playwright.config.js` sets `reuseExistingServer: !process.env.CI`, so any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is reused instead of the correctly-configured test server. DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running E2E, or invoke with `CI=1 npm run test:e2e`.
 
 ## Server Architecture
 
