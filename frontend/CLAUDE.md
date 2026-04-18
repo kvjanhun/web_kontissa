@@ -56,8 +56,10 @@ All in `frontend/composables/` (auto-imported):
 - **Config**: `playwright.config.js` — Flask on :5001, `nuxt build && nuxt preview` on :3000
 - **Why `nuxt build`**: The node-server preset supports `routeRules` proxy. `nuxt generate` (static preset) uses `npx serve` which has no proxy.
 - **Hydration fixture**: `e2e/fixtures/base.js` wraps `page.goto()` with `waitForLoadState('networkidle')` to ensure Vue hydration completes before interactions.
+- **Separate test DB**: Playwright spawns Flask with `DATABASE_URI=sqlite:///app/data/test-e2e.db` — distinct from the dev `site.db`. Seed with `python3 scripts/seed_e2e.py` before first run and after any schema change.
 - **Test credentials**: `admin@test.com` / `adminpass123`, `user@test.com` / `userpass123` (seeded by `scripts/seed_e2e.py`)
-- 33 tests across 8 spec files.
+- **Local run gotcha**: `reuseExistingServer: !process.env.CI` — any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is picked up instead of the properly-configured test one, and DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running locally, or prefix with `CI=1`.
+- 30 tests across 7 spec files.
 
 ## Design
 

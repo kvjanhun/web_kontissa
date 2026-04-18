@@ -65,6 +65,19 @@ Then visit: [http://localhost:3000](http://localhost:3000)
 
 Nuxt proxies `/api/*` requests to Flask on port 5001 via `routeRules` in `nuxt.config.ts`.
 
+### Running tests
+
+```bash
+pytest tests/                         # Backend (in-memory SQLite)
+cd frontend && npm run test           # Vitest unit tests
+
+# E2E uses its own DB at app/data/test-e2e.db — independent of dev site.db.
+python3 scripts/seed_e2e.py           # Seed users, sections, recipes, puzzles
+cd frontend && npm run test:e2e       # Playwright starts Flask (:5001, test-e2e.db) + Nuxt preview (:3000)
+```
+
+Playwright locally reuses any server already on :5001 — stop the dev Flask first (or run with `CI=1`), otherwise DB-backed specs pick up the wrong database and fail.
+
 ## Configuration
 
 A `.env` file is required with at least `SECRET_KEY` for session signing. The SQLite database lives at `/app/data/site.db` (container path). For local development, set `DATABASE_URI` to point to a database on local drive.
