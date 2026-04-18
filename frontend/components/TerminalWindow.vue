@@ -87,7 +87,7 @@ onMounted(async () => {
     focusInput()
   }
   if (firstBoot) {
-    await autoTypeCommand('cowsay You can actually type here, you know?')
+    await autoTypeCommand("cowsay You can type here!")
   }
 })
 
@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
       <div
         ref="scrollContainer"
         class="font-mono text-sm text-white p-4 overflow-y-scroll overflow-x-auto pr-6"
-        :class="fill ? 'h-full' : 'h-[340px]'"
+        :class="fill ? 'h-full' : 'h-[360px]'"
         style="-ms-overflow-style: none; scrollbar-width: none;"
         role="log"
         aria-live="polite"

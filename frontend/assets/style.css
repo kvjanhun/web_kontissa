@@ -59,25 +59,25 @@
   --color-accent-soft: #fff0eb;
   --color-term-bg: #0a0a0a;
   --color-term-user: #ff643e;
-  --color-term-dir: #a8a29e;
-  --color-term-amber: #d4a56a;
-  --color-term-sage: #8aaa9e;
-  --color-term-rose: #c49080;
-  --color-term-sand: #c8b89a;
-  --color-term-error: #d45c5c;
+  --color-term-dir: #b89974;
+  --color-term-amber: #ffb43c;
+  --color-term-sage: #ff8b3c;
+  --color-term-rose: #c73a1e;
+  --color-term-sand: #ffd89a;
+  --color-term-error: #8a2a18;
   --font-sans: "DM Sans", sans-serif;
   --font-mono: "Ubuntu Mono", monospace;
 }
 
 /* Warm stone palette — light mode */
 :root {
-  --color-bg-primary: #d9d6d1;
-  --color-bg-secondary: #eae7e2;
-  --color-bg-tertiary: #d0cdc7;
+  --color-bg-primary: #ffffff;
+  --color-bg-secondary: #fafaf9;
+  --color-bg-tertiary: #f5f5f4;
   --color-text-primary: #292524;
   --color-text-secondary: #78716c;
   --color-text-tertiary: #8f8a83;
-  --color-border: #bdb8b1;
+  --color-border: #e7e5e4;
   --color-header-bg: #1c1917;
   --color-header-border: #ff643e;
 }
