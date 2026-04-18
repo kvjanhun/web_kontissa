@@ -6,7 +6,7 @@ const projects = [
     tagline: 'Finnish word puzzle — NYT Spelling Bee inspired',
     description:
       'Daily Finnish word puzzles with scoring, streaks, and PWA offline support. Nuxt 3 + Flask + SQLite, BDD-first test suite.',
-    image: '/projects/sanakenno/hero.svg',
+    image: '/projects/sanakenno/hero.png',
     live: 'https://sanakenno.fi',
     github: 'https://github.com/kvjanhun/sanakenno',
   },
@@ -16,7 +16,7 @@ const projects = [
     tagline: 'Puzzle curation and player ops',
     description:
       'Private admin panel for generating daily puzzles, managing word lists, and inspecting player stats and combinations.',
-    image: '/projects/sanakenno-admin/hero.svg',
+    image: '/projects/sanakenno-admin/hero.png',
   },
   {
     slug: 'site-admin',
@@ -24,7 +24,7 @@ const projects = [
     tagline: 'Portfolio CMS and server ops',
     description:
       'Admin panel for this site: editing sections, managing recipes, page views analytics, and server health checks.',
-    image: '/projects/site-admin/hero.svg',
+    image: '/projects/site-admin/hero.png',
   },
 ]
 
