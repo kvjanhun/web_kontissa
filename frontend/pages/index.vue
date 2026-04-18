@@ -8,6 +8,18 @@ const i18nStore = useI18nStore()
 const { t } = i18nStore
 const { locale } = storeToRefs(i18nStore)
 
+// Banner kept as a JS array so text interpolation preserves consecutive spaces
+// (Vue's template compiler condenses whitespace inside inline template text).
+const bannerRows = [
+ ' ▄████▄    ██▄████   ▄████▄   ████████             ▄█████▄   ▄█████▄.         ',
+ '██▄▄▄▄██   ██▀      ██▄▄▄▄██      ▄█▀              ▀ ▄▄▄██  ██▀    ▀          ',
+ '██▀▀▀▀▀▀   ██       ██▀▀▀▀▀▀    ▄█▀               ▄██▀▀▀██  ██                ',
+ '▀██▄▄▄▄█   ██       ▀██▄▄▄▄█  ▄██▄▄▄▄▄     ██     ██▄▄▄███  ▀██▄▄▄▄█          ',
+ '  ▀▀▀▀▀    ▀▀         ▀▀▀▀▀   ▀▀▀▀▀▀▀▀     ▀▀      ▀▀▀▀ ▀▀    ▀▀▀▀▀           ',
+ '▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁         ',
+ '▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔         ',
+]
+
 useHead({
   title: computed(() => t('home.metaTitle')),
   meta: [
@@ -22,17 +34,10 @@ const { data: sections, refresh } = await useAsyncData(
   { default: () => [], watch: [locale] }
 )
 
-// Tech pills are language-independent — always fetch from EN.
-const { data: enSections, refresh: refreshEn } = await useFetch('/api/sections', {
-  key: 'home-sections-en',
-  query: { locale: 'en' },
-  default: () => [],
-})
-
 // SSG: retry after mount (API not running at build time)
 onMounted(async () => {
   if (!sections.value.length) {
-    await Promise.all([refresh(), refreshEn()])
+    await refresh()
   }
 })
 
@@ -47,18 +52,6 @@ const bySlug = computed(() => {
   for (const s of sections.value) map[s.slug] = s
   return map
 })
-
-// Tech pills: all pills sections, ordered
-const techCategories = computed(() =>
-  enSections.value
-    .filter(s => s.section_type === 'pills')
-    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
-    .map(s => ({
-      label: t(`about.tech.${s.slug}`) || s.title,
-      items: s.content.split(',').map(i => i.trim()).filter(Boolean),
-    }))
-    .filter(c => c.items.length)
-)
 
 // Projects — content format: "Name|url|description|icon" per line
 const projects = computed(() => {
@@ -85,68 +78,54 @@ function renderLinks(text) {
 
 <template>
   <div class="home-root">
-    <!-- Floating top-right controls -->
-    <div class="home-controls">
-      <LangToggle />
-      <ThemeToggle />
-    </div>
-
-    <div class="home-grid">
-      <!-- Terminal pane (left on desktop, top on mobile) -->
+    <div class="home-content">
       <section class="term-pane" aria-label="Terminal">
         <div class="term-frame">
-          <!-- ASCII banner — demoscene row-by-row gradient -->
-          <pre class="term-banner" aria-label="erez.ac"><span class="term-banner__row">███████╗██████╗ ███████╗███████╗    █████╗  ██████╗</span>
-<span class="term-banner__row">██╔════╝██╔══██╗██╔════╝╚══███╔╝   ██╔══██╗██╔════╝</span>
-<span class="term-banner__row">█████╗  ██████╔╝█████╗    ███╔╝    ███████║██║     </span>
-<span class="term-banner__row">██╔══╝  ██╔══██╗██╔══╝   ███╔╝  ▄  ██╔══██║██║     </span>
-<span class="term-banner__row">███████╗██║  ██║███████╗███████╗ ▀ ██║  ██║╚██████╗</span>
-<span class="term-banner__row">╚══════╝╚═╝  ╚═╝╚══════╝╚══════╝   ╚═╝  ╚═╝ ╚═════╝</span></pre>
+          <div class="term-toggles">
+            <ThemeToggle />
+            <LangToggle />
+          </div>
 
-          <!-- Interactive terminal -->
+          <div class="term-banner" aria-label="erez.ac">
+            <span v-for="(row, i) in bannerRows" :key="i" class="term-banner__row">{{ row }}</span>
+          </div>
+
           <div class="term-live">
             <TerminalWindow :fill="true" />
           </div>
         </div>
       </section>
 
-      <!-- Info panels -->
-      <aside class="info-pane" aria-label="About">
-        <article class="card">
-          <header class="card__label">// whoami</header>
-          <p v-if="intro" class="card__body">{{ intro }}</p>
-          <p v-else class="card__body card__body--muted">—</p>
-        </article>
+      <div class="home-below">
+        <aside class="info-pane" aria-label="About">
+          <article class="card">
+            <header class="card__label">// whoami</header>
+            <p v-if="intro" class="card__body">{{ intro }}</p>
+            <p v-else class="card__body card__body--muted">—</p>
+          </article>
 
-        <article class="card">
-          <header class="card__label">// stack</header>
-          <div class="stack-list">
-            <div v-for="cat in techCategories" :key="cat.label" class="stack-row">
-              <span class="stack-label">{{ cat.label.toLowerCase() }}</span>
-              <span class="stack-items">{{ cat.items.join(' · ') }}</span>
-            </div>
-          </div>
-        </article>
+          <article class="card">
+            <header class="card__label">// projects</header>
+            <ul class="proj-list">
+              <li v-for="p in projects" :key="p.name">
+                <a v-if="p.url" :href="p.url" class="proj-link">
+                  <span class="proj-name">{{ p.name }}</span>
+                  <span class="proj-arrow">→</span>
+                </a>
+                <span v-else class="proj-name">{{ p.name }}</span>
+                <span v-if="p.desc" class="proj-desc">{{ p.desc }}</span>
+              </li>
+            </ul>
+          </article>
 
-        <article class="card">
-          <header class="card__label">// projects</header>
-          <ul class="proj-list">
-            <li v-for="p in projects" :key="p.name">
-              <a v-if="p.url" :href="p.url" class="proj-link">
-                <span class="proj-name">{{ p.name }}</span>
-                <span class="proj-arrow">→</span>
-              </a>
-              <span v-else class="proj-name">{{ p.name }}</span>
-              <span v-if="p.desc" class="proj-desc">{{ p.desc }}</span>
-            </li>
-          </ul>
-        </article>
+          <article class="card">
+            <header class="card__label">// ping</header>
+            <p class="card__body card__body--contact" v-html="renderLinks(contact)"></p>
+          </article>
+        </aside>
 
-        <article class="card">
-          <header class="card__label">// ping</header>
-          <p class="card__body card__body--contact" v-html="renderLinks(contact)"></p>
-        </article>
-      </aside>
+        <ProjectGallery class="home-gallery" />
+      </div>
     </div>
   </div>
 </template>
@@ -163,95 +142,126 @@ function renderLinks(text) {
 
 @media (min-width: 1024px) {
   .home-root {
-    height: 100vh;
-    max-height: 100vh;
-    overflow: hidden;
     padding: 1.25rem;
   }
 }
 
-.home-controls {
-  position: absolute;
-  top: 1rem;
-  right: 1rem;
+/* Left-aligned wrapper; cards + gallery share the terminal's max width */
+.home-content {
   display: flex;
-  gap: 0.25rem;
-  z-index: 30;
-}
-
-@media (min-width: 1024px) {
-  .home-controls {
-    top: 1.5rem;
-    right: 1.75rem;
-  }
-}
-
-.home-grid {
-  display: grid;
+  flex-direction: column;
   gap: 1rem;
-  grid-template-columns: 1fr;
-  min-height: calc(100vh - 2rem);
+  min-width: 0;
 }
 
 @media (min-width: 1024px) {
-  .home-grid {
-    grid-template-columns: minmax(0, 1fr) minmax(18rem, 22rem);
-    height: 100%;
-    min-height: 0;
-    gap: 1.5rem;
+  .home-content {
+    max-width: 60rem;
+    gap: 1.25rem;
   }
+}
+
+/* Row below the terminal: cards (left) + gallery (right) */
+.home-below {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 1rem;
+  min-width: 0;
+}
+
+@media (min-width: 1024px) {
+  .home-below {
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+    gap: 1.25rem;
+    align-items: stretch;
+  }
+}
+
+.home-gallery {
+  min-width: 0;
 }
 
 /* Terminal pane */
 .term-pane {
   display: flex;
-  min-height: 0;
+  min-width: 0;
 }
 .term-frame {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
-  min-height: 260px;
+  min-width: 0;
+  height: 424px;
+  max-height: calc(100vh - 2rem);
   background: var(--color-term-bg);
-  border-radius: 8px;
+  border: 1px solid rgba(255, 100, 62, 0.35);
+  border-radius: 12px;
   overflow: hidden;
-  padding: 1.25rem 0.5rem 0.25rem;
-  box-shadow: 0 0 0 1px rgba(255, 100, 62, 0.12), 0 10px 30px rgba(0,0,0,0.25);
+  padding: 0.75rem 1rem 0.25rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.25);
 }
 
 @media (min-width: 1024px) {
   .term-frame {
-    min-height: 0;
-    height: 100%;
+    height: 57vh;
+    padding-top: 1.25rem;
+  }
+}
+
+/* Mobile: toggles sit in-flow at the top of the terminal, pushing the banner down */
+.term-toggles {
+  display: flex;
+  flex-direction: row;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.35rem;
+  margin-bottom: 0.5rem;
+  z-index: 5;
+}
+
+/* Desktop: overlay toggles in the terminal's top-right corner, stacked vertically */
+@media (min-width: 1024px) {
+  .term-toggles {
+    position: absolute;
+    top: 1.25rem;
+    right: 0.75rem;
+    flex-direction: column;
+    align-items: center;
+    margin-bottom: 0;
   }
 }
 
 .term-banner {
-  font-family: var(--font-mono);
+  /* Single font for the whole banner — avoids mixed-width cells. */
+  font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace;
   font-size: clamp(7px, 2vw, 12px);
-  line-height: 1.05;
-  margin: 0 0 0.9rem;
-  padding: 0 1rem;
-  white-space: pre;
+  line-height: 1;
+  margin: 0 0 0.25rem;
+  padding: 0;
   overflow: hidden;
   user-select: none;
   letter-spacing: 0;
 }
+.term-banner__row {
+  display: block;
+  white-space: pre;
+}
 
 @media (min-width: 1024px) {
   .term-banner {
-    font-size: clamp(11px, 1.5vw, 18px);
+    font-size: clamp(12px, 1.35vw, 17px);
   }
 }
 
 /* Classic demoscene row-gradient: each row its own phosphor hue. */
-.term-banner__row { display: block; }
 .term-banner__row:nth-child(1) { color: #8a2a18; text-shadow: 0 0 6px rgba(138, 42, 24, 0.45); }
 .term-banner__row:nth-child(2) { color: #c73a1e; text-shadow: 0 0 6px rgba(199, 58, 30, 0.45); }
 .term-banner__row:nth-child(3) { color: #ff643e; text-shadow: 0 0 8px rgba(255, 100, 62, 0.55); }
 .term-banner__row:nth-child(4) { color: #ff8b3c; text-shadow: 0 0 8px rgba(255, 139, 60, 0.55); }
 .term-banner__row:nth-child(5) { color: #ffb43c; text-shadow: 0 0 8px rgba(255, 180, 60, 0.50); }
-.term-banner__row:nth-child(6) { color: #ffd97a; text-shadow: 0 0 8px rgba(255, 217, 122, 0.45); }
+.term-banner__row:nth-child(6) { color: #ffb43c; text-shadow: 0 0 8px rgba(255, 217, 122, 0.45); }
+.term-banner__row:nth-child(7) { color: #c73a1e; text-shadow: 0 0 8px rgba(255, 234, 176, 0.40); }
 
 .term-live {
   flex: 1;
@@ -262,36 +272,29 @@ function renderLinks(text) {
   flex: 1;
   min-height: 0;
 }
+.term-live :deep(.overflow-y-scroll) {
+  padding: 0.25rem 1rem 0.25rem 0;
+}
 
-/* Info pane */
+/* Info pane (cards column) */
 .info-pane {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-  min-height: 0;
-  padding-top: 0.75rem;
-}
-
-@media (min-width: 1024px) {
-  .info-pane {
-    height: 100%;
-    overflow-y: auto;
-    padding-top: 2.75rem;
-    padding-right: 0.25rem;
-    scrollbar-width: thin;
-  }
+  gap: 0.9rem;
+  min-width: 0;
 }
 
 .card {
   position: relative;
-  border: 1px solid var(--color-border);
-  border-top-color: var(--color-accent);
+  border: 1px solid rgba(255, 100, 62, 0.35);
+  border-radius: 16px;
   background: var(--color-bg-secondary);
   padding: 1rem 1rem 0.9rem;
   font-family: var(--font-mono);
   font-size: 0.85rem;
   line-height: 1.5;
   color: var(--color-text-secondary);
+  min-width: 0;
 }
 
 .card__label {
@@ -319,24 +322,6 @@ function renderLinks(text) {
 }
 .card__body--contact :deep(.contact-link:hover) {
   text-decoration: underline;
-}
-
-/* Stack list */
-.stack-list { display: flex; flex-direction: column; gap: 0.4rem; }
-.stack-row {
-  display: grid;
-  grid-template-columns: 6.5rem 1fr;
-  gap: 0.75rem;
-  align-items: baseline;
-}
-.stack-label {
-  color: var(--color-accent);
-  font-size: 0.75rem;
-  text-transform: lowercase;
-}
-.stack-items {
-  color: var(--color-text-primary);
-  font-size: 0.82rem;
 }
 
 /* Projects */
