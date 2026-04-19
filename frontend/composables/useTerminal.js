@@ -23,6 +23,24 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
 }
 
+export function formatHelsinkiDate(date) {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Helsinki',
+    weekday: 'short',
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  }).formatToParts(date).reduce((acc, p) => (acc[p.type] = p.value, acc), {})
+  const hour = parts.hour === '24' ? '00' : parts.hour
+  const ms = String(date.getMilliseconds()).padStart(3, '0')
+  const helsinkiHour = parseInt(new Intl.DateTimeFormat('en-GB', {
+    timeZone: 'Europe/Helsinki', hour: '2-digit', hour12: false,
+  }).format(date), 10)
+  const offset = (helsinkiHour - date.getUTCHours() + 24) % 24
+  const tz = offset === 3 ? 'EEST' : 'EET'
+  return `${parts.weekday} ${parts.year}-${parts.month}-${parts.day} ${hour}:${parts.minute}:${parts.second}.${ms} (${tz})`
+}
+
 const KNOWN_COMMANDS = ['help', 'about', 'fetch', 'weather', 'cowsay', 'cowthink', 'echo', 'date', 'clear']
 
 const CHOREOGRAPHY = ['help', 'about', 'weather', 'date | cowsay -f tux', 'clear']
@@ -168,7 +186,7 @@ function handleHelp() {
   pushLine(
     '<table class="text-sm">' +
     '<tr><td class="pr-4 text-term-amber">help</td><td class="text-gray-300">Show available commands</td></tr>' +
-    '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen &amp; skills</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">fetch</td><td class="text-gray-300">System info</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
@@ -215,19 +233,19 @@ function handleAbout() {
   pushLine(
     '<div class="my-1">' +
     '<div class="text-white font-bold">Konsta Janhunen</div>' +
-    '<div class="text-gray-300 mt-1">Software developer based in Helsinki, Finland.</div>' +
-    '<div class="text-gray-300">Building things with Python, JavaScript, and whatever gets the job done.</div>' +
+    '<div class="text-gray-300 mt-1">Software developer based in Vantaa, Finland.</div>' +
+    '<div class="text-gray-300">Building things with Python, TypeScript, and whatever gets the job done.</div>' +
     '<div class="my-2 text-sm space-y-1">' +
-    '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
+    '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · TypeScript · SQL · Bash · HTML/CSS</span></div>' +
     '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
     '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
-    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
-    '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
+    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions · Backblaze S3</span></div>' +
+    '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VSCode</span></div>' +
     '</div>' +
     '<div class="mt-2">' +
-    '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">github.com/kvjanhun</a>' +
+    '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">My GitHub</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
-    '<a href="https://linkedin.com/in/kvjanhun" class="text-term-dir hover:underline" target="_blank" rel="noopener">linkedin.com/in/kvjanhun</a>' +
+    '<a href="https://linkedin.com/in/kvjanhun" class="text-term-dir hover:underline" target="_blank" rel="noopener">My LinkedIn</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
     '<a href="https://sanakenno.fi" class="text-term-sage hover:underline" target="_blank" rel="noopener">Sanakenno.fi</a>' +
     '</div>' +
@@ -356,19 +374,8 @@ function getCommandText(cmd, argsArray) {
   switch (cmd) {
     case 'echo':
       return argsArray.join(' ')
-    case 'date': {
-      const now = new Date()
-      const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-      const d = days[now.getDay()]
-      const m = months[now.getMonth()]
-      const day = String(now.getDate()).padStart(2, ' ')
-      const hh = String(now.getHours()).padStart(2, '0')
-      const mm = String(now.getMinutes()).padStart(2, '0')
-      const ss = String(now.getSeconds()).padStart(2, '0')
-      const tz = Intl.DateTimeFormat().resolvedOptions().timeZone
-      return `${d} ${m} ${day} ${hh}:${mm}:${ss} ${tz} ${now.getFullYear()}`
-    }
+    case 'date':
+      return formatHelsinkiDate(new Date())
     default:
       return null
   }
