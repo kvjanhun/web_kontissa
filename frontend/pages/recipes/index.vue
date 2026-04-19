@@ -4,6 +4,12 @@ definePageMeta({
   requiresAuth: true,
 })
 
+useHead({
+  meta: [
+    { name: 'robots', content: 'noindex' }
+  ]
+})
+
 const router = useRouter()
 const { t } = useI18nStore()
 const recipes = ref([])
