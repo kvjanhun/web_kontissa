@@ -250,14 +250,13 @@ function renderLinks(text) {
   }
 }
 
-/* Classic demoscene row-gradient: each row its own phosphor hue. */
+/* Classic row-gradient: each row its own hue. */
 .term-banner__row:nth-child(1) { color: #8a2a18; text-shadow: 0 0 6px rgba(138, 42, 24, 0.45); }
 .term-banner__row:nth-child(2) { color: #c73a1e; text-shadow: 0 0 6px rgba(199, 58, 30, 0.45); }
 .term-banner__row:nth-child(3) { color: #ff643e; text-shadow: 0 0 8px rgba(255, 100, 62, 0.55); }
 .term-banner__row:nth-child(4) { color: #ff8b3c; text-shadow: 0 0 8px rgba(255, 139, 60, 0.55); }
 .term-banner__row:nth-child(5) { color: #ffb43c; text-shadow: 0 0 8px rgba(255, 180, 60, 0.50); }
-.term-banner__row:nth-child(6) { color: #ffb43c; text-shadow: 0 0 8px rgba(255, 217, 122, 0.45); }
-.term-banner__row:nth-child(7) { color: #c73a1e; text-shadow: 0 0 8px rgba(255, 234, 176, 0.40); }
+.term-banner__row:nth-child(6) { color: #c73a1e; text-shadow: 0 0 8px rgba(255, 217, 122, 0.45); }
 
 .term-live {
   flex: 1;
