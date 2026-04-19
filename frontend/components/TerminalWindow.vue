@@ -6,11 +6,13 @@ defineProps({
 const {
   outputLines,
   currentInput,
+  autoTypedText,
   isBooting,
   isProcessing,
   executeCommand,
   runBootSequence,
-  autoTypeCommand,
+  runChoreography,
+  stopChoreography,
   historyUp,
   historyDown,
 } = useTerminal()
@@ -47,6 +49,7 @@ function focusInput() {
 
 async function handleEnter() {
   if (isBooting.value || isProcessing.value) return
+  if (stopChoreography()) return
   const cmd = currentInput.value
   currentInput.value = ''
   await executeCommand(cmd)
@@ -54,11 +57,15 @@ async function handleEnter() {
 
 function handleKeydown(e) {
   if (e.key === 'ArrowUp') {
+    stopChoreography()
     e.preventDefault()
     historyUp()
   } else if (e.key === 'ArrowDown') {
+    stopChoreography()
     e.preventDefault()
     historyDown()
+  } else if (e.key !== 'Enter') {
+    stopChoreography()
   }
 }
 
@@ -87,11 +94,12 @@ onMounted(async () => {
     focusInput()
   }
   if (firstBoot) {
-    await autoTypeCommand("cowsay You can type here!")
+    runChoreography()
   }
 })
 
 onBeforeUnmount(() => {
+  stopChoreography()
   resizeObserver?.disconnect()
 })
 </script>
@@ -129,7 +137,7 @@ onBeforeUnmount(() => {
               <span class="text-term-dir">~</span>
               <span class="mr-[1ch]">$</span>
             </span>
-            <span class="text-white whitespace-pre">{{ currentInput }}</span>
+            <span class="text-white whitespace-pre">{{ autoTypedText || currentInput }}</span>
             <span class="block self-center h-[1em] w-[0.6em] cursor-blink shrink-0"></span>
           </div>
         </div>
