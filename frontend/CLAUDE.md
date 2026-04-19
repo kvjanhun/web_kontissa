@@ -65,6 +65,6 @@ All in `frontend/composables/` (auto-imported):
 
 - Warm stone-grey palette with orange accent (#ff643e)
 - Dark/light mode via `.dark` class on `<html>` with CSS custom property overrides
-- Fonts: DM Sans (body), Ubuntu Mono (terminal)
+- Fonts: DM Sans (body), Commit Mono (terminal / all monospace)
 - Mobile-first: always-hamburger nav
 - Accessibility: skip-to-content, `:focus-visible` rings, `aria-expanded` menu, `aria-live` announcer, `role="button"` + `aria-label` on honeycomb hexagons, `prefers-reduced-motion` respected

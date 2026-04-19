@@ -132,13 +132,14 @@ const lightboxImgs = computed(() =>
 
 .gallery__label {
   position: absolute;
-  top: -1.2rem;
+  top: -1.4rem;
   left: 0.85rem;
   padding: 0;
   background: transparent;
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   letter-spacing: 0.03em;
 }
 
@@ -196,14 +197,14 @@ const lightboxImgs = computed(() =>
 .highlight__tagline {
   margin: 0;
   font-family: var(--font-mono);
-  font-size: 0.78rem;
+  font-size: 0.8125rem;
   color: var(--color-accent);
 }
 
 .highlight__desc {
   margin: 0;
   font-family: var(--font-sans);
-  font-size: 0.85rem;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--color-text-secondary);
 }
@@ -218,7 +219,7 @@ const lightboxImgs = computed(() =>
   align-items: center;
   gap: 0.3rem;
   font-family: var(--font-mono);
-  font-size: 0.82rem;
+  font-size: 0.875rem;
   color: var(--color-text-primary);
   text-decoration: none;
 }
@@ -274,7 +275,7 @@ const lightboxImgs = computed(() =>
 }
 
 .thumb__name {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   letter-spacing: 0.02em;
   text-align: left;
   overflow: hidden;

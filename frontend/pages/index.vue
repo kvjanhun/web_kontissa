@@ -65,13 +65,18 @@ const intro = computed(() => byType.value['intro']?.content || '')
 const contact = computed(() => bySlug.value['contact']?.content || '')
 
 // Simple markdown-ish link parser: [text](url)
+const EXTERNAL_ICON = '<svg class="contact-link__arrow" xmlns="http://www.w3.org/2000/svg" width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>'
+
 function renderLinks(text) {
   if (!text) return ''
   return text
     .replace(/</g, '&lt;')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) =>
-      `<a href="${url}" class="contact-link">${label}</a>`
-    )
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
+      const external = /^https?:\/\//.test(url)
+      const attrs = external ? ' target="_blank" rel="noopener"' : ''
+      const arrow = external ? EXTERNAL_ICON : ''
+      return `<a href="${url}" class="contact-link"${attrs}>${label}${arrow}</a>`
+    })
 }
 </script>
 
@@ -229,8 +234,7 @@ function renderLinks(text) {
 }
 
 .term-banner {
-  /* Single font for the whole banner — avoids mixed-width cells. */
-  font-family: Menlo, Consolas, "DejaVu Sans Mono", monospace;
+  font-family: var(--font-mono);
   font-size: clamp(7px, 2vw, 12px);
   line-height: 1;
   margin: 0 0 0.25rem;
@@ -294,13 +298,14 @@ function renderLinks(text) {
 
 .card__label {
   position: absolute;
-  top: -1.2rem;
+  top: -1.4rem;
   left: 0.85rem;
   padding: 0;
   background: transparent;
   color: var(--color-accent);
   font-family: var(--font-mono);
-  font-size: 0.7rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   letter-spacing: 0.03em;
 }
 
@@ -308,15 +313,26 @@ function renderLinks(text) {
   margin: 0;
   color: var(--color-text-primary);
   font-family: var(--font-sans);
-  font-size: 0.9rem;
+  font-size: 0.875rem;
   line-height: 1.55;
 }
 .card__body--muted { color: var(--color-text-tertiary); }
 .card__body--contact :deep(.contact-link) {
-  color: var(--color-accent);
+  color: var(--color-text-primary);
+  white-space: nowrap;
 }
 .card__body--contact :deep(.contact-link:hover) {
-  text-decoration: underline;
+  color: var(--color-accent);
+}
+.card__body--contact :deep(.contact-link__arrow) {
+  color: var(--color-accent);
+  margin-left: 0.2rem;
+  display: inline-block;
+  vertical-align: -0.1em;
+  transition: transform 0.15s ease;
+}
+.card__body--contact :deep(.contact-link:hover .contact-link__arrow) {
+  transform: translateX(2px);
 }
 
 /* Projects */
@@ -339,13 +355,14 @@ function renderLinks(text) {
   gap: 0.35rem;
   color: var(--color-text-primary);
   font-family: var(--font-mono);
-  font-size: 0.88rem;
+  font-size: 0.875rem;
   font-weight: 500;
   width: fit-content;
 }
 .proj-link:hover { color: var(--color-accent); }
+.proj-link:hover .proj-name { color: var(--color-accent); }
 .proj-link:hover .proj-arrow { transform: translateX(2px); }
-.proj-name { font-family: var(--font-mono); font-size: 0.88rem; color: var(--color-text-primary); }
+.proj-name { font-family: var(--font-mono); font-size: 0.875rem; color: var(--color-text-primary); }
 .proj-arrow {
   color: var(--color-accent);
   transition: transform 0.15s ease;
@@ -353,7 +370,7 @@ function renderLinks(text) {
 .proj-desc {
   font-family: var(--font-sans);
   color: var(--color-text-secondary);
-  font-size: 0.78rem;
-  line-height: 1.45;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 </style>
