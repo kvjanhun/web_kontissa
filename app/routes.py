@@ -64,8 +64,6 @@ def generate_sitemap():
     pages = [
         {"loc": "https://erez.ac/", "lastmod": lastmod, "changefreq": "monthly", "priority": "1.0"},
         {"loc": "https://erez.ac/sanakenno", "lastmod": lastmod, "changefreq": "daily", "priority": "0.9"},
-        {"loc": "https://erez.ac/about", "lastmod": lastmod, "changefreq": "monthly", "priority": "0.8"},
-        {"loc": "https://erez.ac/contact", "lastmod": lastmod, "changefreq": "monthly", "priority": "0.5"},
     ]
 
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>',

@@ -46,6 +46,11 @@ export default defineNuxtConfig({
         { property: 'og:description', content: 'Developer & tinkerer. Full-stack developer, and technology enthusiast.' },
         { property: 'og:url', content: 'https://erez.ac' },
         { property: 'og:type', content: 'website' },
+        { property: 'og:image', content: 'https://erez.ac/og-image.png' },
+        { property: 'og:image:width', content: '1200' },
+        { property: 'og:image:height', content: '630' },
+        { name: 'twitter:card', content: 'summary_large_image' },
+        { name: 'twitter:image', content: 'https://erez.ac/og-image.png' },
       ],
       link: [],
       script: [
