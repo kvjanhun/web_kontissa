@@ -19,7 +19,7 @@
 - **AboutSectionCard.vue**: Used for `project` (name|url|description|icon lines), `currently`, `text`, and other card types in the about bento layout.
 - **GitStatsSection.vue**: Fetches `/api/project-stats` (GitHub API, cached 6h in `utils.py`) and renders commit count, repo age, size, and languages.
 - **TimelineSection.vue**: Parses `date|title|description` lines; auto-scrolling marquee animation.
-- **TerminalWindow.vue**: Interactive shell with commands (help, about, skills, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions.
+- **TerminalWindow.vue**: Interactive shell with commands (help, about, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions. On first load it auto-runs a looping choreography (`help → about → weather → date | cowsay -f tux → clear`); any user keystroke aborts the loop via `stopChoreography()`.
 - **admin/**: AdminSections, AdminPageViews, AdminRecipes, AdminHealth, AdminKennoStats, AdminKennoPuzzleTool, AdminBlockedWords, KennoVariationsGrid, KennoWordList.
 
 ## Sanakenno Frontend (pages/sanakenno.vue)
