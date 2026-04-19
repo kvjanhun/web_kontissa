@@ -11,13 +11,12 @@ const { locale } = storeToRefs(i18nStore)
 // Banner kept as a JS array so text interpolation preserves consecutive spaces
 // (Vue's template compiler condenses whitespace inside inline template text).
 const bannerRows = [
- ' ▄████▄    ██▄████   ▄████▄   ████████             ▄█████▄   ▄█████▄.         ',
- '██▄▄▄▄██   ██▀      ██▄▄▄▄██      ▄█▀              ▀ ▄▄▄██  ██▀    ▀          ',
- '██▀▀▀▀▀▀   ██       ██▀▀▀▀▀▀    ▄█▀               ▄██▀▀▀██  ██                ',
- '▀██▄▄▄▄█   ██       ▀██▄▄▄▄█  ▄██▄▄▄▄▄     ██     ██▄▄▄███  ▀██▄▄▄▄█          ',
- '  ▀▀▀▀▀    ▀▀         ▀▀▀▀▀   ▀▀▀▀▀▀▀▀     ▀▀      ▀▀▀▀ ▀▀    ▀▀▀▀▀           ',
- '▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁         ',
- '▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔         ',
+' ▄▄▄▖▗▄▄▖ ▗▄▄▄▖▗▄▄▄▖  ▗▄▖  ▗▄▄▖',
+'▐▌   ▐▌ ▐▌▐▌      ▞▘ ▐▌ ▐▌▐▌   ',
+'▐▛▀▀▘▐▛▀▚▖▐▛▀▀▘ ▗▞   ▐▛▀▜▌▐▌   ',
+'▐▙▄▄▖▐▌ ▐▌▐▙▄▄▖▐▙▄▄▖▄▐▌ ▐▌▝▚▄▄▖',
+ '▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁',
+ '▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔',
 ]
 
 useHead({
@@ -209,26 +208,23 @@ function renderLinks(text) {
   }
 }
 
-/* Mobile: toggles sit in-flow at the top of the terminal, pushing the banner down */
+/* Overlay toggles in the terminal's top-right corner */
 .term-toggles {
+  position: absolute;
+  top: 0.75rem;
+  right: 0.75rem;
   display: flex;
   flex-direction: row;
-  justify-content: flex-end;
   align-items: center;
   gap: 0.35rem;
-  margin-bottom: 0.5rem;
   z-index: 5;
 }
 
-/* Desktop: overlay toggles in the terminal's top-right corner, stacked vertically */
+/* Desktop: stack vertically so they take less horizontal space */
 @media (min-width: 1024px) {
   .term-toggles {
-    position: absolute;
     top: 1.25rem;
-    right: 0.75rem;
     flex-direction: column;
-    align-items: center;
-    margin-bottom: 0;
   }
 }
 
