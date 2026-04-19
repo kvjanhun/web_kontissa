@@ -1,44 +1,43 @@
 <script setup>
-const projects = [
+const { t } = useI18nStore()
+
+const projects = computed(() => [
   {
     slug: 'sanakenno',
-    name: 'Sanakenno',
-    tagline: 'Finnish word puzzle — NYT Spelling Bee inspired',
-    description:
-      'Daily Finnish word puzzles with scoring, streaks, and PWA offline support. Nuxt 3 + Flask + SQLite, BDD-first test suite.',
+    name: t('gallery.sanakenno.name'),
+    tagline: t('gallery.sanakenno.tagline'),
+    description: t('gallery.sanakenno.description'),
     image: '/projects/sanakenno/hero.png',
     live: 'https://sanakenno.fi',
     github: 'https://github.com/kvjanhun/sanakenno',
   },
   {
     slug: 'sanakenno-admin',
-    name: 'Sanakenno admin',
-    tagline: 'Puzzle curation and player ops',
-    description:
-      'Private admin panel for generating daily puzzles, managing word lists, and inspecting player stats and combinations.',
+    name: t('gallery.sanakennoAdmin.name'),
+    tagline: t('gallery.sanakennoAdmin.tagline'),
+    description: t('gallery.sanakennoAdmin.description'),
     image: '/projects/sanakenno-admin/hero.png',
   },
   {
     slug: 'site-admin',
-    name: 'erez.ac admin',
-    tagline: 'Portfolio CMS and server ops',
-    description:
-      'Admin panel for this site: editing sections, managing recipes, page views analytics, and server health checks.',
+    name: t('gallery.siteAdmin.name'),
+    tagline: t('gallery.siteAdmin.tagline'),
+    description: t('gallery.siteAdmin.description'),
     image: '/projects/site-admin/hero.png',
   },
-]
+])
 
 const selectedIndex = ref(0)
-const selected = computed(() => projects[selectedIndex.value])
+const selected = computed(() => projects.value[selectedIndex.value])
 </script>
 
 <template>
-  <section class="gallery" aria-label="Project gallery">
+  <section class="gallery" :aria-label="t('gallery.sectionLabel')">
     <header class="gallery__label">// gallery</header>
 
     <div class="highlight">
       <div class="highlight__image">
-        <img :src="selected.image" :alt="selected.name + ' screenshot'" />
+        <img :src="selected.image" :alt="t('gallery.screenshotAlt', { name: selected.name })" />
       </div>
 
       <div class="highlight__meta">
@@ -53,7 +52,7 @@ const selected = computed(() => projects[selectedIndex.value])
             rel="noopener"
             class="highlight__link"
           >
-            <span>live</span><span class="highlight__arrow">→</span>
+            <span>{{ t('gallery.live') }}</span><span class="highlight__arrow">→</span>
           </a>
           <a
             v-if="selected.github"
@@ -62,13 +61,13 @@ const selected = computed(() => projects[selectedIndex.value])
             rel="noopener"
             class="highlight__link"
           >
-            <span>github</span><span class="highlight__arrow">→</span>
+            <span>{{ t('gallery.github') }}</span><span class="highlight__arrow">→</span>
           </a>
         </div>
       </div>
     </div>
 
-    <div class="thumbs" role="tablist" aria-label="Projects">
+    <div class="thumbs" role="tablist" :aria-label="t('gallery.projectsLabel')">
       <button
         v-for="(p, i) in projects"
         :key="p.slug"
