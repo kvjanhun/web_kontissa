@@ -149,14 +149,14 @@ function renderLinks(text) {
 .home-content {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: 1.75rem;
   min-width: 0;
 }
 
 @media (min-width: 1024px) {
   .home-content {
     max-width: 60rem;
-    gap: 1.25rem;
+    gap: 2rem;
   }
 }
 
@@ -164,7 +164,7 @@ function renderLinks(text) {
 .home-below {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 1.75rem;
   min-width: 0;
 }
 
@@ -275,7 +275,7 @@ function renderLinks(text) {
 .info-pane {
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
+  gap: 1.75rem;
   min-width: 0;
 }
 
@@ -294,10 +294,10 @@ function renderLinks(text) {
 
 .card__label {
   position: absolute;
-  top: -0.65rem;
+  top: -1.2rem;
   left: 0.85rem;
-  padding: 0 0.45rem;
-  background: var(--color-bg-primary);
+  padding: 0;
+  background: transparent;
   color: var(--color-accent);
   font-family: var(--font-mono);
   font-size: 0.7rem;
