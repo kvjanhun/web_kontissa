@@ -9,6 +9,7 @@ let hasBooted = false
 
 const outputLines = ref([])
 const currentInput = ref('')
+const autoTypedText = ref('')
 const commandHistory = ref([])
 const historyIndex = ref(-1)
 const isBooting = ref(true)
@@ -22,7 +23,13 @@ function escapeHtml(str) {
     .replace(/"/g, '&quot;')
 }
 
-const KNOWN_COMMANDS = ['help', 'about', 'skills', 'fetch', 'weather', 'cowsay', 'cowthink', 'echo', 'date', 'clear']
+const KNOWN_COMMANDS = ['help', 'about', 'fetch', 'weather', 'cowsay', 'cowthink', 'echo', 'date', 'clear']
+
+const CHOREOGRAPHY = ['help', 'about', 'weather', 'date | cowsay -f tux', 'clear']
+const CHOREOGRAPHY_PAUSE_MS = 6400
+const CHOREOGRAPHY_RESTART_PAUSE_MS = 2400
+
+let choreographyController = null
 
 export function levenshtein(a, b) {
   const m = a.length, n = b.length
@@ -96,26 +103,63 @@ async function runBootSequence() {
   isBooting.value = false
 }
 
-async function autoTypeCommand(command) {
+async function autoTypeCommand(command, controller = null) {
   if (prefersReducedMotion) {
+    if (controller?.aborted) return
     await executeCommand(command)
     return
   }
 
   await delay(600)
+  if (controller?.aborted) return
+
+  const lengthScale = Math.max(1, 10 / command.length)
 
   for (let i = 0; i < command.length; i++) {
-    currentInput.value += command[i]
-    let pause = 25 + Math.random() * 45
+    if (controller?.aborted) return
+    autoTypedText.value += command[i]
+    let pause = (25 + Math.random() * 45) * lengthScale
     if (command[i] === ' ') pause += 40 + Math.random() * 60
     else if (Math.random() < 0.1) pause += 80 + Math.random() * 80
     await delay(pause)
   }
 
+  if (controller?.aborted) return
   await delay(300)
-  const cmd = currentInput.value
-  currentInput.value = ''
+  if (controller?.aborted) return
+  const cmd = autoTypedText.value
+  autoTypedText.value = ''
   await executeCommand(cmd)
+}
+
+async function runChoreography() {
+  if (choreographyController) return
+  if (prefersReducedMotion) return
+  const controller = { aborted: false }
+  choreographyController = controller
+
+  try {
+    while (!controller.aborted) {
+      for (const cmd of CHOREOGRAPHY) {
+        if (controller.aborted) return
+        await autoTypeCommand(cmd, controller)
+        if (controller.aborted) return
+        await delay(cmd === 'clear' ? CHOREOGRAPHY_RESTART_PAUSE_MS : CHOREOGRAPHY_PAUSE_MS)
+      }
+    }
+  } finally {
+    if (choreographyController === controller) {
+      choreographyController = null
+    }
+  }
+}
+
+function stopChoreography() {
+  if (!choreographyController) return false
+  choreographyController.aborted = true
+  choreographyController = null
+  autoTypedText.value = ''
+  return true
 }
 
 // --- Command handlers ---
@@ -124,8 +168,7 @@ function handleHelp() {
   pushLine(
     '<table class="text-sm">' +
     '<tr><td class="pr-4 text-term-amber">help</td><td class="text-gray-300">Show available commands</td></tr>' +
-    '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
-    '<tr><td class="pr-4 text-term-amber">skills</td><td class="text-gray-300">Technical skills</td></tr>' +
+    '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen &amp; skills</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">fetch</td><td class="text-gray-300">System info</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">weather</td><td class="text-gray-300">Current Vantaa weather</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">cowsay &lt;msg&gt;</td><td class="text-gray-300">ASCII cow says your message (-f char, -l)</td></tr>' +
@@ -174,6 +217,13 @@ function handleAbout() {
     '<div class="text-white font-bold">Konsta Janhunen</div>' +
     '<div class="text-gray-300 mt-1">Software developer based in Helsinki, Finland.</div>' +
     '<div class="text-gray-300">Building things with Python, JavaScript, and whatever gets the job done.</div>' +
+    '<div class="my-2 text-sm space-y-1">' +
+    '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
+    '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
+    '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
+    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
+    '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
+    '</div>' +
     '<div class="mt-2">' +
     '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">github.com/kvjanhun</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
@@ -302,18 +352,6 @@ async function handleCowsay(argsArray, think = false) {
   }
 }
 
-function handleSkills() {
-  pushLine(
-    '<div class="my-1 text-sm space-y-1.5">' +
-    '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · JavaScript · SQL · Bash · HTML/CSS</span></div>' +
-    '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
-    '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
-    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions</span></div>' +
-    '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VS Code</span></div>' +
-    '</div>'
-  )
-}
-
 function getCommandText(cmd, argsArray) {
   switch (cmd) {
     case 'echo':
@@ -399,9 +437,6 @@ async function executeCommand(input) {
       case 'fetch':
         await handleFetch()
         break
-      case 'skills':
-        handleSkills()
-        break
       case 'cowsay':
         await handleCowsay(argsArray)
         break
@@ -453,11 +488,14 @@ export function useTerminal() {
   return {
     outputLines,
     currentInput,
+    autoTypedText,
     isBooting,
     isProcessing,
     executeCommand,
     runBootSequence,
     autoTypeCommand,
+    runChoreography,
+    stopChoreography,
     historyUp,
     historyDown,
   }
