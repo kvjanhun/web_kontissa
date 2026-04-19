@@ -19,29 +19,6 @@ const {
 
 const hiddenInput = ref(null)
 const scrollContainer = ref(null)
-const scrollTop = ref(0)
-const scrollHeight = ref(1)
-const clientHeight = ref(1)
-
-const canScroll = computed(() => scrollHeight.value > clientHeight.value)
-const thumbHeight = computed(() => {
-  if (!canScroll.value) return 0
-  return Math.max(24, (clientHeight.value / scrollHeight.value) * clientHeight.value)
-})
-const thumbTop = computed(() => {
-  if (!canScroll.value) return 0
-  const maxScroll = scrollHeight.value - clientHeight.value
-  const maxThumb = clientHeight.value - thumbHeight.value
-  return maxScroll > 0 ? (scrollTop.value / maxScroll) * maxThumb : 0
-})
-
-function updateScrollMetrics() {
-  const el = scrollContainer.value
-  if (!el) return
-  scrollTop.value = el.scrollTop
-  scrollHeight.value = el.scrollHeight
-  clientHeight.value = el.clientHeight
-}
 
 function focusInput() {
   hiddenInput.value?.focus()
@@ -73,20 +50,13 @@ function scrollToBottom() {
   nextTick(() => {
     if (scrollContainer.value) {
       scrollContainer.value.scrollTop = scrollContainer.value.scrollHeight
-      updateScrollMetrics()
     }
   })
 }
 
-let resizeObserver = null
-
 watch(outputLines, scrollToBottom, { deep: true })
 
 onMounted(async () => {
-  if (scrollContainer.value) {
-    resizeObserver = new ResizeObserver(updateScrollMetrics)
-    resizeObserver.observe(scrollContainer.value)
-  }
   const firstBoot = !outputLines.value.length
   await runBootSequence()
   scrollToBottom()
@@ -100,7 +70,6 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   stopChoreography()
-  resizeObserver?.disconnect()
 })
 </script>
 
@@ -114,12 +83,11 @@ onBeforeUnmount(() => {
       <!-- Scrollable content -->
       <div
         ref="scrollContainer"
-        class="font-mono text-sm text-white p-4 overflow-y-scroll overflow-x-auto pr-6"
+        class="font-mono text-sm text-white p-4 overflow-y-scroll overflow-x-auto"
         :class="fill ? 'h-full' : 'h-[360px]'"
         style="-ms-overflow-style: none; scrollbar-width: none;"
         role="log"
         aria-live="polite"
-        @scroll="updateScrollMetrics"
       >
         <div class="min-w-max">
           <!-- Output lines -->
@@ -141,23 +109,6 @@ onBeforeUnmount(() => {
             <span class="block self-center h-[1em] w-[0.6em] cursor-blink shrink-0"></span>
           </div>
         </div>
-      </div>
-
-      <!-- Custom scrollbar track (inside terminal padding) -->
-      <div
-        class="absolute top-2 bottom-2 right-1.5 w-1.5 rounded-full"
-        style="background: #1a1a1a;"
-        aria-hidden="true"
-      >
-        <div
-          v-if="canScroll"
-          class="w-1.5 rounded-full"
-          :style="{
-            background: '#555',
-            height: thumbHeight + 'px',
-            marginTop: thumbTop + 'px',
-          }"
-        />
       </div>
     </div>
 
