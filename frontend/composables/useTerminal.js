@@ -184,7 +184,7 @@ function stopChoreography() {
 
 function handleHelp() {
   pushLine(
-    '<table class="text-sm">' +
+    '<table>' +
     '<tr><td class="pr-4 text-term-amber">help</td><td class="text-gray-300">Show available commands</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">about</td><td class="text-gray-300">About Konsta Janhunen</td></tr>' +
     '<tr><td class="pr-4 text-term-amber">fetch</td><td class="text-gray-300">System info</td></tr>' +
@@ -235,7 +235,7 @@ function handleAbout() {
     '<div class="text-white font-bold">Konsta Janhunen</div>' +
     '<div class="text-gray-300 mt-1">Software developer based in Vantaa, Finland.</div>' +
     '<div class="text-gray-300">Building things with Python, TypeScript, and whatever gets the job done.</div>' +
-    '<div class="my-2 text-sm space-y-1">' +
+    '<div class="my-2 space-y-1">' +
     '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · TypeScript · SQL · Bash · HTML/CSS</span></div>' +
     '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
     '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
@@ -304,7 +304,7 @@ async function handleFetch() {
     `<span class="text-term-dir">Load</span>     <span class="text-gray-300">${escapeHtml(load)}</span>`,
     `<span class="text-term-dir">Uptime</span>   <span class="text-gray-300">${escapeHtml(uptime)}</span>`,
     `<span class="text-term-dir">Theme</span>    <span class="text-gray-300">${document.documentElement.classList.contains('dark') ? 'Dark' : 'Light'} mode</span>`,
-    `<span class="text-term-dir">Font</span>     <span class="text-gray-300">Ubuntu Mono / DM Sans</span>`,
+    `<span class="text-term-dir">Font</span>     <span class="text-gray-300">Commit Mono / DM Sans</span>`,
     '',
     swatches,
   ]
@@ -312,7 +312,7 @@ async function handleFetch() {
   pushLine(
     '<div class="flex items-center gap-4 my-1">' +
     logo +
-    '<pre class="font-mono text-sm leading-relaxed m-0">' + info.join('\n') + '</pre>' +
+    '<pre class="font-mono leading-relaxed m-0">' + info.join('\n') + '</pre>' +
     '</div>'
   )
 }
@@ -364,7 +364,7 @@ async function handleCowsay(argsArray, think = false) {
       pushLine(`<span class="text-term-error">${escapeHtml(data.error)}</span>`)
       return
     }
-    pushLine(`<pre class="font-mono text-sm whitespace-pre m-0">${escapeHtml(data.output)}</pre>`)
+    pushLine(`<pre class="font-mono whitespace-pre m-0">${escapeHtml(data.output)}</pre>`)
   } catch {
     pushLine('<span class="text-term-error">Error fetching cowsay</span>')
   }
