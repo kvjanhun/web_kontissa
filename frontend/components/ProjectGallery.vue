@@ -1,4 +1,6 @@
 <script setup>
+import VueEasyLightbox from 'vue-easy-lightbox'
+
 const { t } = useI18nStore()
 
 const projects = computed(() => [
@@ -29,6 +31,15 @@ const projects = computed(() => [
 
 const selectedIndex = ref(0)
 const selected = computed(() => projects.value[selectedIndex.value])
+
+const lightboxVisible = ref(false)
+const lightboxImgs = computed(() =>
+  projects.value.map(p => ({
+    src: p.image,
+    title: p.name,
+    alt: t('gallery.screenshotAlt', { name: p.name }),
+  }))
+)
 </script>
 
 <template>
@@ -36,9 +47,14 @@ const selected = computed(() => projects.value[selectedIndex.value])
     <header class="gallery__label">// gallery</header>
 
     <div class="highlight">
-      <div class="highlight__image">
+      <button
+        type="button"
+        class="highlight__image"
+        :aria-label="t('gallery.screenshotAlt', { name: selected.name })"
+        @click="lightboxVisible = true"
+      >
         <img :src="selected.image" :alt="t('gallery.screenshotAlt', { name: selected.name })" />
-      </div>
+      </button>
 
       <div class="highlight__meta">
         <h3 class="highlight__name">{{ selected.name }}</h3>
@@ -84,6 +100,19 @@ const selected = computed(() => projects.value[selectedIndex.value])
         <span class="thumb__name">{{ p.name }}</span>
       </button>
     </div>
+
+    <ClientOnly>
+      <VueEasyLightbox
+        teleport="body"
+        :visible="lightboxVisible"
+        :imgs="lightboxImgs"
+        :index="selectedIndex"
+        move-disabled
+        rotate-disabled
+        @hide="lightboxVisible = false"
+        @index-change="i => (selectedIndex = i)"
+      />
+    </ClientOnly>
   </section>
 </template>
 
@@ -103,10 +132,10 @@ const selected = computed(() => projects.value[selectedIndex.value])
 
 .gallery__label {
   position: absolute;
-  top: -0.65rem;
+  top: -1.2rem;
   left: 0.85rem;
-  padding: 0 0.45rem;
-  background: var(--color-bg-primary);
+  padding: 0;
+  background: transparent;
   color: var(--color-accent);
   font-family: var(--font-mono);
   font-size: 0.7rem;
@@ -131,6 +160,16 @@ const selected = computed(() => projects.value[selectedIndex.value])
   display: flex;
   align-items: center;
   justify-content: center;
+  padding: 0;
+  cursor: zoom-in;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.highlight__image:hover {
+  border-color: rgba(255, 100, 62, 0.55);
+}
+.highlight__image:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
 }
 .highlight__image img {
   width: 100%;
@@ -241,5 +280,14 @@ const selected = computed(() => projects.value[selectedIndex.value])
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+</style>
+
+<style>
+/* Cap the teleported lightbox image at terminal width (60rem) */
+.vel-img-modal .vel-img {
+  max-width: min(100%, 60rem) !important;
+  max-height: 90vh;
+  object-fit: contain;
 }
 </style>
