@@ -62,7 +62,7 @@ const projects = computed(() => {
 })
 
 const intro = computed(() => byType.value['intro']?.content || '')
-const contact = computed(() => bySlug.value['where']?.content || '')
+const contact = computed(() => bySlug.value['contact']?.content || '')
 
 // Simple markdown-ish link parser: [text](url)
 function renderLinks(text) {
