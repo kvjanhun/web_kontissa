@@ -22,9 +22,9 @@ describe('trackPageView', () => {
   })
 
   it('sends the path as JSON in the request body', async () => {
-    trackPageView('/sanakenno')
+    trackPageView('/recipes')
     const [, options] = fetchMock.mock.calls[0]
-    expect(options.body).toBe(JSON.stringify({ path: '/sanakenno' }))
+    expect(options.body).toBe(JSON.stringify({ path: '/recipes' }))
   })
 
   it('sets Content-Type to application/json', () => {

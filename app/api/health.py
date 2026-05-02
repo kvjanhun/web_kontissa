@@ -5,7 +5,7 @@ import urllib.request
 
 import structlog
 from flask import Blueprint, jsonify, current_app
-from app.models import db, User, Recipe, Section, BlockedWord, PageViewEvent
+from app.models import db, User, Recipe, Section, PageViewEvent
 from app.decorators import admin_required
 from app import _stats
 
@@ -151,7 +151,6 @@ def admin_health():
         ("users", User),
         ("recipes", Recipe),
         ("sections", Section),
-        ("blocked_words", BlockedWord),
         ("page_view_events", PageViewEvent),
     ]:
         try:

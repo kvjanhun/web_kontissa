@@ -1,6 +1,5 @@
 """Tests for SQLAlchemy model constraints, defaults, relationships, and serialization."""
 
-import json
 from datetime import datetime
 
 import pytest
@@ -8,9 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from app.models import (
-    BlockedWord,
     Ingredient,
-    KennoCombination,
     PageViewEvent,
     Recipe,
     Section,
@@ -238,29 +235,6 @@ class TestRecipe:
 
 
 # ---------------------------------------------------------------------------
-# BlockedWord
-# ---------------------------------------------------------------------------
-
-class TestBlockedWord:
-    def test_word_must_be_unique(self, app):
-        with app.app_context():
-            db.session.add(BlockedWord(word="kissa"))
-            db.session.commit()
-
-            db.session.add(BlockedWord(word="kissa"))
-            with pytest.raises(IntegrityError):
-                db.session.commit()
-            db.session.rollback()
-
-    def test_blocked_at_defaults_to_now(self, app):
-        with app.app_context():
-            bw = BlockedWord(word="koira")
-            db.session.add(bw)
-            db.session.commit()
-            assert isinstance(bw.blocked_at, datetime)
-
-
-# ---------------------------------------------------------------------------
 # PageViewEvent
 # ---------------------------------------------------------------------------
 
@@ -281,55 +255,3 @@ class TestPageViewEvent:
             assert count == 5
 
 
-# ---------------------------------------------------------------------------
-# KennoCombination
-# ---------------------------------------------------------------------------
-
-class TestKennoCombination:
-    def _make_combo(self, app, letters="aeklnst"):
-        variations = [{"center": c, "word_count": 10 + i} for i, c in enumerate(letters)]
-        combo = KennoCombination(
-            letters=letters,
-            total_pangrams=2,
-            min_word_count=50,
-            max_word_count=80,
-            min_max_score=100,
-            max_max_score=200,
-            variations=json.dumps(variations),
-            in_rotation=False,
-        )
-        with app.app_context():
-            db.session.add(combo)
-            db.session.commit()
-        return letters
-
-    def test_to_dict_deserializes_variations_from_json(self, app):
-        letters = self._make_combo(app)
-        with app.app_context():
-            combo = db.session.get(KennoCombination, letters)
-            d = combo.to_dict()
-            assert isinstance(d["variations"], list)
-            assert len(d["variations"]) == 7
-            assert d["variations"][0]["center"] == letters[0]
-
-    def test_to_dict_includes_all_fields(self, app):
-        letters = self._make_combo(app)
-        with app.app_context():
-            combo = db.session.get(KennoCombination, letters)
-            d = combo.to_dict()
-            assert d["letters"] == letters
-            assert d["total_pangrams"] == 2
-            assert d["min_word_count"] == 50
-            assert d["max_word_count"] == 80
-            assert d["min_max_score"] == 100
-            assert d["max_max_score"] == 200
-            assert d["in_rotation"] is False
-
-    def test_in_rotation_flag_persists(self, app):
-        letters = self._make_combo(app)
-        with app.app_context():
-            combo = db.session.get(KennoCombination, letters)
-            combo.in_rotation = True
-            db.session.commit()
-            refreshed = db.session.get(KennoCombination, letters)
-            assert refreshed.in_rotation is True

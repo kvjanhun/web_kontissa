@@ -95,7 +95,6 @@ from .auth import auth_bp
 from .recipes import recipes_bp
 from .api.cowsay import cowsay_bp
 from .api.weather import weather_bp
-from .api.kenno import kenno_bp
 from .api.pageviews import pageviews_bp
 from .api.health import health_bp
 
@@ -103,7 +102,6 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(recipes_bp)
 app.register_blueprint(cowsay_bp)
 app.register_blueprint(weather_bp)
-app.register_blueprint(kenno_bp)
 app.register_blueprint(pageviews_bp)
 app.register_blueprint(health_bp)
 app.register_blueprint(core_bp)  # last — has catch-all route

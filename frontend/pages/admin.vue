@@ -19,8 +19,6 @@ const tabs = [
   { key: 'analytics', labelKey: 'admin.tab.analytics', component: resolveComponent('AdminPageViews') },
   { key: 'recipes', labelKey: 'admin.tab.recipes', component: resolveComponent('AdminRecipes') },
   { key: 'health', labelKey: 'admin.tab.health', component: resolveComponent('AdminHealth') },
-  { key: 'sanakenno', labelKey: 'admin.tab.sanakenno', components: [resolveComponent('AdminKennoStats'), resolveComponent('AdminBlockedWords')] },
-  { key: 'kennotyokalu', labelKey: 'admin.tab.kennotyokalu', component: resolveComponent('AdminKennoPuzzleTool') },
 ]
 
 const activeTab = ref('sections')
@@ -68,13 +66,7 @@ function selectTab(key) {
       :aria-labelledby="`tab-${tab.key}`"
     >
       <template v-if="mountedTabs.has(tab.key)">
-        <!-- Sanakenno tab renders two components stacked -->
-        <template v-if="tab.components">
-          <div class="space-y-6">
-            <component v-for="(comp, i) in tab.components" :key="i" :is="comp" />
-          </div>
-        </template>
-        <component v-else :is="tab.component" />
+        <component :is="tab.component" />
       </template>
     </div>
   </div>

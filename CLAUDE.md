@@ -51,11 +51,11 @@ web_kontissa/
 │   ├── __init__.py         # App factory, LoginManager, Limiter
 │   ├── routes.py           # Sections CRUD, meta, sitemap, static serving
 │   ├── auth.py, recipes.py # Auth + recipe endpoints
-│   ├── api/                # kenno, cowsay, weather, health, pageviews
+│   ├── api/                # cowsay, weather, health, pageviews
 │   ├── models.py           # All SQLAlchemy models
-│   └── wordlists/          # kotus_words.txt (101k Finnish words)
+│   └── decorators.py
 ├── tests/                  # Backend pytest (357 tests)
-├── scripts/                # seed_puzzles.py, seed_e2e.py, etc.
+├── scripts/                # seed_e2e.py, create_user.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
     └── observability/      # Loki, Promtail, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```

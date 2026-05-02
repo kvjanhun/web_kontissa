@@ -21,7 +21,7 @@ Personal portfolio website by Konsta Janhunen.
 - Interactive terminal animation on the home page (cowsay, weather, etc.)
 - Admin panel for managing content sections (tab-based dashboard)
 - Shared recipe book with search, categories, cooking mode with wake lock (for logged in users only)
-- [Sanakenno](https://erez.ac/sanakenno) — Finnish word game with a full admin panel. Inspired by [NYT Spelling Bee](https://www.nytimes.com/puzzles/spelling-bee)
+- [Sanakenno](https://sanakenno.fi) — Finnish word game with a full admin panel. Inspired by [NYT Spelling Bee](https://www.nytimes.com/puzzles/spelling-bee). Now lives in its own repository and container.
 - Real-time weather from the Finnish Meteorological Institute (FMI) API
 - Accessibility: skip links, ARIA attributes, focus indicators, reduced-motion support
 
@@ -30,7 +30,6 @@ Here's some documentation on the parts of the stack that are not available for n
 ### Features for logged in users
 The site has some features that are available only for logged in users. Some of the features are demonstrated below.
 
-- [Sanakenno puzzle editor](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
 - [Observability stack](./server/observability) - Live logging with Grafana, Loki, Promtail, Prometheus.
 
 ### Server configuration

@@ -258,7 +258,7 @@ class TestSectionType:
     def test_create_project_section(self, logged_in_admin):
         res = logged_in_admin.post("/api/sections", json={
             "title": "Projects", "slug": "projects",
-            "content": "Sanakenno|/sanakenno|A word game",
+            "content": "erez.ac|https://erez.ac|Personal portfolio site",
             "section_type": "project",
         })
         assert res.status_code == 201
