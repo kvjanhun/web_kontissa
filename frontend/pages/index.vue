@@ -62,22 +62,7 @@ const projects = computed(() => {
 })
 
 const intro = computed(() => byType.value['intro']?.content || '')
-const contact = computed(() => bySlug.value['contact']?.content || '')
-
-// Simple markdown-ish link parser: [text](url)
-const EXTERNAL_ICON = '<svg class="contact-link__arrow" xmlns="http://www.w3.org/2000/svg" width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>'
-
-function renderLinks(text) {
-  if (!text) return ''
-  return text
-    .replace(/</g, '&lt;')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const external = /^https?:\/\//.test(url)
-      const attrs = external ? ' target="_blank" rel="noopener"' : ''
-      const arrow = external ? EXTERNAL_ICON : ''
-      return `<a href="${url}" class="contact-link"${attrs}>${label}${arrow}</a>`
-    })
-}
+const contactHtml = computed(() => renderMarkdown(bySlug.value['contact']?.content || ''))
 </script>
 
 <template>
@@ -124,7 +109,7 @@ function renderLinks(text) {
 
           <article class="card">
             <header class="card__label">// ping</header>
-            <p class="card__body card__body--contact" v-html="renderLinks(contact)"></p>
+            <div class="card__body card__body--contact" v-html="contactHtml"></div>
           </article>
         </aside>
 
@@ -317,21 +302,27 @@ function renderLinks(text) {
   line-height: 1.55;
 }
 .card__body--muted { color: var(--color-text-tertiary); }
-.card__body--contact :deep(.contact-link) {
+.card__body--contact :deep(p) {
+  margin: 0;
+}
+.card__body--contact :deep(p + p) {
+  margin-top: 0.4rem;
+}
+.card__body--contact :deep(a) {
   color: var(--color-text-primary);
   white-space: nowrap;
 }
-.card__body--contact :deep(.contact-link:hover) {
+.card__body--contact :deep(a:hover) {
   color: var(--color-accent);
 }
-.card__body--contact :deep(.contact-link__arrow) {
+.card__body--contact :deep(a[target="_blank"])::after {
+  content: '↗';
   color: var(--color-accent);
   margin-left: 0.2rem;
   display: inline-block;
-  vertical-align: -0.1em;
   transition: transform 0.15s ease;
 }
-.card__body--contact :deep(.contact-link:hover .contact-link__arrow) {
+.card__body--contact :deep(a[target="_blank"]:hover)::after {
   transform: translateX(2px);
 }
 
