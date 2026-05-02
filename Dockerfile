@@ -8,9 +8,10 @@ RUN cd frontend && npm ci && npm run build
 # Stage 2: Python runtime
 FROM python:3.13-alpine
 WORKDIR /app
-RUN apk add --no-cache gcc musl-dev libffi-dev
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN apk add --no-cache --virtual .build-deps gcc musl-dev libffi-dev \
+ && pip install --no-cache-dir -r requirements.txt \
+ && apk del .build-deps
 COPY app/ ./app/
 COPY scripts/ ./scripts/
 COPY run.py .
