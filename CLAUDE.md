@@ -110,7 +110,8 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 - **SQL injection**: SQLAlchemy parameterized queries throughout.
 - **XSS**: Vue auto-escapes `{{ }}`. `v-html` only on admin-authored section content.
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`).
-- **Network**: Container port 8080 on localhost only. Nginx handles TLS.
+- **Network**: Container port 8080 on localhost only. Nginx handles TLS. Flask is wrapped in `ProxyFix(x_for=1, x_proto=1)` so `request.remote_addr` reflects the real client IP — required for rate limiting to be per-visitor instead of per-container. Do not bump `x_for` without verifying the upstream chain still terminates at our nginx; otherwise clients can spoof IPs via `X-Forwarded-For`.
+- **Rate limiting**: Flask-Limiter uses in-memory storage with `default_limits=["30/minute"]`, keyed on the real client IP. With 2 gunicorn workers each holding independent counters, the effective limit per IP is approximately 60/minute. Acceptable for the site's threat model; tighten by adding a shared storage backend.
 - **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx. CSP in report-only mode. Config: `server/erez.ac.conf`.
 - **Webhook**: Token-validated, runs as unprivileged user.
 

@@ -6,6 +6,7 @@ from flask import Flask, request
 from flask_login import LoginManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, User
 
 structlog.configure(
@@ -24,6 +25,10 @@ structlog.configure(
 )
 
 app = Flask(__name__)
+# Trust exactly one proxy hop (nginx on 127.0.0.1). Bumping x_for/x_proto
+# without verifying the upstream chain still terminates at our nginx would
+# let clients spoof their IP via X-Forwarded-For.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=0, x_prefix=0)
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URI", "sqlite:////app/data/site.db"
 )
