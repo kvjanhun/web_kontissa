@@ -1,0 +1,324 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [],
+  "panels": [
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 0 },
+      "id": 10,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "expr": "sum(rate({job=\"nginx\", filename=\"/var/log/nginx/sanakenno.fi.access.log\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx Request Rate (5m avg)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "linesps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 8, "y": 0 },
+      "id": 11,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "expr": "sum(rate({compose_service=~\"sanakenno-.*\"}[5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "App Log Rate (5m avg)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "linesps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 4, "w": 8, "x": 16, "y": 0 },
+      "id": 12,
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"] },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "value"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "expr": "sum(rate({compose_service=~\"sanakenno-.*\"} | json | level=\"error\"[5m]))",
+          "refId": "A"
+        }
+      ],
+      "title": "App Error Rate (5m avg)",
+      "type": "stat"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "spanNulls": true
+          },
+          "unit": "reqps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 0, "y": 4 },
+      "id": 13,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "expr": "sum(rate({job=\"nginx\", filename=\"/var/log/nginx/sanakenno.fi.access.log\"}[5m]))",
+          "legendFormat": "sanakenno.fi requests",
+          "refId": "A"
+        }
+      ],
+      "title": "Traffic Volume (Requests/sec)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "lineWidth": 1,
+            "fillOpacity": 15,
+            "spanNulls": true
+          },
+          "unit": "linesps",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 7, "w": 12, "x": 12, "y": 4 },
+      "id": 14,
+      "options": {
+        "legend": { "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi" }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "expr": "sum by (compose_service) (rate({compose_service=~\"sanakenno-.*\"}[5m]))",
+          "legendFormat": "{{compose_service}} logs",
+          "refId": "A"
+        }
+      ],
+      "title": "App Log Rate by Container",
+      "type": "timeseries"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 11 },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "detailsMode": "inline",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/sanakenno.fi.access.log\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx Access Traffic (sanakenno.fi)",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 21 },
+      "id": 2,
+      "options": {
+        "dedupStrategy": "none",
+        "detailsMode": "inline",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/sanakenno.fi.error.log\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Nginx Error Logs (sanakenno.fi)",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 29 },
+      "id": 3,
+      "options": {
+        "dedupStrategy": "none",
+        "detailsMode": "inline",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "expr": "{compose_service=~\"sanakenno-.*\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Hono Application Logs (Sanakenno)",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 41 },
+      "id": 4,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": false,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "expr": "{compose_service=~\"sanakenno-.*\"} |= \"/api/achievement\" |= \"201\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Registered Player Achievements",
+      "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 41 },
+      "id": 5,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": false,
+        "fontSize": "small",
+        "prettifyLogMessage": true,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "expr": "{compose_service=~\"sanakenno-.*\"} |= \"/api/word-find\" |= \"200\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Registered Player Word Finds",
+      "type": "logs"
+    }
+  ],
+  "preload": false,
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": ["sanakenno", "logs", "traffic", "gameplay"],
+  "templating": { "list": [] },
+  "time": { "from": "now-6h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Sanakenno Overview",
+  "uid": "sanakenno-logs-dashboard-1",
+  "version": 1,
+  "weekStart": ""
+}
