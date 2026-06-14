@@ -124,6 +124,78 @@ def test_get_show_detail(mock_get, client):
     assert data["breeds"][0]["has_results"] is True
     assert data["breeds"][1]["has_results"] is False
 
+
+SAMPLE_GENERAL_SHOW_MAIN_HTML = """
+<div id="divOtsikko">
+    <h1>10.05.2026 Kouvola</h1>
+</div>
+<div id="divContent">
+    <a href="/nayttelyt/Tulokset?Id=14025&R=3">FCI 3</a>
+    <a href="/nayttelyt/Tulokset?Id=14025&R=5">FCI 5</a>
+</div>
+"""
+
+SAMPLE_GENERAL_SHOW_GROUP_3_HTML = """
+<div id="divOtsikko">
+    <h1>10.05.2026 Kouvola</h1>
+</div>
+<table class="rotulistatable">
+    <tr class="rotuluettelo">
+        <td><a href="/nayttelyt/Tulokset?Id=14025&R=3&RO=166">australianterrieri</a></td>
+        <td class="right">11</td>
+        <td class="right"><i class="fa fa-check"></i></td>
+    </tr>
+</table>
+"""
+
+SAMPLE_GENERAL_SHOW_GROUP_5_HTML = """
+<div id="divOtsikko">
+    <h1>10.05.2026 Kouvola</h1>
+</div>
+<table class="rotulistatable">
+    <tr class="rotuluettelo">
+        <td><a href="/nayttelyt/Tulokset?Id=14025&R=5&RO=3">basenji</a></td>
+        <td class="right">5</td>
+        <td class="right"></td>
+    </tr>
+</table>
+"""
+
+@patch("app.api.dog.requests.get")
+def test_get_show_detail_general(mock_get, client):
+    mock_resp_main = MagicMock()
+    mock_resp_main.text = SAMPLE_GENERAL_SHOW_MAIN_HTML
+    mock_resp_main.status_code = 200
+
+    mock_resp_g3 = MagicMock()
+    mock_resp_g3.text = SAMPLE_GENERAL_SHOW_GROUP_3_HTML
+    mock_resp_g3.status_code = 200
+
+    mock_resp_g5 = MagicMock()
+    mock_resp_g5.text = SAMPLE_GENERAL_SHOW_GROUP_5_HTML
+    mock_resp_g5.status_code = 200
+
+    mock_get.side_effect = [mock_resp_main, mock_resp_g3, mock_resp_g5]
+
+    resp = client.get("/api/dog/shows/14025")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["id"] == 14025
+    assert data["title"] == "10.05.2026 Kouvola"
+    assert len(data["breeds"]) == 2
+    
+    assert data["breeds"][0]["name"] == "australianterrieri"
+    assert data["breeds"][0]["count"] == 11
+    assert data["breeds"][0]["group"] == "3"
+    assert data["breeds"][0]["breed_id"] == "166"
+    assert data["breeds"][0]["has_results"] is True
+
+    assert data["breeds"][1]["name"] == "basenji"
+    assert data["breeds"][1]["count"] == 5
+    assert data["breeds"][1]["group"] == "5"
+    assert data["breeds"][1]["breed_id"] == "3"
+    assert data["breeds"][1]["has_results"] is False
+
 @patch("app.api.dog.requests.get")
 def test_get_breed_results(mock_get, client):
     mock_resp = MagicMock()

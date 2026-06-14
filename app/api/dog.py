@@ -118,7 +118,7 @@ def _background_crawler():
 @dog_bp.record
 def on_blueprint_ready(state):
     app = state.app
-    if not app.config.get("TESTING"):
+    if not app.config.get("TESTING") and os.environ.get("DOG_NO_CRAWLER") != "true":
         _load_index()
         global _crawler_started
         with _crawler_lock:
@@ -210,11 +210,7 @@ def show_list():
 # GET /api/dog/shows/<show_id> — show detail with breed list
 # ---------------------------------------------------------------------------
 
-def _parse_show_detail(soup, show_id):
-    """Parse the show detail page: title and breed list."""
-    title_el = soup.select_one("#divOtsikko h1")
-    title = title_el.get_text(strip=True) if title_el else ""
-
+def _parse_breeds_from_soup(soup):
     breeds = []
     for row in soup.select("table.rotulistatable tr.rotuluettelo"):
         cells = row.find_all("td")
@@ -250,6 +246,50 @@ def _parse_show_detail(soup, show_id):
             "breed_id": breed_id,
             "has_results": has_results,
         })
+    return breeds
+
+
+def _parse_show_detail(soup, show_id):
+    """Parse the show detail page: title and breed list."""
+    title_el = soup.select_one("#divOtsikko h1")
+    title = title_el.get_text(strip=True) if title_el else ""
+
+    # 1. Parse breeds on the landing page (for specialty shows)
+    breeds = _parse_breeds_from_soup(soup)
+
+    # 2. If no breeds found, look for group links (FCI groups R=1..10)
+    if not breeds:
+        group_links = []
+        content = soup.find(id="divContent") or soup.find(id="content") or soup
+        for a in content.find_all("a"):
+            href = a.get("href", "")
+            match = re.search(r"R=(\d+)", href)
+            # Only match groups 1-10
+            if match:
+                group_num = match.group(1)
+                if group_num.isdigit() and 1 <= int(group_num) <= 10:
+                    group_links.append((group_num, href))
+
+        # Remove duplicate group numbers
+        seen_groups = set()
+        unique_groups = []
+        for g, href in group_links:
+            if g not in seen_groups:
+                seen_groups.add(g)
+                unique_groups.append((g, href))
+
+        if unique_groups:
+            logger.info("dog_show_groups_found", show_id=show_id, groups=[g[0] for g in unique_groups])
+            for g_num, href in unique_groups:
+                url = f"{BASE_URL}?Id={show_id}&R={g_num}"
+                try:
+                    # Sleep 0.5s to be polite during nested crawls
+                    time.sleep(0.5)
+                    group_soup = _fetch_page(url)
+                    group_breeds = _parse_breeds_from_soup(group_soup)
+                    breeds.extend(group_breeds)
+                except Exception as e:
+                    logger.warning("dog_show_group_fetch_failed", show_id=show_id, group=g_num, error=str(e))
 
     return {
         "id": show_id,
