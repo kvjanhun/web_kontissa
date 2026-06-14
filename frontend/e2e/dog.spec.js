@@ -135,4 +135,133 @@ test.describe('Dog Show Browser', () => {
     await expect(page).toHaveURL(/\/dog$/)
     await expect(page.getByRole('button', { name: 'Näyttelyt', exact: true })).toBeVisible()
   })
+
+  test('show-wide results can be searched and filtered by rank without selecting a breed', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 14042,
+              date: '14.06.',
+              name: 'Basenji Show',
+              month: 'kesäkuu 2026',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+            },
+          ],
+          index: {
+            indexed_show_count: 1,
+            total_show_count: 1,
+            last_updated: null,
+            last_updated_iso: null,
+          },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14042,
+          title: 'Basenji Show 2026',
+          breeds: [
+            {
+              name: 'Basenji',
+              count: 3,
+              group: '6',
+              breed_id: '123',
+              has_results: true,
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042&R=6&RO=123',
+            },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042/all-results', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          show_id: 14042,
+          results: [
+            {
+              number: 1,
+              name: 'Aamun Tähti',
+              reg_url: '',
+              grade: 'ERI',
+              placement: 1,
+              awards: '',
+              critique: 'Hieno basenji',
+              gender: 'uros',
+              class_name: 'JUN',
+              breedName: 'Basenji',
+              breedGroup: '6',
+              breedId: '123',
+              breedObj: {
+                name: 'Basenji',
+                count: 3,
+                group: '6',
+                breed_id: '123',
+                has_results: true,
+              },
+            },
+            {
+              number: 2,
+              name: 'Iltatähti',
+              reg_url: '',
+              grade: 'EH',
+              placement: 2,
+              awards: '',
+              critique: '',
+              gender: 'narttu',
+              class_name: 'NUO',
+              breedName: 'Basenji',
+              breedGroup: '6',
+              breedId: '123',
+              breedObj: {
+                name: 'Basenji',
+                count: 3,
+                group: '6',
+                breed_id: '123',
+                has_results: true,
+              },
+            },
+          ],
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByRole('button', { name: /Basenji Show/ }).click()
+    await expect(page.getByRole('button', { name: 'Rotuluettelo (1)' })).toBeVisible()
+    
+    // Switch to results & dogs tab
+    await page.getByRole('button', { name: 'Koirat & Tulokset' }).click()
+    
+    // Check that both dogs are visible
+    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Iltatähti')).toBeVisible()
+    
+    // Filter by grade 'ERI'
+    await page.locator('select').first().selectOption('eri')
+    
+    // Aamun Tähti (ERI) should be visible, Iltatähti (EH) should be hidden
+    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Iltatähti')).not.toBeVisible()
+    
+    // Search text for 'Aamun'
+    await page.getByPlaceholder('Nimi, numero tai rotu...').fill('Aamun')
+    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    
+    // Non-matching search
+    await page.getByPlaceholder('Nimi, numero tai rotu...').fill('Mustikki')
+    await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
+  })
 })

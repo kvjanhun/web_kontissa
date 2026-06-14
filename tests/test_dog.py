@@ -356,3 +356,28 @@ def test_breed_results_invalid_params(client):
 
     resp = client.get("/api/dog/shows/14042/results?group=5&breed=0")
     assert resp.status_code == 400
+
+@patch("app.api.dog.requests.get")
+def test_search_shows_by_judge(mock_get, client):
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+
+    from app.api.dog import _show_index
+    _show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" }
+        ]
+    }
+
+    mock_get.return_value = mock_resp_list
+
+    resp = client.get("/api/dog/search?q=steele")
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["query"] == "steele"
+    assert len(data["results"]) == 1
+    assert data["results"][0]["show"]["name"] == "Basenji"
+    assert data["results"][0]["breed"]["judge"] == "Paula Steele"
+    assert data["results"][0]["match"] == "breed"

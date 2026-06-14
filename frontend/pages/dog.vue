@@ -16,18 +16,6 @@ useHead({
 const route = useRoute()
 const router = useRouter()
 
-// --- Dark mode: always on for this page ---
-onMounted(() => {
-  document.documentElement.classList.add('dark')
-})
-onUnmounted(() => {
-  // Restore user preference on leave
-  const saved = localStorage.getItem('theme')
-  if (saved !== 'dark' && !window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    document.documentElement.classList.remove('dark')
-  }
-})
-
 // ─── View state ──────────────────────────────────────────────
 // 'list' | 'detail' | 'results'
 const currentView = ref('list')
@@ -56,6 +44,120 @@ const searchResults = ref([])
 const searchLoading = ref(false)
 const searchError = ref('')
 const showResultsOnly = ref(false)
+
+// Breed list search query (within show detail view)
+const breedSearchQuery = ref('')
+
+// Breed results filters (within results view)
+const dogSearchQuery = ref('')
+const dogGradeFilter = ref('')
+const dogClassFilter = ref('')
+const dogAwardFilter = ref('')
+
+// ─── Show-wide all-dogs results state (Show detail view) ─────
+const showDetailTab = ref('breeds') // 'breeds' | 'dogs'
+const allDogsLoading = ref(false)
+const allDogsLoaded = ref(false)
+const allDogsError = ref('')
+const allDogsResults = ref([])
+
+function onSelectDogsTab() {
+  showDetailTab.value = 'dogs'
+  loadAllShowResults()
+}
+
+async function loadAllShowResults() {
+  if (allDogsLoaded.value || allDogsLoading.value) return
+  allDogsLoading.value = true
+  allDogsError.value = ''
+  try {
+    const data = await $fetch(`/api/dog/shows/${selectedShow.value.id}/all-results`)
+    allDogsResults.value = data.results || []
+    allDogsLoaded.value = true
+  } catch (e) {
+    allDogsError.value = 'Tulosten hakeminen epäonnistui.'
+  } finally {
+    allDogsLoading.value = false
+  }
+}
+
+
+const filteredAllDogs = computed(() => {
+  if (!allDogsLoaded.value) return []
+  let res = allDogsResults.value
+  
+  // Apply search text (dog name, catalog number, breed name, class)
+  const q = dogSearchQuery.value.toLowerCase().trim()
+  if (q) {
+    res = res.filter(d => 
+      (d.name || '').toLowerCase().includes(q) ||
+      String(d.number || '').includes(q) ||
+      (d.breedName || '').toLowerCase().includes(q) ||
+      (d.class_name || '').toLowerCase().includes(q)
+    )
+  }
+  
+  // Apply grade filter
+  const grade = dogGradeFilter.value.toLowerCase().trim()
+  if (grade) {
+    if (grade === 'hyl') {
+      res = res.filter(d => ['hyl', 'poissa', 'ei voida arvostella', 'eva'].includes((d.grade || '').toLowerCase()))
+    } else {
+      res = res.filter(d => (d.grade || '').toLowerCase() === grade)
+    }
+  }
+  
+  // Apply class filter
+  const cls = dogClassFilter.value.toLowerCase().trim()
+  if (cls) {
+    res = res.filter(d => (d.class_name || '').toLowerCase() === cls)
+  }
+  
+  // Apply award filter
+  const award = dogAwardFilter.value.toLowerCase().trim()
+  if (award) {
+    res = res.filter(d => (d.awards || '').toLowerCase().includes(award))
+  }
+  
+  return res
+})
+
+const allDogsGroupedByBreed = computed(() => {
+  const list = filteredAllDogs.value
+  const groups = {}
+  for (const d of list) {
+    const bName = d.breedName
+    if (!groups[bName]) {
+      groups[bName] = {
+        breedName: bName,
+        breedObj: d.breedObj,
+        dogs: []
+      }
+    }
+    groups[bName].dogs.push(d)
+  }
+  return Object.values(groups)
+})
+
+const availableShowClasses = computed(() => {
+  if (!allDogsResults.value) return []
+  const classes = allDogsResults.value.map(r => r.class_name).filter(Boolean)
+  return [...new Set(classes)].sort()
+})
+
+const availableShowAwards = computed(() => {
+  if (!allDogsResults.value) return []
+  const awardsSet = new Set()
+  allDogsResults.value.forEach(r => {
+    if (r.awards) {
+      r.awards.split(',').forEach(a => {
+        const trimmed = a.trim()
+        if (trimmed) awardsSet.add(trimmed)
+      })
+    }
+  })
+  return [...awardsSet].sort()
+})
 
 // ─── Collapsible months ──────────────────────────────────────
 const collapsedMonths = ref(new Set())
@@ -100,6 +202,48 @@ function getRouteSelection() {
   }
 }
 
+function parseShowDate(dateStr) {
+  if (!dateStr) return null
+  const parts = dateStr.split('.')
+  if (parts.length !== 3) return null
+  const day = parseInt(parts[0], 10)
+  const month = parseInt(parts[1], 10) - 1
+  const year = parseInt(parts[2], 10)
+  return new Date(year, month, day)
+}
+
+function isThisWeekLeft(showDate) {
+  if (!showDate) return false
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  const currentDayOfWeek = today.getDay()
+  const daysToSunday = currentDayOfWeek === 0 ? 0 : 7 - currentDayOfWeek
+  const sunday = new Date(today)
+  sunday.setDate(today.getDate() + daysToSunday)
+  sunday.setHours(23, 59, 59, 999)
+  return showDate >= today && showDate <= sunday
+}
+
+function getCurrentMonthLabel() {
+  const FINNISH_MONTHS = [
+    "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
+    "heinäkuu", "elokuu", "syyskuu", "lokakuu", "marraskuu", "joulukuu"
+  ]
+  const now = new Date()
+  return `${FINNISH_MONTHS[now.getMonth()]} ${now.getFullYear()}`
+}
+
+function shouldCollapseMonth(monthLabel) {
+  if (!monthLabel) return false
+  const m = monthLabel.toLowerCase().trim()
+  if (m === 'tänään' || m === 'tällä viikolla') return false
+  
+  const currentMonthLabel = getCurrentMonthLabel().toLowerCase().trim()
+  if (m === currentMonthLabel) return false
+  
+  return true
+}
+
 function resetDogSelection() {
   currentView.value = 'list'
   selectedShow.value = null
@@ -111,6 +255,17 @@ function resetDogSelection() {
   resultsLoading.value = false
   resultsError.value = ''
   expandedCritiques.value = new Set()
+  breedSearchQuery.value = ''
+  dogSearchQuery.value = ''
+  dogGradeFilter.value = ''
+  dogClassFilter.value = ''
+  dogAwardFilter.value = ''
+  
+  showDetailTab.value = 'breeds'
+  allDogsLoading.value = false
+  allDogsLoaded.value = false
+  allDogsError.value = ''
+  allDogsResults.value = []
 }
 
 function formatTimestamp(value) {
@@ -154,6 +309,16 @@ async function fetchShows() {
     const data = await $fetch('/api/dog/shows')
     shows.value = data.shows || []
     indexStats.value = data.index || null
+
+    // Default collapse other months (except current, Tänään, Tällä viikolla)
+    const monthsToCollapse = new Set()
+    for (const show of shows.value) {
+      if (show.month && shouldCollapseMonth(show.month)) {
+        monthsToCollapse.add(show.month)
+      }
+    }
+    collapsedMonths.value = monthsToCollapse
+
     const { showId } = getRouteSelection()
     if (showId) {
       const activeShow = shows.value.find(show => sameId(show.id, showId))
@@ -180,6 +345,13 @@ async function fetchShowDetail(show, options = {}) {
   showDetail.value = null
   selectedBreed.value = null
   breedResults.value = null
+  
+  showDetailTab.value = 'breeds'
+  allDogsLoading.value = false
+  allDogsLoaded.value = false
+  allDogsError.value = ''
+  allDogsResults.value = []
+  
   try {
     const data = await $fetch(`/api/dog/shows/${show.id}`)
     if (syncToken !== null && syncToken !== routeSyncToken) return
@@ -326,10 +498,24 @@ const groupedShows = computed(() => {
   return groups
 })
 
+const thisWeekShows = computed(() => {
+  return shows.value.filter(show => {
+    const showDate = parseShowDate(show.date)
+    return isThisWeekLeft(showDate)
+  })
+})
+
 const filteredBreeds = computed(() => {
-  const breeds = showDetail.value?.breeds || []
-  if (!showResultsOnly.value) return breeds
-  return breeds.filter(b => b.has_results)
+  let breeds = showDetail.value?.breeds || []
+  if (showResultsOnly.value) {
+    breeds = breeds.filter(b => b.has_results)
+  }
+  const q = breedSearchQuery.value.toLowerCase().trim()
+  if (!q) return breeds
+  return breeds.filter(b =>
+    b.name.toLowerCase().includes(q) ||
+    (b.judge && b.judge.toLowerCase().includes(q))
+  )
 })
 
 const selectedShowSourceUrl = computed(() => (
@@ -351,14 +537,75 @@ const routeSelectionKey = computed(() => [
   firstQueryValue(route.query.breed) || '',
 ].join('|'))
 
-// ─── Computed: results grouped by gender ─────────────────────
-const resultsByGender = computed(() => {
-  if (!breedResults.value?.results) return {}
+// ─── Computed: filtered breed results & classes/awards ───────
+const filteredDogResults = computed(() => {
+  if (!breedResults.value?.results) return []
+  
+  const search = dogSearchQuery.value.toLowerCase().trim()
+  const grade = dogGradeFilter.value.toLowerCase().trim()
+  const className = dogClassFilter.value.trim()
+  const award = dogAwardFilter.value.trim()
+  
+  return breedResults.value.results.filter(dog => {
+    if (search) {
+      const nameMatch = dog.name?.toLowerCase().includes(search)
+      const numMatch = String(dog.number).includes(search)
+      if (!nameMatch && !numMatch) return false
+    }
+    
+    if (grade) {
+      const dogGrade = dog.grade?.toLowerCase().trim()
+      if (grade === 'kp') {
+        if (dogGrade !== 'kp') return false
+      } else if (grade === 'hyl') {
+        if (dogGrade !== 'hyl' && dogGrade !== 'hylätty' && dogGrade !== 'poissa') return false
+      } else {
+        if (dogGrade !== grade) return false
+      }
+    }
+    
+    if (className) {
+      if (dog.class_name !== className) return false
+    }
+    
+    if (award) {
+      if (!dog.awards) return false
+      const hasAward = dog.awards.split(',').map(s => s.trim().toLowerCase()).includes(award.toLowerCase())
+      if (!hasAward) return false
+    }
+    
+    return true
+  })
+})
+
+const availableClasses = computed(() => {
+  if (!breedResults.value?.results) return []
+  const classes = breedResults.value.results.map(r => r.class_name).filter(Boolean)
+  return [...new Set(classes)].sort()
+})
+
+const availableAwards = computed(() => {
+  if (!breedResults.value?.results) return []
+  const awardsSet = new Set()
+  breedResults.value.results.forEach(r => {
+    if (r.awards) {
+      r.awards.split(',').forEach(a => {
+        const trimmed = a.trim()
+        if (trimmed) awardsSet.add(trimmed)
+      })
+    }
+  })
+  return [...awardsSet].sort()
+})
+
+const resultsByGenderAndClass = computed(() => {
   const groups = {}
-  for (const r of breedResults.value.results) {
+  for (const r of filteredDogResults.value) {
     const gender = r.gender || 'Muu'
-    if (!groups[gender]) groups[gender] = []
-    groups[gender].push(r)
+    const className = r.class_name || 'Luokka'
+    if (!groups[gender]) groups[gender] = {}
+    if (!groups[gender][className]) groups[gender][className] = []
+    groups[gender][className].push(r)
   }
   return groups
 })
@@ -373,6 +620,17 @@ function gradeClasses(grade) {
   if (g === 'kp') return 'dog-badge-info'
   if (g === 'poissa' || g === 'hyl' || g === 'hylätty') return 'dog-badge-muted'
   return 'dog-badge-default'
+}
+
+function gradeBorderClass(grade) {
+  if (!grade) return 'dog-border-default'
+  const g = grade.toLowerCase().trim()
+  if (g === 'eri' || g === 'erinomainen') return 'dog-border-gold'
+  if (g === 'eh' || g === 'erittäin hyvä') return 'dog-border-silver'
+  if (g === 'h' || g === 'hyvä') return 'dog-border-bronze'
+  if (g === 'kp') return 'dog-border-info'
+  if (g === 'poissa' || g === 'hyl' || g === 'hylätty') return 'dog-border-muted'
+  return 'dog-border-default'
 }
 
 async function syncRouteState() {
@@ -468,17 +726,50 @@ onUnmounted(() => {
 
 <template>
   <div class="dog-page">
+    <!-- Top Navigation Bar -->
+    <header class="dog-top-bar">
+      <div class="dog-top-left">
+        <!-- List view: link to main site home -->
+        <NuxtLink v-if="currentView === 'list'" to="/" class="dog-back-link">
+          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="160 208 80 128 160 48" />
+          </svg>
+          <span>erez.ac</span>
+        </NuxtLink>
+        <!-- Detail view: back to list -->
+        <button v-else-if="currentView === 'detail'" class="dog-back-link" @click="goToList">
+          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="160 208 80 128 160 48" />
+          </svg>
+          <span>Näyttelyt</span>
+        </button>
+        <!-- Results view: back to detail -->
+        <button v-else-if="currentView === 'results'" class="dog-back-link" @click="goToDetail">
+          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="160 208 80 128 160 48" />
+          </svg>
+          <span>Näyttely</span>
+        </button>
+      </div>
+
+      <div class="dog-top-center">
+        <h1 class="dog-top-title">
+          <span v-if="currentView === 'list'">Näyttelytulokset</span>
+          <span v-else-if="currentView === 'detail'">{{ showDetail?.title || selectedShow?.name }}</span>
+          <span v-else-if="currentView === 'results'">{{ breedResults?.breed || selectedBreed?.name }}</span>
+        </h1>
+      </div>
+
+      <div class="dog-top-right">
+        <ThemeToggle />
+      </div>
+    </header>
+
     <!-- ═══ VIEW: SHOW LIST ═══ -->
     <Transition name="dog-fade" mode="out-in">
       <div v-if="currentView === 'list'" key="list">
-        <!-- Header -->
-        <header class="dog-header">
-          <h1 class="dog-title">
-            <span class="dog-title-icon">🐾</span>
-            Näyttelytulokset
-          </h1>
-          <p class="dog-subtitle">Koiranäyttelyiden tulokset ja tilastot</p>
-        </header>
+        <!-- Space helper to separate header from tabs in list view -->
+        <div class="dog-view-spacing" />
 
         <!-- Tabs -->
         <div class="dog-tabs">
@@ -500,8 +791,9 @@ onUnmounted(() => {
         <div v-if="activeTab === 'shows'">
           <!-- Filter -->
           <div class="dog-search-wrap">
-            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="116" cy="116" r="84" />
+              <line x1="175.4" y1="175.4" x2="224" y2="224" />
             </svg>
             <input
               v-model="filterText"
@@ -509,6 +801,33 @@ onUnmounted(() => {
               class="dog-search-input"
               placeholder="Suodata näyttelyt..."
             />
+          </div>
+
+          <!-- Featured: Tällä viikolla -->
+          <div v-if="!filterText && thisWeekShows.length" class="dog-this-week-section">
+            <h2 class="dog-this-week-heading">
+              <svg class="dog-heading-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="32" y="48" width="192" height="176" rx="8" />
+                <line x1="32" y1="88" x2="224" y2="88" />
+                <line x1="80" y1="24" x2="80" y2="48" />
+                <line x1="176" y1="24" x2="176" y2="48" />
+              </svg>
+              Tällä viikolla
+            </h2>
+            <div class="dog-this-week-list">
+              <button
+                v-for="show in thisWeekShows"
+                :key="'week-' + show.id"
+                class="dog-show-row dog-show-row-featured"
+                @click="openShow(show)"
+              >
+                <span class="dog-show-date">{{ show.date }}</span>
+                <span class="dog-show-name">{{ show.name }}</span>
+                <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="96 48 176 128 96 208" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           <!-- Loading skeleton -->
@@ -530,9 +849,9 @@ onUnmounted(() => {
                 <span class="dog-month-count">{{ monthShows.length }}</span>
                 <svg
                   :class="['dog-chevron', !collapsedMonths.has(month) && 'dog-chevron-open']"
-                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
                 >
-                  <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clip-rule="evenodd" />
+                  <polyline points="208 96 128 176 48 96" />
                 </svg>
               </button>
               <Transition name="dog-collapse">
@@ -545,8 +864,8 @@ onUnmounted(() => {
                   >
                     <span class="dog-show-date">{{ show.date }}</span>
                     <span class="dog-show-name">{{ show.name }}</span>
-                    <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+                    <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="96 48 176 128 96 208" />
                     </svg>
                   </button>
                 </div>
@@ -563,14 +882,15 @@ onUnmounted(() => {
         <!-- Search tab -->
         <div v-if="activeTab === 'search'">
           <div class="dog-search-wrap">
-            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M9 3.5a5.5 5.5 0 100 11 5.5 5.5 0 000-11zM2 9a7 7 0 1112.452 4.391l3.328 3.329a.75.75 0 11-1.06 1.06l-3.329-3.328A7 7 0 012 9z" clip-rule="evenodd" />
+            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="116" cy="116" r="84" />
+              <line x1="175.4" y1="175.4" x2="224" y2="224" />
             </svg>
             <input
               v-model="searchQuery"
               type="text"
               class="dog-search-input"
-              placeholder="Esim. basenji, villakoira..."
+              placeholder="Esim. basenji, tuomarin nimi..."
               @input="onSearchInput"
             />
           </div>
@@ -601,11 +921,14 @@ onUnmounted(() => {
                 <span class="dog-show-name">{{ res.show.name }}</span>
                 <span v-if="res.breed" class="dog-search-breed-tag">
                   🐾 {{ res.breed.name }} ({{ res.breed.count }} koiraa)
+                  <span v-if="res.breed.judge" class="dog-search-judge-sub">
+                    Tuomari: {{ res.breed.judge }}
+                  </span>
                 </span>
                 <span v-else class="dog-search-breed-tag">Näyttely</span>
               </div>
-              <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
+              <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="96 48 176 128 96 208" />
               </svg>
             </button>
           </div>
@@ -620,34 +943,28 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- ═══ VIEW: SHOW DETAIL ═══ -->
       <div v-else-if="currentView === 'detail'" key="detail">
-        <!-- Breadcrumb -->
-        <nav class="dog-breadcrumb">
-            <button class="dog-breadcrumb-link" @click="goToList">Näyttelyt</button>
-          <span class="dog-breadcrumb-sep">›</span>
-          <span class="dog-breadcrumb-current">{{ selectedShow?.name }}</span>
-        </nav>
-
-        <header class="dog-header dog-header-compact">
-          <h1 class="dog-title dog-title-sm">
-            {{ showDetail?.title || selectedShow?.name }}
-          </h1>
-          <div class="dog-meta-row">
-            <a
-              v-if="selectedShowSourceUrl"
-              :href="selectedShowSourceUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="dog-source-link"
-            >
-              Showlink
-            </a>
-            <span v-if="showDetail?.fetched_at_iso" class="dog-updated">
-              Päivitetty {{ formatTimestamp(showDetail.fetched_at_iso) }}
-            </span>
-          </div>
-        </header>
+        <!-- ═══ VIEW: SHOW DETAIL ═══ -->
+        <!-- Metadata bar -->
+        <div class="dog-meta-bar" v-if="showDetail">
+          <a
+            v-if="selectedShowSourceUrl"
+            :href="selectedShowSourceUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="dog-source-link-pill"
+          >
+            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M128,48H48V208H208V128" />
+              <polyline points="160 48 208 48 208 96" />
+              <line x1="128" y1="128" x2="208" y2="48" />
+            </svg>
+            Showlink
+          </a>
+          <span v-if="showDetail?.fetched_at_iso" class="dog-updated-pill">
+            Päivitetty {{ formatTimestamp(showDetail.fetched_at_iso) }}
+          </span>
+        </div>
 
         <!-- Loading -->
         <div v-if="detailLoading" class="dog-skeleton-list">
@@ -662,67 +979,254 @@ onUnmounted(() => {
 
         <!-- Breeds list -->
         <div v-else-if="showDetail">
-          <div class="dog-filter-row">
-            <label class="dog-toggle">
-              <input v-model="showResultsOnly" type="checkbox" />
-              <span>Vain tuloksia</span>
-            </label>
-          </div>
-          <div v-if="filteredBreeds.length" class="dog-breed-list">
+          <!-- Sub-tabs for Show Detail view -->
+          <div class="dog-tabs dog-detail-tabs">
             <button
-              v-for="breed in filteredBreeds"
-              :key="breed.breed_id || breed.name"
-              :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
-              :disabled="!breed.has_results"
-              @click="openBreed(breed)"
+              :class="['dog-tab', showDetailTab === 'breeds' && 'dog-tab-active']"
+              @click="showDetailTab = 'breeds'"
             >
-              <div class="dog-breed-info">
-                <span class="dog-breed-name">{{ breed.name }}</span>
-                <span class="dog-breed-count">{{ breed.count }} koiraa</span>
-              </div>
-              <div class="dog-breed-status">
-                <span v-if="breed.has_results" class="dog-check" title="Tulokset saatavilla">✓</span>
-                <span v-else class="dog-no-results" title="Ei tuloksia">—</span>
-              </div>
+              Rotuluettelo ({{ showDetail.breeds?.length || 0 }})
+            </button>
+            <button
+              :class="['dog-tab', showDetailTab === 'dogs' && 'dog-tab-active']"
+              @click="onSelectDogsTab"
+            >
+              Koirat & Tulokset
             </button>
           </div>
-          <div v-else class="dog-empty">
-            <p>Ei rotuja valitulla rajauksella.</p>
+
+          <!-- TAB 1: BREEDS LIST -->
+          <div v-if="showDetailTab === 'breeds'">
+            <div class="dog-detail-filter-bar">
+              <div class="dog-search-wrap dog-breed-search">
+                <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="116" cy="116" r="84" />
+                  <line x1="175.4" y1="175.4" x2="224" y2="224" />
+                </svg>
+                <input
+                  v-model="breedSearchQuery"
+                  type="text"
+                  class="dog-search-input"
+                  placeholder="Hae rotua tai tuomaria..."
+                />
+              </div>
+              <label class="dog-toggle">
+                <input v-model="showResultsOnly" type="checkbox" />
+                <span>Vain tuloksia</span>
+              </label>
+            </div>
+            <div v-if="filteredBreeds.length" class="dog-breed-list">
+              <button
+                v-for="breed in filteredBreeds"
+                :key="breed.breed_id || breed.name"
+                :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
+                :disabled="!breed.has_results"
+                @click="openBreed(breed)"
+              >
+                <div class="dog-breed-info">
+                  <span class="dog-breed-name">{{ breed.name }}</span>
+                  <span class="dog-breed-count">
+                    {{ breed.count }} koiraa
+                    <span v-if="breed.judge" class="dog-breed-judge">
+                      • Tuomari: {{ breed.judge }}
+                    </span>
+                  </span>
+                </div>
+                <div class="dog-breed-status">
+                  <span v-if="breed.has_results" class="dog-check" title="Tulokset saatavilla">✓</span>
+                  <span v-else class="dog-no-results" title="Ei tuloksia">—</span>
+                </div>
+              </button>
+            </div>
+            <div v-else class="dog-empty">
+              <p>Ei rotuja valitulla rajauksella.</p>
+            </div>
+          </div>
+
+          <!-- TAB 2: DOG RESULTS & SEARCH -->
+          <div v-else-if="showDetailTab === 'dogs'">
+            <div v-if="allDogsLoading" class="dog-skeleton-list">
+              <div v-for="i in 5" :key="i" class="dog-skeleton-row" />
+            </div>
+
+            <div v-else-if="allDogsError" class="dog-error">
+              <p>{{ allDogsError }}</p>
+              <button class="dog-btn" @click="loadAllShowResults">Yritä uudelleen</button>
+            </div>
+
+            <div v-else>
+              <!-- Show-wide Filter Panel -->
+              <div class="dog-results-filter-panel">
+                <div class="dog-results-filter-grid">
+                  <!-- Search text -->
+                  <div class="dog-filter-col">
+                    <label class="dog-filter-label">Hae koiraa</label>
+                    <div class="dog-search-wrap dog-filter-search">
+                      <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="116" cy="116" r="84" />
+                        <line x1="175.4" y1="175.4" x2="224" y2="224" />
+                      </svg>
+                      <input
+                        v-model="dogSearchQuery"
+                        type="text"
+                        class="dog-search-input"
+                        placeholder="Nimi, numero tai rotu..."
+                      />
+                    </div>
+                  </div>
+                  <!-- Grade selection -->
+                  <div class="dog-filter-col">
+                    <label class="dog-filter-label">Laatuarvostelu</label>
+                    <select v-model="dogGradeFilter" class="dog-filter-select">
+                      <option value="">Kaikki arvostelut</option>
+                      <option value="eri">ERI (Erinomainen)</option>
+                      <option value="eh">EH (Erittäin hyvä)</option>
+                      <option value="h">H (Hyvä)</option>
+                      <option value="t">T (Tyydyttävä)</option>
+                      <option value="kp">KP (Kunniapalkinto)</option>
+                      <option value="hyl">Hylätty / Poissa / Ei voida arvostella</option>
+                    </select>
+                  </div>
+                  <!-- Class selection -->
+                  <div v-if="availableShowClasses.length" class="dog-filter-col">
+                    <label class="dog-filter-label">Luokka</label>
+                    <select v-model="dogClassFilter" class="dog-filter-select">
+                      <option value="">Kaikki luokat</option>
+                      <option v-for="c in availableShowClasses" :key="c" :value="c">{{ c }}</option>
+                    </select>
+                  </div>
+                  <!-- Award selection -->
+                  <div v-if="availableShowAwards.length" class="dog-filter-col">
+                    <label class="dog-filter-label">Palkinto</label>
+                    <select v-model="dogAwardFilter" class="dog-filter-select">
+                      <option value="">Kaikki palkinnot</option>
+                      <option v-for="a in availableShowAwards" :key="a" :value="a">{{ a }}</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Grouped Dog Results -->
+              <div v-if="allDogsGroupedByBreed.length" class="dog-all-dogs-list">
+                <div v-for="group in allDogsGroupedByBreed" :key="group.breedName" class="dog-breed-group-section">
+                  <button class="dog-breed-group-header-btn" @click="openBreed(group.breedObj)">
+                    <span class="dog-breed-group-title">{{ group.breedName }}</span>
+                    <span class="dog-breed-group-badge">{{ group.dogs.length }} tulosta</span>
+                    <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="96 48 176 128 96 208" />
+                    </svg>
+                  </button>
+
+                  <div class="dog-results-grid">
+                    <div
+                      v-for="dog in group.dogs"
+                      :key="dog.number || dog.name"
+                      class="dog-result-card"
+                      :class="gradeBorderClass(dog.grade)"
+                    >
+                      <div class="dog-result-main">
+                        <div class="dog-result-top">
+                          <span v-if="dog.number" class="dog-catalog-num">#{{ dog.number }}</span>
+                          <span v-if="dog.placement" class="dog-placement-badge">{{ dog.placement }}.</span>
+                          <span class="dog-class-badge-inline">{{ dog.class_name }}</span>
+                          <span class="dog-gender-badge-inline">{{ dog.gender === 'uros' ? '♂' : dog.gender === 'narttu' ? '♀' : '' }}</span>
+                          
+                          <a
+                            v-if="dog.reg_url"
+                            :href="dog.reg_url"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="dog-dog-name"
+                          >
+                            {{ dog.name }}
+                            <svg class="dog-external" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                              <path d="M128,48H48V208H208V128" />
+                              <polyline points="160 48 208 48 208 96" />
+                              <line x1="128" y1="128" x2="208" y2="48" />
+                            </svg>
+                          </a>
+                          <span v-else class="dog-dog-name-plain">{{ dog.name }}</span>
+                        </div>
+                        <div class="dog-result-badges">
+                          <span v-if="dog.grade" :class="['dog-grade', gradeClasses(dog.grade)]">
+                            {{ dog.grade }}
+                          </span>
+                          <span
+                            v-for="(a, ai) in (dog.awards || '').split(',').map(s => s.trim()).filter(Boolean)"
+                            :key="ai"
+                            class="dog-mini-award"
+                          >
+                            {{ a }}
+                          </span>
+                        </div>
+                      </div>
+
+                      <!-- Critique toggle -->
+                      <button
+                        v-if="dog.critique"
+                        class="dog-critique-toggle"
+                        @click="toggleCritique(`all-${group.breedName}-${dog.number || dog.name}`)"
+                      >
+                        <svg class="dog-critique-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="40" y="32" width="176" height="192" rx="16" />
+                          <line x1="80" y1="80" x2="176" y2="80" />
+                          <line x1="80" y1="128" x2="176" y2="128" />
+                          <line x1="80" y1="176" x2="136" y2="176" />
+                        </svg>
+                        <span>{{ expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`) ? 'Piilota arvostelu' : 'Näytä arvostelu' }}</span>
+                        <svg
+                          :class="['dog-chevron-sm', expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`) && 'dog-chevron-open']"
+                          xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                        >
+                          <polyline points="208 96 128 176 48 96" />
+                        </svg>
+                      </button>
+                      <Transition name="dog-collapse">
+                        <div v-if="expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`)" class="dog-critique-text">
+                          {{ dog.critique }}
+                        </div>
+                      </Transition>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="dog-empty">
+                <p>Ei tuloksia valituilla suodattimilla.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- ═══ VIEW: BREED RESULTS ═══ -->
       <div v-else-if="currentView === 'results'" key="results">
-        <!-- Breadcrumb -->
-        <nav class="dog-breadcrumb">
-          <button class="dog-breadcrumb-link" @click="goToList">Näyttelyt</button>
-          <span class="dog-breadcrumb-sep">›</span>
-          <button class="dog-breadcrumb-link" @click="goToDetail">{{ selectedShow?.name }}</button>
-          <span class="dog-breadcrumb-sep">›</span>
-          <span class="dog-breadcrumb-current">{{ selectedBreed?.name }}</span>
-        </nav>
-
-        <header class="dog-header dog-header-compact">
-          <h1 class="dog-title dog-title-sm">{{ breedResults?.breed || selectedBreed?.name }}</h1>
-          <p v-if="breedResults?.judge" class="dog-judge">
+        <!-- ═══ VIEW: BREED RESULTS ═══ -->
+        <!-- Metadata bar -->
+        <div class="dog-meta-bar" v-if="breedResults">
+          <span v-if="breedResults?.judge" class="dog-judge-pill">
+            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="128" cy="96" r="64"/>
+              <path d="M32,224a96,96,0,0,1,192,0"/>
+            </svg>
             Tuomari: <strong>{{ breedResults.judge }}</strong>
-          </p>
-          <div class="dog-meta-row">
-            <a
-              v-if="selectedBreedSourceUrl"
-              :href="selectedBreedSourceUrl"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="dog-source-link"
-            >
-              Showlink
-            </a>
-            <span v-if="breedResults?.fetched_at_iso" class="dog-updated">
-              Päivitetty {{ formatTimestamp(breedResults.fetched_at_iso) }}
-            </span>
-          </div>
-        </header>
+          </span>
+          <a
+            v-if="selectedBreedSourceUrl"
+            :href="selectedBreedSourceUrl"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="dog-source-link-pill"
+          >
+            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M128,48H48V208H208V128" />
+              <polyline points="160 48 208 48 208 96" />
+              <line x1="128" y1="128" x2="208" y2="48" />
+            </svg>
+            Showlink
+          </a>
+          <span v-if="breedResults?.fetched_at_iso" class="dog-updated-pill">
+            Päivitetty {{ formatTimestamp(breedResults.fetched_at_iso) }}
+          </span>
+        </div>
 
         <!-- Loading -->
         <div v-if="resultsLoading" class="dog-skeleton-list">
@@ -736,8 +1240,59 @@ onUnmounted(() => {
         </div>
 
         <div v-else-if="breedResults">
+          <!-- Filter Panel -->
+          <div class="dog-results-filter-panel">
+            <div class="dog-results-filter-grid">
+              <!-- Search text -->
+              <div class="dog-filter-col">
+                <label class="dog-filter-label">Hae koiraa</label>
+                <div class="dog-search-wrap dog-filter-search">
+                  <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="116" cy="116" r="84" />
+                    <line x1="175.4" y1="175.4" x2="224" y2="224" />
+                  </svg>
+                  <input
+                    v-model="dogSearchQuery"
+                    type="text"
+                    class="dog-search-input"
+                    placeholder="Nimi tai numero..."
+                  />
+                </div>
+              </div>
+              <!-- Grade selection -->
+              <div class="dog-filter-col">
+                <label class="dog-filter-label">Laatuarvostelu</label>
+                <select v-model="dogGradeFilter" class="dog-filter-select">
+                  <option value="">Kaikki arvostelut</option>
+                  <option value="eri">ERI (Erinomainen)</option>
+                  <option value="eh">EH (Erittäin hyvä)</option>
+                  <option value="h">H (Hyvä)</option>
+                  <option value="t">T (Tyydyttävä)</option>
+                  <option value="kp">KP (Kunniapalkinto)</option>
+                  <option value="hyl">Hylätty / Poissa / Ei voida arvostella</option>
+                </select>
+              </div>
+              <!-- Class selection -->
+              <div v-if="availableClasses.length" class="dog-filter-col">
+                <label class="dog-filter-label">Luokka</label>
+                <select v-model="dogClassFilter" class="dog-filter-select">
+                  <option value="">Kaikki luokat</option>
+                  <option v-for="c in availableClasses" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+              <!-- Award selection -->
+              <div v-if="availableAwards.length" class="dog-filter-col">
+                <label class="dog-filter-label">Palkinto</label>
+                <select v-model="dogAwardFilter" class="dog-filter-select">
+                  <option value="">Kaikki palkinnot</option>
+                  <option v-for="a in availableAwards" :key="a" :value="a">{{ a }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
           <!-- Awards -->
-          <div v-if="breedResults.awards?.length" class="dog-awards">
+          <div v-if="breedResults.awards?.length && !dogSearchQuery && !dogGradeFilter && !dogClassFilter && !dogAwardFilter" class="dog-awards">
             <div
               v-for="(award, i) in breedResults.awards"
               :key="i"
@@ -748,84 +1303,93 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Results by gender -->
-          <div v-for="(dogs, gender) in resultsByGender" :key="gender" class="dog-gender-group">
+          <!-- Results by gender and class -->
+          <div v-for="(classes, gender) in resultsByGenderAndClass" :key="gender" class="dog-gender-group">
             <h2 class="dog-gender-heading">
+              <span class="dog-gender-symbol">{{ gender === 'uros' ? '♂' : gender === 'narttu' ? '♀' : '🐾' }}</span>
               {{ gender === 'uros' ? 'Urokset' : gender === 'narttu' ? 'Nartut' : gender }}
             </h2>
 
-            <!-- Group by class -->
-            <div
-              v-for="(dog, idx) in dogs"
-              :key="idx"
-              class="dog-result-card"
-            >
-              <!-- Class separator -->
-              <div
-                v-if="idx === 0 || dogs[idx - 1]?.class_name !== dog.class_name"
-                class="dog-class-header"
-              >
-                {{ dog.class_name || 'Luokka' }}
+            <div v-for="(dogs, className) in classes" :key="className" class="dog-class-section">
+              <div class="dog-class-title-header">
+                <span class="dog-class-badge">Luokka</span>
+                <span class="dog-class-title-text">{{ className }}</span>
               </div>
 
-              <div class="dog-result-main">
-                <div class="dog-result-top">
-                  <span v-if="dog.number" class="dog-catalog-num">{{ dog.number }}</span>
-                  <span v-if="dog.placement" class="dog-placement">{{ dog.placement }}.</span>
-                  <a
-                    v-if="dog.reg_url"
-                    :href="dog.reg_url"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    class="dog-dog-name"
-                  >
-                    {{ dog.name }}
-                    <svg class="dog-external" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor">
-                      <path d="M8.75 3.5a.75.75 0 01.75-.75h3.5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0V5.06l-4.72 4.72a.75.75 0 01-1.06-1.06L11.19 4H9.5a.75.75 0 01-.75-.75z" />
-                      <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25h1.5a.75.75 0 010 1.5H5v6h6v-1.25a.75.75 0 011.5 0v1.5c0 .69-.56 1.25-1.25 1.25h-7c-.69 0-1.25-.56-1.25-1.25v-7z" />
-                    </svg>
-                  </a>
-                  <span v-else class="dog-dog-name-plain">{{ dog.name }}</span>
-                </div>
-                <div class="dog-result-badges">
-                  <span v-if="dog.grade" :class="['dog-grade', gradeClasses(dog.grade)]">
-                    {{ dog.grade }}
-                  </span>
-                  <span
-                    v-for="(a, ai) in (dog.awards || '').split(',').map(s => s.trim()).filter(Boolean)"
-                    :key="ai"
-                    class="dog-mini-award"
-                  >
-                    {{ a }}
-                  </span>
-                </div>
-              </div>
-
-              <!-- Critique toggle -->
-              <button
-                v-if="dog.critique"
-                class="dog-critique-toggle"
-                @click="toggleCritique(`${gender}-${idx}`)"
-              >
-                {{ expandedCritiques.has(`${gender}-${idx}`) ? 'Piilota arvostelu' : 'Näytä arvostelu' }}
-                <svg
-                  :class="['dog-chevron-sm', expandedCritiques.has(`${gender}-${idx}`) && 'dog-chevron-open']"
-                  xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+              <div class="dog-results-grid">
+                <div
+                  v-for="dog in dogs"
+                  :key="dog.number || dog.name"
+                  class="dog-result-card"
+                  :class="gradeBorderClass(dog.grade)"
                 >
-                  <path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 011.06 0L10 11.94l3.72-3.72a.75.75 0 111.06 1.06l-4.25 4.25a.75.75 0 01-1.06 0L5.22 9.28a.75.75 0 010-1.06z" clip-rule="evenodd" />
-                </svg>
-              </button>
-              <Transition name="dog-collapse">
-                <div v-if="expandedCritiques.has(`${gender}-${idx}`)" class="dog-critique-text">
-                  {{ dog.critique }}
+                  <div class="dog-result-main">
+                    <div class="dog-result-top">
+                      <span v-if="dog.number" class="dog-catalog-num">#{{ dog.number }}</span>
+                      <span v-if="dog.placement" class="dog-placement-badge">{{ dog.placement }}.</span>
+                      <a
+                        v-if="dog.reg_url"
+                        :href="dog.reg_url"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="dog-dog-name"
+                      >
+                        {{ dog.name }}
+                        <svg class="dog-external" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M128,48H48V208H208V128" />
+                          <polyline points="160 48 208 48 208 96" />
+                          <line x1="128" y1="128" x2="208" y2="48" />
+                        </svg>
+                      </a>
+                      <span v-else class="dog-dog-name-plain">{{ dog.name }}</span>
+                    </div>
+                    <div class="dog-result-badges">
+                      <span v-if="dog.grade" :class="['dog-grade', gradeClasses(dog.grade)]">
+                        {{ dog.grade }}
+                      </span>
+                      <span
+                        v-for="(a, ai) in (dog.awards || '').split(',').map(s => s.trim()).filter(Boolean)"
+                        :key="ai"
+                        class="dog-mini-award"
+                      >
+                        {{ a }}
+                      </span>
+                    </div>
+                  </div>
+
+                  <!-- Critique toggle -->
+                  <button
+                    v-if="dog.critique"
+                    class="dog-critique-toggle"
+                    @click="toggleCritique(`${gender}-${className}-${dog.number || dog.name}`)"
+                  >
+                    <svg class="dog-critique-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="40" y="32" width="176" height="192" rx="16" />
+                      <line x1="80" y1="80" x2="176" y2="80" />
+                      <line x1="80" y1="128" x2="176" y2="128" />
+                      <line x1="80" y1="176" x2="136" y2="176" />
+                    </svg>
+                    <span>{{ expandedCritiques.has(`${gender}-${className}-${dog.number || dog.name}`) ? 'Piilota arvostelu' : 'Näytä arvostelu' }}</span>
+                    <svg
+                      :class="['dog-chevron-sm', expandedCritiques.has(`${gender}-${className}-${dog.number || dog.name}`) && 'dog-chevron-open']"
+                      xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                    >
+                      <polyline points="208 96 128 176 48 96" />
+                    </svg>
+                  </button>
+                  <Transition name="dog-collapse">
+                    <div v-if="expandedCritiques.has(`${gender}-${className}-${dog.number || dog.name}`)" class="dog-critique-text">
+                      {{ dog.critique }}
+                    </div>
+                  </Transition>
                 </div>
-              </Transition>
+              </div>
             </div>
           </div>
 
           <!-- Empty results -->
-          <div v-if="!breedResults.results?.length && !breedResults.awards?.length" class="dog-empty">
-            <p>Ei tuloksia tämän rodun kohdalta.</p>
+          <div v-if="!Object.keys(resultsByGenderAndClass).length" class="dog-empty">
+            <p>Ei tuloksia valituilla suodattimilla.</p>
           </div>
         </div>
       </div>
@@ -836,6 +1400,34 @@ onUnmounted(() => {
 <style scoped>
 /* ═══ Scoped design tokens ═══ */
 .dog-page {
+  /* Warm/neutral light theme colors */
+  --dog-bg: #fdfbf7;         /* Warm stone-like light bg */
+  --dog-surface: #f5f2eb;    /* Slightly darker surface */
+  --dog-surface-el: #eae6db; /* Elements background */
+  --dog-accent: #c2410c;     /* Warm rust/orange accent for light mode */
+  --dog-accent-2: #b45309;   /* Slightly deeper amber/orange accent */
+  --dog-text: #292524;       /* Dark text (warm stone) */
+  --dog-text-muted: #6b6661; /* Muted text */
+  --dog-border: #dcd7cc;     /* Light borders */
+  --dog-gold: #b45309;       /* Gold color for ERI in light mode (deeper for readability) */
+  --dog-silver: #475569;     /* Silver for EH */
+  --dog-bronze: #854d0e;     /* Bronze for H */
+  --dog-info: #0284c7;       /* Blue for KP */
+
+  font-family: 'DM Sans', sans-serif;
+  font-weight: 300;
+  color: var(--dog-text);
+  background: var(--dog-bg);
+  min-height: 100dvh;
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 1rem;
+  padding-bottom: 4rem;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+:where(.dark) .dog-page {
+  /* Dark mode override */
   --dog-bg: #121212;
   --dog-surface: #1e1e1e;
   --dog-surface-el: #2a2a2a;
@@ -848,79 +1440,117 @@ onUnmounted(() => {
   --dog-silver: #94a3b8;
   --dog-bronze: #cd7f32;
   --dog-info: #60a5fa;
-
-  font-family: 'DM Sans', sans-serif;
-  font-weight: 300;
-  color: var(--dog-text);
-  background: var(--dog-bg);
-  min-height: 100dvh;
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 1rem;
-  padding-bottom: 4rem;
 }
 
-/* ═══ Header ═══ */
-.dog-header {
-  text-align: center;
-  padding: 2rem 0 1.5rem;
+/* ═══ Top bar / Header ═══ */
+.dog-top-bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  padding: 0.75rem 0;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--dog-border);
 }
-.dog-header-compact {
-  padding: 1rem 0;
-  text-align: left;
+.dog-top-left {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  min-width: 0;
 }
-.dog-title {
-  font-size: 1.75rem;
+.dog-top-center {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-width: 0;
+}
+.dog-top-title {
+  font-size: 1.25rem;
   font-weight: 600;
   color: var(--dog-text);
   margin: 0;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+@media (max-width: 640px) {
+  .dog-top-title {
+    font-size: 1.05rem;
+  }
+}
+.dog-top-right {
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
+  justify-content: flex-end;
 }
-.dog-header-compact .dog-title {
-  justify-content: flex-start;
-}
-.dog-title-sm {
-  font-size: 1.35rem;
-}
-.dog-title-icon {
-  font-size: 1.5rem;
-}
-.dog-subtitle {
-  color: var(--dog-text-muted);
-  margin: 0.35rem 0 0;
+.dog-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
   font-size: 0.9rem;
-}
-.dog-judge {
   color: var(--dog-text-muted);
-  margin: 0.25rem 0 0;
-  font-size: 0.9rem;
-}
-.dog-judge strong {
-  color: var(--dog-text);
+  text-decoration: none;
+  background: none;
+  border: none;
+  font-family: inherit;
   font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  min-height: 44px;
+  transition: color 0.15s;
+  white-space: nowrap;
 }
-.dog-meta-row {
+.dog-back-link:hover {
+  color: var(--dog-accent);
+}
+.dog-back-icon {
+  width: 1rem;
+  height: 1rem;
+  stroke-width: 2.5;
+}
+
+/* ═══ Page layout & metadata ═══ */
+.dog-view-spacing {
+  height: 0.5rem;
+}
+.dog-meta-bar {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   flex-wrap: wrap;
-  margin-top: 0.45rem;
-  color: var(--dog-text-muted);
-  font-size: 0.8rem;
+  margin-bottom: 1.5rem;
 }
-.dog-source-link {
+.dog-source-link-pill,
+.dog-updated-pill,
+.dog-judge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+  padding: 0.35rem 0.75rem;
+  border-radius: 999px;
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  color: var(--dog-text-muted);
+}
+.dog-source-link-pill {
   color: var(--dog-accent);
   text-decoration: none;
   font-weight: 500;
+  transition: background-color 0.15s, border-color 0.15s;
 }
-.dog-source-link:hover {
-  text-decoration: underline;
+.dog-source-link-pill:hover {
+  background: var(--dog-surface-el);
+  border-color: var(--dog-accent);
 }
-.dog-updated {
-  color: var(--dog-text-muted);
+.dog-judge-pill strong {
+  color: var(--dog-text);
+  font-weight: 500;
+}
+.dog-pill-icon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
 }
 
 /* ═══ Tabs ═══ */
@@ -928,7 +1558,7 @@ onUnmounted(() => {
   display: flex;
   gap: 0;
   border-bottom: 1px solid var(--dog-border);
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 .dog-tab {
   flex: 1;
@@ -955,7 +1585,7 @@ onUnmounted(() => {
 /* ═══ Search ═══ */
 .dog-search-wrap {
   position: relative;
-  margin-bottom: 1rem;
+  margin-bottom: 1.5rem;
 }
 .dog-search-icon {
   position: absolute;
@@ -969,7 +1599,7 @@ onUnmounted(() => {
 }
 .dog-search-input {
   width: 100%;
-  padding: 0.75rem 1rem 0.75rem 2.75rem;
+  padding: 0.75rem 1rem 0.75rem 2.5rem;
   background: var(--dog-surface);
   border: 1px solid var(--dog-border);
   border-radius: 0.5rem;
@@ -989,9 +1619,45 @@ onUnmounted(() => {
   border-color: var(--dog-accent);
 }
 .dog-status-note {
-  margin: -0.35rem 0 1rem;
+  margin: -0.85rem 0 1.5rem;
   color: var(--dog-text-muted);
   font-size: 0.8rem;
+}
+
+/* ═══ Featured: Tällä viikolla ═══ */
+.dog-this-week-section {
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.dog-this-week-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--dog-accent-2);
+  margin: 0 0 1rem 0;
+}
+.dog-heading-icon {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--dog-accent);
+}
+.dog-this-week-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.dog-show-row-featured {
+  background: var(--dog-surface-el);
+  border-radius: 0.5rem;
+  border-bottom: none;
+}
+.dog-show-row-featured:hover {
+  background: color-mix(in srgb, var(--dog-surface-el) 92%, var(--dog-accent));
 }
 
 /* ═══ Skeleton ═══ */
@@ -1024,7 +1690,7 @@ onUnmounted(() => {
   margin-top: 0.75rem;
   padding: 0.6rem 1.5rem;
   background: var(--dog-accent);
-  color: #121212;
+  color: var(--dog-bg);
   border: none;
   border-radius: 0.5rem;
   font-family: inherit;
@@ -1050,7 +1716,7 @@ onUnmounted(() => {
 
 /* ═══ Month groups ═══ */
 .dog-month-group {
-  margin-bottom: 0.25rem;
+  margin-bottom: 0.5rem;
 }
 .dog-month-header {
   display: flex;
@@ -1070,7 +1736,7 @@ onUnmounted(() => {
   transition: background 0.15s;
 }
 .dog-month-header:hover {
-  background: #333;
+  background: color-mix(in srgb, var(--dog-surface-el) 95%, var(--dog-text));
 }
 .dog-month-label {
   flex: 1;
@@ -1100,15 +1766,17 @@ onUnmounted(() => {
 .dog-month-list {
   display: flex;
   flex-direction: column;
+  gap: 0.25rem;
+  margin-top: 0.25rem;
 }
 .dog-show-row {
   display: flex;
   align-items: center;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--dog-border);
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.5rem;
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.9rem;
@@ -1117,10 +1785,11 @@ onUnmounted(() => {
   text-align: left;
   gap: 0.75rem;
   min-height: 44px;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
 }
 .dog-show-row:hover {
-  background: var(--dog-surface);
+  background: var(--dog-surface-el);
+  border-color: var(--dog-accent);
 }
 .dog-show-date {
   font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -1131,7 +1800,7 @@ onUnmounted(() => {
 }
 .dog-show-name {
   flex: 1;
-  color: var(--dog-accent);
+  color: var(--dog-text);
 }
 .dog-search-result-info {
   display: flex;
@@ -1145,6 +1814,13 @@ onUnmounted(() => {
   color: var(--dog-accent-2);
   margin-top: 0.15rem;
 }
+.dog-search-judge-sub {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--dog-text-muted);
+  margin-top: 0.15rem;
+  font-style: italic;
+}
 .dog-arrow {
   width: 1rem;
   height: 1rem;
@@ -1152,43 +1828,26 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
-/* ═══ Breadcrumb ═══ */
-.dog-breadcrumb {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-  padding: 0.75rem 0;
-  font-size: 0.85rem;
-  flex-wrap: wrap;
-}
-.dog-breadcrumb-link {
-  background: none;
-  border: none;
-  color: var(--dog-accent);
-  font-family: inherit;
-  font-size: inherit;
-  font-weight: 400;
-  cursor: pointer;
-  padding: 0.25rem 0;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-.dog-breadcrumb-link:hover {
-  text-decoration: underline;
-}
-.dog-breadcrumb-sep {
-  color: var(--dog-text-muted);
-}
-.dog-breadcrumb-current {
-  color: var(--dog-text-muted);
-}
+
 
 /* ═══ Breed list (detail view) ═══ */
-.dog-filter-row {
+.dog-detail-filter-bar {
   display: flex;
-  justify-content: flex-end;
-  margin-bottom: 0.5rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.5rem;
+}
+@media (min-width: 640px) {
+  .dog-detail-filter-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+.dog-breed-search {
+  flex: 1;
+  max-width: 400px;
+  margin-bottom: 0;
 }
 .dog-toggle {
   display: inline-flex;
@@ -1207,6 +1866,7 @@ onUnmounted(() => {
 .dog-breed-list {
   display: flex;
   flex-direction: column;
+  gap: 0.25rem;
 }
 .dog-breed-row {
   display: flex;
@@ -1214,9 +1874,9 @@ onUnmounted(() => {
   justify-content: space-between;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: none;
-  border: none;
-  border-bottom: 1px solid var(--dog-border);
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.5rem;
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.9rem;
@@ -1224,10 +1884,11 @@ onUnmounted(() => {
   cursor: pointer;
   text-align: left;
   min-height: 44px;
-  transition: background 0.12s;
+  transition: background 0.12s, border-color 0.12s;
 }
 .dog-breed-row:hover:not(:disabled) {
-  background: var(--dog-surface);
+  background: var(--dog-surface-el);
+  border-color: var(--dog-accent);
 }
 .dog-breed-row-disabled {
   cursor: default;
@@ -1245,16 +1906,83 @@ onUnmounted(() => {
   font-size: 0.8rem;
   color: var(--dog-text-muted);
 }
+.dog-breed-judge {
+  color: var(--dog-text-muted);
+  font-style: italic;
+  font-size: 0.75rem;
+}
 .dog-breed-status {
   flex-shrink: 0;
 }
 .dog-check {
-  color: #4ade80;
+  color: #10b981;
   font-size: 1.1rem;
   font-weight: 700;
 }
 .dog-no-results {
   color: var(--dog-text-muted);
+}
+
+/* ═══ Filter Panel (results view) ═══ */
+.dog-results-filter-panel {
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.75rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+}
+.dog-results-filter-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+}
+@media (min-width: 640px) {
+  .dog-results-filter-grid {
+    grid-template-columns: 2fr 1.2fr 1.2fr 1.2fr;
+  }
+}
+.dog-filter-col {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+.dog-filter-label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--dog-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.dog-filter-select {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  background: var(--dog-surface-el);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.375rem;
+  color: var(--dog-text);
+  font-family: inherit;
+  font-size: 0.85rem;
+  outline: none;
+  min-height: 38px;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+.dog-filter-select:focus {
+  border-color: var(--dog-accent);
+}
+.dog-filter-search {
+  margin-bottom: 0;
+}
+.dog-filter-search .dog-search-input {
+  padding: 0.5rem 0.75rem 0.5rem 2.25rem;
+  font-size: 0.85rem;
+  min-height: 38px;
+  background: var(--dog-surface-el);
+}
+.dog-filter-search .dog-search-icon {
+  width: 1rem;
+  height: 1rem;
+  left: 0.75rem;
 }
 
 /* ═══ Awards ═══ */
@@ -1289,55 +2017,98 @@ onUnmounted(() => {
 
 /* ═══ Gender heading ═══ */
 .dog-gender-group {
-  margin-bottom: 1.5rem;
+  margin-bottom: 2rem;
 }
 .dog-gender-heading {
-  font-size: 1.1rem;
+  font-size: 1.25rem;
   font-weight: 600;
-  color: var(--dog-accent-2);
-  margin: 1rem 0 0.5rem;
-  padding-bottom: 0.25rem;
-  border-bottom: 1px solid var(--dog-border);
+  color: var(--dog-text);
+  margin: 1.5rem 0 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 2px solid var(--dog-border);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+.dog-gender-symbol {
+  font-size: 1.15rem;
+  color: var(--dog-accent);
 }
 
-/* ═══ Class header ═══ */
-.dog-class-header {
-  font-size: 0.8rem;
+/* ═══ Class section ═══ */
+.dog-class-section {
+  margin-bottom: 1.5rem;
+}
+.dog-class-title-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px dashed var(--dog-border);
+}
+.dog-class-badge {
+  font-size: 0.7rem;
   font-weight: 600;
+  background: var(--dog-surface-el);
   color: var(--dog-text-muted);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
   text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 0.6rem 0 0.3rem;
-  margin-top: 0.5rem;
+  letter-spacing: 0.05em;
+}
+.dog-class-title-text {
+  font-size: 0.95rem;
+  font-weight: 500;
+  color: var(--dog-text);
+}
+.dog-results-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 /* ═══ Result card ═══ */
 .dog-result-card {
   background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
   border-radius: 0.5rem;
-  margin-bottom: 0.375rem;
   overflow: hidden;
+  transition: border-color 0.15s;
+}
+.dog-result-card:hover {
+  border-color: var(--dog-accent-2);
 }
 .dog-result-main {
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1.25rem;
 }
 .dog-result-top {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 0.5rem;
   flex-wrap: wrap;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.5rem;
 }
 .dog-catalog-num {
   font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: 0.75rem;
   color: var(--dog-text-muted);
+  background: var(--dog-surface-el);
+  padding: 0.1rem 0.4rem;
+  border-radius: 0.25rem;
   flex-shrink: 0;
 }
-.dog-placement {
+.dog-placement-badge {
+  font-size: 0.8rem;
   font-weight: 700;
+  background: color-mix(in srgb, var(--dog-accent) 20%, transparent);
   color: var(--dog-accent);
-  font-size: 1rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   flex-shrink: 0;
 }
 .dog-dog-name {
@@ -1362,6 +2133,14 @@ onUnmounted(() => {
   flex-shrink: 0;
 }
 
+/* ═══ Grade border accenting ═══ */
+.dog-result-card.dog-border-gold { border-left: 4px solid var(--dog-gold); }
+.dog-result-card.dog-border-silver { border-left: 4px solid var(--dog-silver); }
+.dog-result-card.dog-border-bronze { border-left: 4px solid var(--dog-bronze); }
+.dog-result-card.dog-border-info { border-left: 4px solid var(--dog-info); }
+.dog-result-card.dog-border-muted { border-left: 4px solid var(--dog-text-muted); }
+.dog-result-card.dog-border-default { border-left: 4px solid var(--dog-border); }
+
 /* ═══ Result badges ═══ */
 .dog-result-badges {
   display: flex;
@@ -1380,9 +2159,9 @@ onUnmounted(() => {
   letter-spacing: 0.03em;
 }
 .dog-badge-gold {
-  background: color-mix(in srgb, var(--dog-gold) 20%, transparent);
+  background: color-mix(in srgb, var(--dog-gold) 15%, transparent);
   color: var(--dog-gold);
-  border: 1px solid color-mix(in srgb, var(--dog-gold) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-gold) 35%, transparent);
 }
 .dog-badge-silver {
   background: color-mix(in srgb, var(--dog-silver) 15%, transparent);
@@ -1390,9 +2169,9 @@ onUnmounted(() => {
   border: 1px solid color-mix(in srgb, var(--dog-silver) 30%, transparent);
 }
 .dog-badge-bronze {
-  background: color-mix(in srgb, var(--dog-bronze) 20%, transparent);
+  background: color-mix(in srgb, var(--dog-bronze) 15%, transparent);
   color: var(--dog-bronze);
-  border: 1px solid color-mix(in srgb, var(--dog-bronze) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-bronze) 30%, transparent);
 }
 .dog-badge-info {
   background: color-mix(in srgb, var(--dog-info) 15%, transparent);
@@ -1416,18 +2195,18 @@ onUnmounted(() => {
   border-radius: 0.25rem;
   font-size: 0.7rem;
   font-weight: 600;
-  background: color-mix(in srgb, var(--dog-accent) 15%, transparent);
+  background: color-mix(in srgb, var(--dog-accent) 12%, transparent);
   color: var(--dog-accent);
-  border: 1px solid color-mix(in srgb, var(--dog-accent) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-accent) 25%, transparent);
 }
 
 /* ═══ Critique ═══ */
 .dog-critique-toggle {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.35rem;
   width: 100%;
-  padding: 0.5rem 1rem;
+  padding: 0.6rem 1.25rem;
   background: var(--dog-surface-el);
   border: none;
   border-top: 1px solid var(--dog-border);
@@ -1442,15 +2221,21 @@ onUnmounted(() => {
 .dog-critique-toggle:hover {
   color: var(--dog-text);
 }
+.dog-critique-icon {
+  width: 0.9rem;
+  height: 0.9rem;
+  color: var(--dog-text-muted);
+}
 .dog-chevron-sm {
   width: 1rem;
   height: 1rem;
   transition: transform 0.2s;
   transform: rotate(-90deg);
   flex-shrink: 0;
+  margin-left: auto;
 }
 .dog-critique-text {
-  padding: 0.75rem 1rem;
+  padding: 0.85rem 1.25rem;
   font-size: 0.85rem;
   font-weight: 300;
   line-height: 1.6;
@@ -1483,6 +2268,73 @@ onUnmounted(() => {
 .dog-collapse-enter-to,
 .dog-collapse-leave-from {
   max-height: 2000px;
+}
+
+/* ═══ Show-wide results (Dogs tab) ═══ */
+.dog-detail-tabs {
+  margin-top: 0.5rem;
+}
+.dog-breed-group-section {
+  background: var(--dog-surface-el);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.75rem;
+  padding: 1rem;
+  margin-bottom: 1.5rem;
+}
+.dog-breed-group-header-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  background: none;
+  border: none;
+  font-family: inherit;
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--dog-text);
+  cursor: pointer;
+  padding: 0.25rem 0 0.75rem 0;
+  text-align: left;
+}
+.dog-breed-group-header-btn:hover .dog-breed-group-title {
+  color: var(--dog-accent);
+}
+.dog-breed-group-title {
+  flex: 1;
+  transition: color 0.15s;
+}
+.dog-breed-group-badge {
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: var(--dog-text-muted);
+  background: var(--dog-surface);
+  padding: 0.15rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--dog-border);
+}
+.dog-arrow-sm {
+  width: 1rem;
+  height: 1rem;
+  color: var(--dog-text-muted);
+  transition: transform 0.15s;
+}
+.dog-breed-group-header-btn:hover .dog-arrow-sm {
+  transform: translateX(2px);
+  color: var(--dog-accent);
+}
+.dog-class-badge-inline,
+.dog-gender-badge-inline {
+  font-size: 0.75rem;
+  font-weight: 500;
+  background: var(--dog-surface-el);
+  color: var(--dog-text-muted);
+  padding: 0.15rem 0.45rem;
+  border-radius: 0.25rem;
+}
+.dog-gender-badge-inline {
+  background: none;
+  border: 1px solid var(--dog-border);
+  font-size: 0.8rem;
 }
 
 /* ═══ Responsive ═══ */

@@ -32,6 +32,9 @@ SHOW_DETAIL_TTL = 600     # 10 minutes for recent/ongoing shows
 _breed_result_cache = {}  # {(show_id, group, breed): {"data": data, "ts": timestamp}}
 BREED_RESULT_TTL = 600    # 10 minutes (for recent/ongoing shows)
 
+_show_all_results_cache = {} # {show_id: {"data": data, "ts": timestamp}}
+SHOW_ALL_RESULTS_TTL = 86400  # 24 hours
+
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
 
@@ -451,6 +454,20 @@ def show_detail(show_id):
         data["fetched_at"] = fetched_at
         data["fetched_at_iso"] = _utc_iso(fetched_at)
 
+        # Enrich breeds with judge info from the index if available
+        try:
+            _load_index()
+            sid_str = str(show_id)
+            if sid_str in _show_index["shows"]:
+                idx_show = _show_index["shows"][sid_str]
+                idx_breeds = { (str(b.get("group")), str(b.get("breed_id"))): b.get("judge") for b in idx_show.get("breeds", []) if b.get("judge") }
+                for breed_data in data.get("breeds", []):
+                    key = (str(breed_data.get("group")), str(breed_data.get("breed_id")))
+                    if key in idx_breeds:
+                        breed_data["judge"] = idx_breeds[key]
+        except Exception as e:
+            logger.warning("dog_detail_judge_enrich_failed", show_id=show_id, error=str(e))
+
         _show_detail_cache[show_id] = {"data": data, "ts": fetched_at}
         return jsonify(data)
     except requests.RequestException as exc:
@@ -622,6 +639,23 @@ def breed_results(show_id):
         data["fetched_at"] = now
         data["fetched_at_iso"] = _utc_iso(now)
 
+        # Update show index with judge name if we fetched it
+        try:
+            _load_index()
+            sid_str = str(show_id)
+            if sid_str in _show_index["shows"]:
+                show_data = _show_index["shows"][sid_str]
+                updated_index = False
+                for b_data in show_data.get("breeds", []):
+                    if str(b_data.get("group")) == str(group) and str(b_data.get("breed_id")) == str(breed):
+                        if b_data.get("judge") != data.get("judge"):
+                            b_data["judge"] = data.get("judge")
+                            updated_index = True
+                if updated_index:
+                    _save_index()
+        except Exception as e:
+            logger.warning("dog_index_judge_update_failed", show_id=show_id, error=str(e))
+
         _breed_result_cache[cache_key] = {"data": data, "ts": now}
         return jsonify(data)
     except requests.RequestException as exc:
@@ -633,6 +667,85 @@ def breed_results(show_id):
     except Exception:
         logger.exception("breed_results_error", show_id=show_id, group=group, breed=breed)
         return jsonify({"error": "Internal server error"}), 500
+
+
+@dog_bp.route("/api/dog/shows/<int:show_id>/all-results")
+@limiter.limit("10/minute")
+def show_all_results(show_id):
+    now = time.time()
+    is_recent = _is_show_recent_by_id(show_id)
+
+    if show_id in _show_all_results_cache:
+        cached = _show_all_results_cache[show_id]
+        if not is_recent or (now - cached["ts"]) < SHOW_ALL_RESULTS_TTL:
+            return jsonify(cached["data"])
+
+    try:
+        show_detail_data = _cached_show_detail(show_id)
+        if not show_detail_data:
+            url = _source_url(show_id)
+            soup = _fetch_page(url)
+            show_detail_data = _parse_show_detail(soup, show_id)
+            show_detail_data["fetched_at"] = now
+            show_detail_data["fetched_at_iso"] = _utc_iso(now)
+            _show_detail_cache[show_id] = {"data": show_detail_data, "ts": now}
+
+        breeds_with_results = [b for b in show_detail_data.get("breeds", []) if b.get("has_results")]
+
+        all_results = []
+        for breed in breeds_with_results:
+            group = breed.get("group", "")
+            breed_id = breed.get("breed_id", "")
+            if not group or not breed_id:
+                continue
+
+            cache_key = (show_id, str(group), str(breed_id))
+            breed_data = None
+            if cache_key in _breed_result_cache:
+                cached_breed = _breed_result_cache[cache_key]
+                if not is_recent or (now - cached_breed["ts"]) < BREED_RESULT_TTL:
+                    breed_data = cached_breed["data"]
+
+            if not breed_data:
+                # Polite delay to prevent rate limits or IP bans from external server
+                time.sleep(0.3)
+                breed_url = _source_url(show_id, group, breed_id)
+                breed_soup = _fetch_page(breed_url)
+                breed_data = _parse_breed_results(breed_soup, show_id)
+                breed_data["source_url"] = breed_url
+                breed_data["fetched_at"] = now
+                breed_data["fetched_at_iso"] = _utc_iso(now)
+                _breed_result_cache[cache_key] = {"data": breed_data, "ts": now}
+
+            # Map dogs
+            for dog in breed_data.get("results", []):
+                all_results.append({
+                    "number": dog.get("number"),
+                    "name": dog.get("name"),
+                    "reg_url": dog.get("reg_url"),
+                    "grade": dog.get("grade"),
+                    "placement": dog.get("placement"),
+                    "awards": dog.get("awards"),
+                    "critique": dog.get("critique"),
+                    "gender": dog.get("gender"),
+                    "class_name": dog.get("class_name"),
+                    "breedName": breed.get("name"),
+                    "breedGroup": group,
+                    "breedId": breed_id,
+                    "breedObj": breed
+                })
+
+        response_data = {
+            "show_id": show_id,
+            "results": all_results,
+            "fetched_at": now,
+            "fetched_at_iso": _utc_iso(now)
+        }
+        _show_all_results_cache[show_id] = {"data": response_data, "ts": now}
+        return jsonify(response_data)
+    except Exception as e:
+        logger.exception("show_all_results_error", show_id=show_id)
+        return jsonify({"error": "Failed to fetch show all results", "detail": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------
@@ -667,7 +780,9 @@ def search_shows():
             breed_matches = []
             if indexed_show:
                 for breed_data in indexed_show.get("breeds", []):
-                    if q_lower in breed_data.get("name", "").lower():
+                    breed_name = breed_data.get("name", "").lower()
+                    judge_name = breed_data.get("judge", "").lower()
+                    if q_lower in breed_name or q_lower in judge_name:
                         breed_matches.append(breed_data)
 
             if breed_matches:
