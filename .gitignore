@@ -18,6 +18,7 @@ frontend/node_modules/
 
 # Nuxt build artifacts
 frontend/.nuxt/
+frontend/.nuxt-e2e/
 frontend/.output/
 frontend/dist
 

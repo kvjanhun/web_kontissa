@@ -5,8 +5,12 @@ const apiBaseUrl = (process.env.API_BASE_URL || 'http://localhost:5001').replace
 export default defineNuxtConfig({
   compatibilityDate: '2025-06-01',
 
+  // Use a separate build directory during testing to prevent E2E runs from corrupting/clashing with local dev server (.nuxt)
+  buildDir: process.env.TESTING ? '.nuxt-e2e' : '.nuxt',
+
   experimental: {
     payloadExtraction: false,
+    appManifest: false,
   },
 
   // Static site generation
@@ -30,6 +34,11 @@ export default defineNuxtConfig({
   // Tailwind CSS 4 via Vite plugin
   vite: {
     plugins: [tailwindcss()],
+    server: {
+      watch: {
+        ignored: ['**/.nuxt-e2e/**'],
+      },
+    },
   },
 
   // Global CSS

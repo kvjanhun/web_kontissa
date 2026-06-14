@@ -6,6 +6,7 @@ app/static/dist/
 
 frontend/node_modules/
 frontend/.nuxt/
+frontend/.nuxt-e2e/
 frontend/.output/
 frontend/playwright-report/
 frontend/test-results/
