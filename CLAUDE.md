@@ -45,13 +45,13 @@ web_kontissa/
 │   ├── composables/        # Vue composables (auto-imported)
 │   ├── layouts/            # default.vue + standalone.vue
 │   ├── middleware/          # auth.global.js + pageview.global.js
-│   ├── e2e/                # Playwright E2E tests (30 tests)
+│   ├── e2e/                # Playwright E2E tests (31 tests)
 │   └── tests/unit/         # Vitest unit tests (155 tests)
 ├── app/                    # Flask backend (see app/CLAUDE.md)
 │   ├── __init__.py         # App factory, LoginManager, Limiter
 │   ├── routes.py           # Sections CRUD, meta, sitemap, static serving
 │   ├── auth.py, recipes.py # Auth + recipe endpoints
-│   ├── api/                # kenno, cowsay, weather, health, pageviews
+│   ├── api/                # kenno, cowsay, weather, health, pageviews, dog
 │   ├── models.py           # All SQLAlchemy models
 │   └── wordlists/          # kotus_words.txt (101k Finnish words)
 ├── tests/                  # Backend pytest (357 tests)
@@ -88,7 +88,7 @@ cd frontend && npm run build           # nuxt generate → .output/public/
 docker compose up --build -d
 ```
 
-**Local E2E gotcha**: `playwright.config.js` sets `reuseExistingServer: !process.env.CI`, so any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is reused instead of the correctly-configured test server. DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running E2E, or invoke with `CI=1 npm run test:e2e`.
+**Local E2E gotcha**: `playwright.config.js` sets `reuseExistingServer: !process.env.CI`, so any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is reused instead of the correctly-configured test server. DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running E2E, invoke with `CI=1 npm run test:e2e`, or use alternate ports via `PLAYWRIGHT_API_PORT=5101 PLAYWRIGHT_WEB_PORT=3100`.
 
 ## Server Architecture
 

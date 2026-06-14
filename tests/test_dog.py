@@ -2,6 +2,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 import requests
 from app.api.dog import _show_list_cache, _show_detail_cache, _breed_result_cache
+from app.api import dog as dog_module
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -80,11 +81,16 @@ SAMPLE_BREED_RESULTS_HTML = """
 """
 
 @pytest.fixture(autouse=True)
-def clear_caches():
+def clear_caches(monkeypatch, tmp_path):
+    monkeypatch.setattr(dog_module, "INDEX_DIR", str(tmp_path))
+    monkeypatch.setattr(dog_module, "INDEX_PATH", str(tmp_path / "dog_show_index.json"))
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
     _show_detail_cache.clear()
     _breed_result_cache.clear()
+    dog_module._show_index["shows"].clear()
+    dog_module._show_index["last_updated"] = 0
+    dog_module._show_index_mtime = 0
 
 @patch("app.api.dog.requests.get")
 def test_get_shows(mock_get, client):
@@ -101,8 +107,10 @@ def test_get_shows(mock_get, client):
     assert data["shows"][0]["id"] == 14042
     assert data["shows"][0]["name"] == "Basenji"
     assert data["shows"][0]["month"] == "kesäkuu 2026"
+    assert data["shows"][0]["source_url"].endswith("Id=14042")
     assert data["shows"][1]["id"] == 14043
     assert data["shows"][1]["name"] == "Villakoira erikoisnäyttely"
+    assert data["index"]["total_show_count"] == 2
 
 @patch("app.api.dog.requests.get")
 def test_get_show_detail(mock_get, client):
@@ -122,7 +130,43 @@ def test_get_show_detail(mock_get, client):
     assert data["breeds"][0]["group"] == "5"
     assert data["breeds"][0]["breed_id"] == "3"
     assert data["breeds"][0]["has_results"] is True
+    assert data["breeds"][0]["source_url"].endswith("Id=14042&R=5&RO=3")
     assert data["breeds"][1]["has_results"] is False
+    assert data["source_url"].endswith("Id=14042")
+    assert data["fetched_at_iso"]
+
+
+@patch("app.api.dog.requests.get")
+def test_recent_show_detail_cache_expires(mock_get, client):
+    _show_detail_cache[14042] = {
+        "data": {"id": 14042, "title": "stale", "breeds": []},
+        "ts": 0,
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows/14042")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["title"] == "14.06.2026 Basenji"
+    mock_get.assert_called_once()
+
+
+@patch("app.api.dog.requests.get")
+def test_old_show_detail_cache_is_reused(mock_get, client):
+    dog_module._show_index["shows"]["14042"] = {"month": "tammikuu 2000", "breeds": []}
+    _show_detail_cache[14042] = {
+        "data": {"id": 14042, "title": "cached old show", "breeds": []},
+        "ts": 0,
+    }
+
+    resp = client.get("/api/dog/shows/14042")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["title"] == "cached old show"
+    mock_get.assert_not_called()
 
 
 SAMPLE_GENERAL_SHOW_MAIN_HTML = """
@@ -183,7 +227,7 @@ def test_get_show_detail_general(mock_get, client):
     assert data["id"] == 14025
     assert data["title"] == "10.05.2026 Kouvola"
     assert len(data["breeds"]) == 2
-    
+
     assert data["breeds"][0]["name"] == "australianterrieri"
     assert data["breeds"][0]["count"] == 11
     assert data["breeds"][0]["group"] == "3"
@@ -212,7 +256,7 @@ def test_get_breed_results(mock_get, client):
     assert len(data["awards"]) == 1
     assert data["awards"][0]["type"] == "ROP"
     assert "Wazazi Tempting Fate" in data["awards"][0]["text"]
-    
+
     assert len(data["results"]) == 1
     res = data["results"][0]
     assert res["number"] == 1
@@ -224,6 +268,8 @@ def test_get_breed_results(mock_get, client):
     assert res["critique"] == "5 months old, clearly needs time..."
     assert res["gender"] == "Urokset"
     assert res["class_name"] == "Pentuluokka 5-7 kk"
+    assert data["source_url"].endswith("Id=14042&R=5&RO=3")
+    assert data["fetched_at_iso"]
 
 @patch("app.api.dog.requests.get")
 def test_search_shows(mock_get, client):
@@ -239,13 +285,14 @@ def test_search_shows(mock_get, client):
     assert len(data["results"]) == 1
     assert data["results"][0]["show"]["name"] == "Villakoira erikoisnäyttely"
     assert data["results"][0]["breed"] is None
+    assert data["results"][0]["match"] == "show"
 
 @patch("app.api.dog.requests.get")
 def test_search_shows_by_breed(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
-    
+
     from app.api.dog import _show_index
     _show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -253,7 +300,7 @@ def test_search_shows_by_breed(mock_get, client):
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True }
         ]
     }
-    
+
     mock_get.return_value = mock_resp_list
 
     resp = client.get("/api/dog/search?q=base")
@@ -264,6 +311,30 @@ def test_search_shows_by_breed(mock_get, client):
     assert data["results"][0]["show"]["name"] == "Basenji"
     assert data["results"][0]["breed"]["name"] == "basenji"
     assert data["results"][0]["breed"]["breed_id"] == "3"
+    assert data["results"][0]["match"] == "breed"
+
+
+@patch("app.api.dog.requests.get")
+def test_search_indexed_show_name_without_breed_match(mock_get, client):
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "breeds": [
+            { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True }
+        ]
+    }
+    mock_get.return_value = mock_resp_list
+
+    resp = client.get("/api/dog/search?q=base")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["results"]) == 1
+    assert data["results"][0]["show"]["name"] == "Basenji"
+    assert data["results"][0]["breed"] is None
+    assert data["results"][0]["match"] == "show"
 
 def test_search_shows_missing_query(client):
     resp = client.get("/api/dog/search?q=")
@@ -278,4 +349,10 @@ def test_breed_results_missing_params(client):
 
 def test_breed_results_invalid_params(client):
     resp = client.get("/api/dog/shows/14042/results?group=abc&breed=3")
+    assert resp.status_code == 400
+
+    resp = client.get("/api/dog/shows/14042/results?group=11&breed=3")
+    assert resp.status_code == 400
+
+    resp = client.get("/api/dog/shows/14042/results?group=5&breed=0")
     assert resp.status_code == 400

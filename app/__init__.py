@@ -24,6 +24,7 @@ structlog.configure(
 )
 
 app = Flask(__name__)
+app.config["TESTING"] = os.environ.get("TESTING") in {"1", "true", "True"}
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URI", "sqlite:////app/data/site.db"
 )

@@ -1,5 +1,7 @@
 import tailwindcss from '@tailwindcss/vite'
 
+const apiBaseUrl = (process.env.API_BASE_URL || 'http://localhost:5001').replace(/\/$/, '')
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-06-01',
 
@@ -16,8 +18,8 @@ export default defineNuxtConfig({
   },
 
   routeRules: {
-    '/api/**': { proxy: 'http://localhost:5001/api/**' },
-    '/sitemap.xml': { proxy: 'http://localhost:5001/sitemap.xml' },
+    '/api/**': { proxy: `${apiBaseUrl}/api/**` },
+    '/sitemap.xml': { proxy: `${apiBaseUrl}/sitemap.xml` },
     '/about': { redirect: '/' },
     '/contact': { redirect: '/' },
   },

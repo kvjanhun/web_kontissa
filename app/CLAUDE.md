@@ -8,6 +8,7 @@
 - All API endpoints return JSON
 - `catch_all` route serves static files from `dist/`, pre-rendered `index.html` per route, or `200.html` SPA fallback for client-side routing
 - GitHub API responses cached 6 hours (`utils.py`). FMI weather cached 10 minutes with stale fallback (`api/weather.py`).
+- Showlink dog show data is scraped server-side (`api/dog.py`). Breed indexing runs from `scripts/dog_crawl.py` as a separate process, not from Flask/Gunicorn workers.
 
 ## API Endpoints
 
@@ -45,11 +46,19 @@
 | GET | `/api/admin/health` | Admin | System health |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | FMI weather (Helsinki-Vantaa) |
+| GET | `/api/dog/shows` | Public | Showlink dog show list |
+| GET | `/api/dog/shows/<id>` | Public | Dog show breed list |
+| GET | `/api/dog/shows/<id>/results?group=&breed=` | Public | Breed results |
+| GET | `/api/dog/search?q=` | Public | Search shows and indexed breed names |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
 ## Models
 
 `User`, `Section` (with `section_type`: text/pills/quote/currently/intro/project/git_stats/timeline), `Recipe`, `Ingredient`, `Step`, `BlockedWord`, `KennoConfig`, `KennoPuzzle`, `KennoAchievement`, `KennoCombination`, `PageView`, `PageViewEvent`
+
+## Dog Shows Backend (api/dog.py)
+
+Public Showlink browser. `/api/dog/shows` fetches the current show list with a 30-minute cache. Show detail and breed result caches are short-lived for current/previous-month shows and effectively stable for old shows. `scripts/dog_crawl.py --loop` owns the persisted `dog_show_index.json` breed-search index; Docker sets `DOG_INDEX_DIR=/app/data` so web and crawler containers share the mounted data volume. The web process reloads that file when it changes.
 
 ## Sanakenno Backend (api/kenno.py)
 

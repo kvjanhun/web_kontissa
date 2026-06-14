@@ -1,8 +1,12 @@
 services:
   web:
     build: .
+    image: web-kontissa:latest
     command: gunicorn -w 2 -b 0.0.0.0:80 run:app
     env_file: .env
+    environment:
+      - DOG_NO_CRAWLER=true
+      - DOG_INDEX_DIR=/app/data
     ports:
       - "127.0.0.1:8080:80"
     volumes:
@@ -21,6 +25,25 @@ services:
       options:
         loki-url: "http://127.0.0.1:3100/loki/api/v1/push"
         loki-external-labels: "compose_service=web"
+
+  dog-crawler:
+    image: web-kontissa:latest
+    command: python scripts/dog_crawl.py --loop --interval 3600
+    env_file: .env
+    environment:
+      - DOG_NO_CRAWLER=true
+      - DOG_INDEX_DIR=/app/data
+    volumes:
+      - ./app/data:/app/data
+    mem_limit: 128m
+    restart: unless-stopped
+    depends_on:
+      - loki
+    logging:
+      driver: loki
+      options:
+        loki-url: "http://127.0.0.1:3100/loki/api/v1/push"
+        loki-external-labels: "compose_service=dog-crawler"
 
   loki:
     image: grafana/loki:3.6.7
@@ -105,4 +128,3 @@ volumes:
   grafana_data:
   promtail_positions:
   prometheus_data:
-    

@@ -13,6 +13,9 @@ useHead({
   ],
 })
 
+const route = useRoute()
+const router = useRouter()
+
 // --- Dark mode: always on for this page ---
 onMounted(() => {
   document.documentElement.classList.add('dark')
@@ -34,6 +37,7 @@ const activeTab = ref('shows') // 'shows' | 'search'
 const shows = ref([])
 const showsLoading = ref(true)
 const showsError = ref('')
+const indexStats = ref(null)
 
 const selectedShow = ref(null)
 const showDetail = ref(null)
@@ -51,6 +55,7 @@ const searchQuery = ref('')
 const searchResults = ref([])
 const searchLoading = ref(false)
 const searchError = ref('')
+const showResultsOnly = ref(false)
 
 // ─── Collapsible months ──────────────────────────────────────
 const collapsedMonths = ref(new Set())
@@ -60,6 +65,52 @@ const expandedCritiques = ref(new Set())
 
 // ─── Debounce timer ──────────────────────────────────────────
 let searchTimer = null
+let indexPollTimer = null
+
+function firstQueryValue(value) {
+  return Array.isArray(value) ? value[0] : value
+}
+
+function setDogQuery(query) {
+  const clean = {}
+  for (const [key, value] of Object.entries(query)) {
+    if (value !== undefined && value !== null && value !== '') clean[key] = String(value)
+  }
+  router.replace({ path: '/dog', query: clean }).catch(() => {})
+}
+
+function formatTimestamp(value) {
+  if (!value) return ''
+  const date = typeof value === 'number' ? new Date(value * 1000) : new Date(value)
+  if (Number.isNaN(date.getTime())) return ''
+  return new Intl.DateTimeFormat('fi-FI', {
+    dateStyle: 'short',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+function sourceForShow(show) {
+  return show?.source_url || (show?.id ? `https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=${show.id}` : '')
+}
+
+async function refreshIndexStats() {
+  try {
+    const data = await $fetch('/api/dog/shows')
+    shows.value = data.shows || shows.value
+    indexStats.value = data.index || indexStats.value
+    if (!indexWarming.value && indexPollTimer) {
+      clearInterval(indexPollTimer)
+      indexPollTimer = null
+    }
+  } catch {
+    // Keep existing page data; this is only a background freshness check.
+  }
+}
+
+function startIndexPolling() {
+  if (indexPollTimer || !indexWarming.value) return
+  indexPollTimer = setInterval(refreshIndexStats, 15000)
+}
 
 // ─── Fetch shows ─────────────────────────────────────────────
 async function fetchShows() {
@@ -68,6 +119,7 @@ async function fetchShows() {
   try {
     const data = await $fetch('/api/dog/shows')
     shows.value = data.shows || []
+    indexStats.value = data.index || null
   } catch (e) {
     showsError.value = 'Näyttelyiden lataaminen epäonnistui.'
   } finally {
@@ -76,15 +128,20 @@ async function fetchShows() {
 }
 
 // ─── Fetch show detail ───────────────────────────────────────
-async function fetchShowDetail(show) {
+async function fetchShowDetail(show, options = {}) {
+  if (!show) return
+  const { updateRoute = true } = options
   selectedShow.value = show
   currentView.value = 'detail'
   detailLoading.value = true
   detailError.value = ''
   showDetail.value = null
+  selectedBreed.value = null
+  breedResults.value = null
   try {
     const data = await $fetch(`/api/dog/shows/${show.id}`)
     showDetail.value = data
+    if (updateRoute) setDogQuery({ show: show.id })
   } catch (e) {
     detailError.value = 'Näyttelyn tietojen lataaminen epäonnistui.'
   } finally {
@@ -93,8 +150,9 @@ async function fetchShowDetail(show) {
 }
 
 // ─── Fetch breed results ─────────────────────────────────────
-async function fetchBreedResults(breed) {
+async function fetchBreedResults(breed, options = {}) {
   if (!breed.has_results) return
+  const { updateRoute = true } = options
   selectedBreed.value = breed
   currentView.value = 'results'
   resultsLoading.value = true
@@ -108,6 +166,13 @@ async function fetchBreedResults(breed) {
     const url = `/api/dog/shows/${selectedShow.value.id}/results?${params}`
     const data = await $fetch(url)
     breedResults.value = data
+    if (updateRoute) {
+      setDogQuery({
+        show: selectedShow.value.id,
+        group: breed.group,
+        breed: breed.breed_id,
+      })
+    }
   } catch (e) {
     resultsError.value = 'Tulosten lataaminen epäonnistui.'
   } finally {
@@ -130,6 +195,7 @@ function onSearchInput() {
     try {
       const data = await $fetch(`/api/dog/search?q=${encodeURIComponent(q)}`)
       searchResults.value = data.results || []
+      indexStats.value = data.index || indexStats.value
     } catch (e) {
       searchError.value = 'Haku epäonnistui.'
     } finally {
@@ -141,24 +207,7 @@ function onSearchInput() {
 async function onSelectSearchResult(res) {
   selectedShow.value = res.show
   if (res.breed && res.breed.has_results) {
-    selectedBreed.value = res.breed
-    currentView.value = 'results'
-    resultsLoading.value = true
-    resultsError.value = ''
-    breedResults.value = null
-    expandedCritiques.value = new Set()
-    try {
-      const params = new URLSearchParams()
-      if (res.breed.group) params.set('group', res.breed.group)
-      if (res.breed.breed_id) params.set('breed', res.breed.breed_id)
-      const url = `/api/dog/shows/${res.show.id}/results?${params}`
-      const data = await $fetch(url)
-      breedResults.value = data
-    } catch (e) {
-      resultsError.value = 'Tulosten lataaminen epäonnistui.'
-    } finally {
-      resultsLoading.value = false
-    }
+    await fetchBreedResults(res.breed)
   } else {
     await fetchShowDetail(res.show)
   }
@@ -171,10 +220,16 @@ function goToList() {
   showDetail.value = null
   selectedBreed.value = null
   breedResults.value = null
+  setDogQuery({})
 }
 
-function goToDetail() {
-  currentView.value = 'detail'
+async function goToDetail() {
+  if (selectedShow.value && !showDetail.value) {
+    await fetchShowDetail(selectedShow.value)
+  } else {
+    currentView.value = 'detail'
+    if (selectedShow.value) setDogQuery({ show: selectedShow.value.id })
+  }
   selectedBreed.value = null
   breedResults.value = null
 }
@@ -213,6 +268,25 @@ const groupedShows = computed(() => {
   return groups
 })
 
+const filteredBreeds = computed(() => {
+  const breeds = showDetail.value?.breeds || []
+  if (!showResultsOnly.value) return breeds
+  return breeds.filter(b => b.has_results)
+})
+
+const selectedShowSourceUrl = computed(() => (
+  showDetail.value?.source_url || sourceForShow(selectedShow.value)
+))
+
+const selectedBreedSourceUrl = computed(() => (
+  breedResults.value?.source_url || selectedBreed.value?.source_url || ''
+))
+
+const indexWarming = computed(() => (
+  indexStats.value?.total_show_count
+  && indexStats.value.indexed_show_count < indexStats.value.total_show_count
+))
+
 // ─── Computed: results grouped by gender ─────────────────────
 const resultsByGender = computed(() => {
   if (!breedResults.value?.results) return {}
@@ -237,9 +311,38 @@ function gradeClasses(grade) {
   return 'dog-badge-default'
 }
 
+async function applyInitialRoute() {
+  const showId = firstQueryValue(route.query.show)
+  if (!showId) return
+
+  const show = shows.value.find(s => String(s.id) === String(showId)) || {
+    id: Number(showId),
+    name: `Näyttely ${showId}`,
+    source_url: sourceForShow({ id: showId }),
+  }
+
+  await fetchShowDetail(show, { updateRoute: false })
+
+  const group = firstQueryValue(route.query.group)
+  const breedId = firstQueryValue(route.query.breed)
+  if (!group || !breedId || !showDetail.value) return
+
+  const breed = showDetail.value.breeds.find(b => (
+    String(b.group) === String(group) && String(b.breed_id) === String(breedId)
+  ))
+  if (breed) await fetchBreedResults(breed, { updateRoute: false })
+}
+
 // ─── Init ────────────────────────────────────────────────────
-onMounted(() => {
-  fetchShows()
+onMounted(async () => {
+  await fetchShows()
+  await applyInitialRoute()
+  startIndexPolling()
+})
+
+onUnmounted(() => {
+  clearTimeout(searchTimer)
+  if (indexPollTimer) clearInterval(indexPollTimer)
 })
 </script>
 
@@ -351,6 +454,12 @@ onMounted(() => {
               @input="onSearchInput"
             />
           </div>
+          <p v-if="indexWarming" class="dog-status-note">
+            Rotuhaku päivittyy: {{ indexStats.indexed_show_count }}/{{ indexStats.total_show_count }} näyttelyä.
+          </p>
+          <p v-else-if="indexStats?.last_updated_iso" class="dog-status-note">
+            Rotuhaku päivitetty {{ formatTimestamp(indexStats.last_updated_iso) }}.
+          </p>
 
           <div v-if="searchLoading" class="dog-skeleton-list">
             <div v-for="i in 4" :key="i" class="dog-skeleton-row" />
@@ -373,6 +482,7 @@ onMounted(() => {
                 <span v-if="res.breed" class="dog-search-breed-tag">
                   🐾 {{ res.breed.name }} ({{ res.breed.count }} koiraa)
                 </span>
+                <span v-else class="dog-search-breed-tag">Näyttely</span>
               </div>
               <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
@@ -403,6 +513,20 @@ onMounted(() => {
           <h1 class="dog-title dog-title-sm">
             {{ showDetail?.title || selectedShow?.name }}
           </h1>
+          <div class="dog-meta-row">
+            <a
+              v-if="selectedShowSourceUrl"
+              :href="selectedShowSourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="dog-source-link"
+            >
+              Showlink
+            </a>
+            <span v-if="showDetail?.fetched_at_iso" class="dog-updated">
+              Päivitetty {{ formatTimestamp(showDetail.fetched_at_iso) }}
+            </span>
+          </div>
         </header>
 
         <!-- Loading -->
@@ -417,23 +541,34 @@ onMounted(() => {
         </div>
 
         <!-- Breeds list -->
-        <div v-else-if="showDetail" class="dog-breed-list">
-          <button
-            v-for="breed in showDetail.breeds"
-            :key="breed.breed_id || breed.name"
-            :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
-            :disabled="!breed.has_results"
-            @click="fetchBreedResults(breed)"
-          >
-            <div class="dog-breed-info">
-              <span class="dog-breed-name">{{ breed.name }}</span>
-              <span class="dog-breed-count">{{ breed.count }} koiraa</span>
-            </div>
-            <div class="dog-breed-status">
-              <span v-if="breed.has_results" class="dog-check" title="Tulokset saatavilla">✓</span>
-              <span v-else class="dog-no-results" title="Ei tuloksia">—</span>
-            </div>
-          </button>
+        <div v-else-if="showDetail">
+          <div class="dog-filter-row">
+            <label class="dog-toggle">
+              <input v-model="showResultsOnly" type="checkbox" />
+              <span>Vain tuloksia</span>
+            </label>
+          </div>
+          <div v-if="filteredBreeds.length" class="dog-breed-list">
+            <button
+              v-for="breed in filteredBreeds"
+              :key="breed.breed_id || breed.name"
+              :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
+              :disabled="!breed.has_results"
+              @click="fetchBreedResults(breed)"
+            >
+              <div class="dog-breed-info">
+                <span class="dog-breed-name">{{ breed.name }}</span>
+                <span class="dog-breed-count">{{ breed.count }} koiraa</span>
+              </div>
+              <div class="dog-breed-status">
+                <span v-if="breed.has_results" class="dog-check" title="Tulokset saatavilla">✓</span>
+                <span v-else class="dog-no-results" title="Ei tuloksia">—</span>
+              </div>
+            </button>
+          </div>
+          <div v-else class="dog-empty">
+            <p>Ei rotuja valitulla rajauksella.</p>
+          </div>
         </div>
       </div>
 
@@ -453,6 +588,20 @@ onMounted(() => {
           <p v-if="breedResults?.judge" class="dog-judge">
             Tuomari: <strong>{{ breedResults.judge }}</strong>
           </p>
+          <div class="dog-meta-row">
+            <a
+              v-if="selectedBreedSourceUrl"
+              :href="selectedBreedSourceUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="dog-source-link"
+            >
+              Showlink
+            </a>
+            <span v-if="breedResults?.fetched_at_iso" class="dog-updated">
+              Päivitetty {{ formatTimestamp(breedResults.fetched_at_iso) }}
+            </span>
+          </div>
         </header>
 
         <!-- Loading -->
@@ -633,6 +782,26 @@ onMounted(() => {
   color: var(--dog-text);
   font-weight: 500;
 }
+.dog-meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  margin-top: 0.45rem;
+  color: var(--dog-text-muted);
+  font-size: 0.8rem;
+}
+.dog-source-link {
+  color: var(--dog-accent);
+  text-decoration: none;
+  font-weight: 500;
+}
+.dog-source-link:hover {
+  text-decoration: underline;
+}
+.dog-updated {
+  color: var(--dog-text-muted);
+}
 
 /* ═══ Tabs ═══ */
 .dog-tabs {
@@ -698,6 +867,11 @@ onMounted(() => {
 }
 .dog-search-input:focus {
   border-color: var(--dog-accent);
+}
+.dog-status-note {
+  margin: -0.35rem 0 1rem;
+  color: var(--dog-text-muted);
+  font-size: 0.8rem;
 }
 
 /* ═══ Skeleton ═══ */
@@ -891,6 +1065,25 @@ onMounted(() => {
 }
 
 /* ═══ Breed list (detail view) ═══ */
+.dog-filter-row {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.5rem;
+}
+.dog-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  min-height: 44px;
+  color: var(--dog-text-muted);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.dog-toggle input {
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--dog-accent);
+}
 .dog-breed-list {
   display: flex;
   flex-direction: column;
