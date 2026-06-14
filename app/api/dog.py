@@ -3,6 +3,7 @@ import time
 import os
 import json
 import threading
+import datetime
 
 import requests
 import structlog
@@ -27,18 +28,44 @@ _show_list_cache = {"data": None, "ts": 0}
 SHOW_LIST_TTL = 1800  # 30 minutes
 
 _show_detail_cache = {}   # {show_id: data}  — indefinite
-_breed_result_cache = {}  # {(show_id, group, breed): data} — indefinite
+_breed_result_cache = {}  # {(show_id, group, breed): {"data": data, "ts": timestamp}}
+BREED_RESULT_TTL = 600    # 10 minutes (for recent/ongoing shows)
 
 INDEX_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
 
 # In-memory index representation
 _show_index = {
-    "shows": {},       # show_id (str) -> { "title": "...", "breeds": [...] }
+    "shows": {},       # show_id (str) -> { "title": "...", "month": "...", "breeds": [...] }
     "last_updated": 0
 }
 _crawler_started = False
 _crawler_lock = threading.Lock()
+
+def _is_recent_show(month_str):
+    """Check if the show month is the current or previous month."""
+    if not month_str:
+        return True  # Default to recent if unknown
+    
+    FINNISH_MONTHS = [
+        "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
+        "heinäkuu", "elokuu", "syyskuu", "lokakuu", "marraskuu", "joulukuu"
+    ]
+    try:
+        now = datetime.datetime.now()
+        cur_year = now.year
+        cur_month = now.month
+        
+        prev_month = cur_month - 1 if cur_month > 1 else 12
+        prev_year = cur_year if cur_month > 1 else cur_year - 1
+        
+        cur_str = f"{FINNISH_MONTHS[cur_month - 1]} {cur_year}".lower()
+        prev_str = f"{FINNISH_MONTHS[prev_month - 1]} {prev_year}".lower()
+        
+        m_lower = month_str.lower().strip()
+        return m_lower == cur_str or m_lower == prev_str
+    except Exception:
+        return True
 
 def _load_index():
     global _show_index
@@ -77,26 +104,27 @@ def _background_crawler():
                 time.sleep(60)
                 continue
 
-            # 2. Find which shows are missing from the index
-            missing = []
+            # 2. Find which shows are missing or need updating (recent/ongoing shows)
+            to_update = []
             for s in shows_list:
                 sid = str(s["id"])
-                if sid not in _show_index["shows"]:
-                    missing.append(s)
+                if sid not in _show_index["shows"] or _is_recent_show(s.get("month")):
+                    to_update.append(s)
 
-            if missing:
-                logger.info("dog_crawler_missing_shows", count=len(missing))
-                # Crawl missing shows
-                for s in missing:
+            if to_update:
+                logger.info("dog_crawler_updating_shows", count=len(to_update))
+                # Crawl/Update shows
+                for s in to_update:
                     sid = s["id"]
                     try:
                         url = f"{BASE_URL}?Id={sid}"
                         soup = _fetch_page(url)
                         detail = _parse_show_detail(soup, sid)
                         
-                        # Add to index
+                        # Add or update in index
                         _show_index["shows"][str(sid)] = {
                             "title": detail["title"],
+                            "month": s.get("month", ""),
                             "breeds": detail["breeds"]
                         }
                         _show_index["last_updated"] = time.time()
@@ -454,16 +482,26 @@ def breed_results(show_id):
         return jsonify({"error": "Parameters group and breed must be numeric integers"}), 400
 
     cache_key = (show_id, group, breed)
+    now = time.time()
+
+    # Check if the show is recent/ongoing
+    is_recent = True
+    sid_str = str(show_id)
+    if sid_str in _show_index["shows"]:
+        show_data = _show_index["shows"][sid_str]
+        is_recent = _is_recent_show(show_data.get("month"))
 
     try:
         if cache_key in _breed_result_cache:
-            return jsonify(_breed_result_cache[cache_key])
+            cached = _breed_result_cache[cache_key]
+            if not is_recent or (now - cached["ts"]) < BREED_RESULT_TTL:
+                return jsonify(cached["data"])
 
         url = f"{BASE_URL}?Id={show_id}&R={group}&RO={breed}"
         soup = _fetch_page(url)
         data = _parse_breed_results(soup, show_id)
 
-        _breed_result_cache[cache_key] = data
+        _breed_result_cache[cache_key] = {"data": data, "ts": now}
         return jsonify(data)
     except requests.RequestException as exc:
         logger.warning("showlink_fetch_failed", endpoint="breed_results",
