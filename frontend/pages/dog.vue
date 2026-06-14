@@ -66,17 +66,51 @@ const expandedCritiques = ref(new Set())
 // ─── Debounce timer ──────────────────────────────────────────
 let searchTimer = null
 let indexPollTimer = null
+let routeSyncToken = 0
 
 function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value
 }
 
-function setDogQuery(query) {
+function buildDogQuery(query) {
   const clean = {}
   for (const [key, value] of Object.entries(query)) {
     if (value !== undefined && value !== null && value !== '') clean[key] = String(value)
   }
-  router.replace({ path: '/dog', query: clean }).catch(() => {})
+  return clean
+}
+
+function pushDogQuery(query) {
+  return router.push({ path: '/dog', query: buildDogQuery(query) }).catch(() => {})
+}
+
+function sameId(left, right) {
+  return String(left) === String(right)
+}
+
+function isNumericString(value) {
+  return /^\d+$/.test(String(value))
+}
+
+function getRouteSelection() {
+  return {
+    showId: firstQueryValue(route.query.show),
+    groupId: firstQueryValue(route.query.group),
+    breedId: firstQueryValue(route.query.breed),
+  }
+}
+
+function resetDogSelection() {
+  currentView.value = 'list'
+  selectedShow.value = null
+  showDetail.value = null
+  selectedBreed.value = null
+  breedResults.value = null
+  detailLoading.value = false
+  detailError.value = ''
+  resultsLoading.value = false
+  resultsError.value = ''
+  expandedCritiques.value = new Set()
 }
 
 function formatTimestamp(value) {
@@ -120,6 +154,13 @@ async function fetchShows() {
     const data = await $fetch('/api/dog/shows')
     shows.value = data.shows || []
     indexStats.value = data.index || null
+    const { showId } = getRouteSelection()
+    if (showId) {
+      const activeShow = shows.value.find(show => sameId(show.id, showId))
+      if (activeShow && sameId(selectedShow.value?.id, showId)) {
+        selectedShow.value = activeShow
+      }
+    }
   } catch (e) {
     showsError.value = 'Näyttelyiden lataaminen epäonnistui.'
   } finally {
@@ -130,7 +171,8 @@ async function fetchShows() {
 // ─── Fetch show detail ───────────────────────────────────────
 async function fetchShowDetail(show, options = {}) {
   if (!show) return
-  const { updateRoute = true } = options
+  const { updateRoute = false, syncToken = null } = options
+  if (syncToken !== null && syncToken !== routeSyncToken) return
   selectedShow.value = show
   currentView.value = 'detail'
   detailLoading.value = true
@@ -140,19 +182,24 @@ async function fetchShowDetail(show, options = {}) {
   breedResults.value = null
   try {
     const data = await $fetch(`/api/dog/shows/${show.id}`)
+    if (syncToken !== null && syncToken !== routeSyncToken) return
     showDetail.value = data
-    if (updateRoute) setDogQuery({ show: show.id })
   } catch (e) {
+    if (syncToken !== null && syncToken !== routeSyncToken) return
     detailError.value = 'Näyttelyn tietojen lataaminen epäonnistui.'
   } finally {
-    detailLoading.value = false
+    if (syncToken === null || syncToken === routeSyncToken) {
+      detailLoading.value = false
+    }
   }
+  if (updateRoute) pushDogQuery({ show: show.id })
 }
 
 // ─── Fetch breed results ─────────────────────────────────────
 async function fetchBreedResults(breed, options = {}) {
   if (!breed.has_results) return
-  const { updateRoute = true } = options
+  const { updateRoute = false, syncToken = null } = options
+  if (syncToken !== null && syncToken !== routeSyncToken) return
   selectedBreed.value = breed
   currentView.value = 'results'
   resultsLoading.value = true
@@ -165,18 +212,22 @@ async function fetchBreedResults(breed, options = {}) {
     if (breed.breed_id) params.set('breed', breed.breed_id)
     const url = `/api/dog/shows/${selectedShow.value.id}/results?${params}`
     const data = await $fetch(url)
+    if (syncToken !== null && syncToken !== routeSyncToken) return
     breedResults.value = data
-    if (updateRoute) {
-      setDogQuery({
-        show: selectedShow.value.id,
-        group: breed.group,
-        breed: breed.breed_id,
-      })
-    }
   } catch (e) {
+    if (syncToken !== null && syncToken !== routeSyncToken) return
     resultsError.value = 'Tulosten lataaminen epäonnistui.'
   } finally {
-    resultsLoading.value = false
+    if (syncToken === null || syncToken === routeSyncToken) {
+      resultsLoading.value = false
+    }
+  }
+  if (updateRoute) {
+    pushDogQuery({
+      show: selectedShow.value.id,
+      group: breed.group,
+      breed: breed.breed_id,
+    })
   }
 }
 
@@ -205,33 +256,40 @@ function onSearchInput() {
 }
 
 async function onSelectSearchResult(res) {
-  selectedShow.value = res.show
+  if (!res?.show?.id) return
   if (res.breed && res.breed.has_results) {
-    await fetchBreedResults(res.breed)
-  } else {
-    await fetchShowDetail(res.show)
+    return pushDogQuery({
+      show: res.show.id,
+      group: res.breed.group,
+      breed: res.breed.breed_id,
+    })
   }
+  return pushDogQuery({ show: res.show.id })
 }
 
 // ─── Navigation ──────────────────────────────────────────────
 function goToList() {
-  currentView.value = 'list'
-  selectedShow.value = null
-  showDetail.value = null
-  selectedBreed.value = null
-  breedResults.value = null
-  setDogQuery({})
+  return pushDogQuery({})
 }
 
-async function goToDetail() {
-  if (selectedShow.value && !showDetail.value) {
-    await fetchShowDetail(selectedShow.value)
-  } else {
-    currentView.value = 'detail'
-    if (selectedShow.value) setDogQuery({ show: selectedShow.value.id })
+function goToDetail() {
+  if (selectedShow.value) {
+    return pushDogQuery({ show: selectedShow.value.id })
   }
-  selectedBreed.value = null
-  breedResults.value = null
+}
+
+function openShow(show) {
+  if (!show?.id) return
+  pushDogQuery({ show: show.id })
+}
+
+function openBreed(breed) {
+  if (!breed?.has_results || !selectedShow.value?.id) return
+  pushDogQuery({
+    show: selectedShow.value.id,
+    group: breed.group,
+    breed: breed.breed_id,
+  })
 }
 
 // ─── Toggle helpers ──────────────────────────────────────────
@@ -287,6 +345,12 @@ const indexWarming = computed(() => (
   && indexStats.value.indexed_show_count < indexStats.value.total_show_count
 ))
 
+const routeSelectionKey = computed(() => [
+  firstQueryValue(route.query.show) || '',
+  firstQueryValue(route.query.group) || '',
+  firstQueryValue(route.query.breed) || '',
+].join('|'))
+
 // ─── Computed: results grouped by gender ─────────────────────
 const resultsByGender = computed(() => {
   if (!breedResults.value?.results) return {}
@@ -311,32 +375,88 @@ function gradeClasses(grade) {
   return 'dog-badge-default'
 }
 
-async function applyInitialRoute() {
-  const showId = firstQueryValue(route.query.show)
-  if (!showId) return
+async function syncRouteState() {
+  const syncToken = ++routeSyncToken
+  const { showId, groupId, breedId } = getRouteSelection()
 
-  const show = shows.value.find(s => String(s.id) === String(showId)) || {
+  if (!showId || !isNumericString(showId)) {
+    resetDogSelection()
+    return
+  }
+
+  const show = shows.value.find(item => sameId(item.id, showId)) || {
     id: Number(showId),
     name: `Näyttely ${showId}`,
     source_url: sourceForShow({ id: showId }),
   }
 
-  await fetchShowDetail(show, { updateRoute: false })
+  const showMatches = showDetail.value && sameId(showDetail.value.id, showId)
+  if (!showMatches) {
+    await fetchShowDetail(show, { syncToken })
+    if (syncToken !== routeSyncToken) return
+  } else {
+    selectedShow.value = show
+    currentView.value = 'detail'
+    detailLoading.value = false
+    detailError.value = ''
+  }
 
-  const group = firstQueryValue(route.query.group)
-  const breedId = firstQueryValue(route.query.breed)
-  if (!group || !breedId || !showDetail.value) return
+  if (!groupId || !breedId) {
+    currentView.value = 'detail'
+    selectedBreed.value = null
+    breedResults.value = null
+    resultsLoading.value = false
+    resultsError.value = ''
+    expandedCritiques.value = new Set()
+    return
+  }
 
-  const breed = showDetail.value.breeds.find(b => (
-    String(b.group) === String(group) && String(b.breed_id) === String(breedId)
+  if (!isNumericString(groupId) || !isNumericString(breedId) || !showDetail.value) {
+    currentView.value = 'detail'
+    selectedBreed.value = null
+    breedResults.value = null
+    resultsLoading.value = false
+    resultsError.value = ''
+    expandedCritiques.value = new Set()
+    return
+  }
+
+  const breed = showDetail.value?.breeds?.find(item => (
+    sameId(item.group, groupId) && sameId(item.breed_id, breedId)
   ))
-  if (breed) await fetchBreedResults(breed, { updateRoute: false })
+  if (!breed) {
+    currentView.value = 'detail'
+    selectedBreed.value = null
+    breedResults.value = null
+    resultsLoading.value = false
+    resultsError.value = ''
+    expandedCritiques.value = new Set()
+    return
+  }
+
+  const resultsMatch = selectedBreed.value
+    && sameId(selectedBreed.value.group, groupId)
+    && sameId(selectedBreed.value.breed_id, breedId)
+    && sameId(selectedShow.value?.id, showId)
+    && breedResults.value
+
+  if (!resultsMatch) {
+    await fetchBreedResults(breed, { syncToken })
+    if (syncToken !== routeSyncToken) return
+  } else {
+    currentView.value = 'results'
+    resultsLoading.value = false
+    resultsError.value = ''
+  }
 }
 
 // ─── Init ────────────────────────────────────────────────────
+watch(routeSelectionKey, () => {
+  syncRouteState().catch(() => {})
+}, { immediate: true })
+
 onMounted(async () => {
   await fetchShows()
-  await applyInitialRoute()
   startIndexPolling()
 })
 
@@ -421,7 +541,7 @@ onUnmounted(() => {
                     v-for="show in monthShows"
                     :key="show.id"
                     class="dog-show-row"
-                    @click="fetchShowDetail(show)"
+                    @click="openShow(show)"
                   >
                     <span class="dog-show-date">{{ show.date }}</span>
                     <span class="dog-show-name">{{ show.name }}</span>
@@ -504,7 +624,7 @@ onUnmounted(() => {
       <div v-else-if="currentView === 'detail'" key="detail">
         <!-- Breadcrumb -->
         <nav class="dog-breadcrumb">
-          <button class="dog-breadcrumb-link" @click="goToList">Näyttelyt</button>
+            <button class="dog-breadcrumb-link" @click="goToList">Näyttelyt</button>
           <span class="dog-breadcrumb-sep">›</span>
           <span class="dog-breadcrumb-current">{{ selectedShow?.name }}</span>
         </nav>
@@ -554,7 +674,7 @@ onUnmounted(() => {
               :key="breed.breed_id || breed.name"
               :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
               :disabled="!breed.has_results"
-              @click="fetchBreedResults(breed)"
+              @click="openBreed(breed)"
             >
               <div class="dog-breed-info">
                 <span class="dog-breed-name">{{ breed.name }}</span>
