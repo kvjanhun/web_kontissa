@@ -1,5 +1,8 @@
 import re
 import time
+import os
+import json
+import threading
 
 import requests
 import structlog
@@ -17,7 +20,7 @@ REQUEST_HEADERS = {"User-Agent": "erez.ac dog show browser"}
 REQUEST_TIMEOUT = 10
 
 # ---------------------------------------------------------------------------
-# TTL cache helpers
+# TTL cache & Breed Indexing persistence
 # ---------------------------------------------------------------------------
 
 _show_list_cache = {"data": None, "ts": 0}
@@ -26,6 +29,36 @@ SHOW_LIST_TTL = 1800  # 30 minutes
 _show_detail_cache = {}   # {show_id: data}  — indefinite
 _breed_result_cache = {}  # {(show_id, group, breed): data} — indefinite
 
+INDEX_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
+
+# In-memory index representation
+_show_index = {
+    "shows": {},       # show_id (str) -> { "title": "...", "breeds": [...] }
+    "last_updated": 0
+}
+_crawler_started = False
+_crawler_lock = threading.Lock()
+
+def _load_index():
+    global _show_index
+    if os.path.exists(INDEX_PATH):
+        try:
+            with open(INDEX_PATH, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "shows" in data:
+                    _show_index = data
+                    logger.info("dog_index_loaded", count=len(data["shows"]))
+        except Exception:
+            logger.exception("dog_index_load_failed")
+
+def _save_index():
+    try:
+        os.makedirs(INDEX_DIR, exist_ok=True)
+        with open(INDEX_PATH, "w", encoding="utf-8") as f:
+            json.dump(_show_index, f, ensure_ascii=False, indent=2)
+    except Exception:
+        logger.exception("dog_index_save_failed")
 
 def _fetch_page(url):
     """Fetch a page from Showlink with timeout and logging."""
@@ -33,6 +66,69 @@ def _fetch_page(url):
     resp = requests.get(url, headers=REQUEST_HEADERS, timeout=REQUEST_TIMEOUT)
     resp.raise_for_status()
     return BeautifulSoup(resp.text, "html.parser")
+
+def _background_crawler():
+    logger.info("dog_crawler_started")
+    while True:
+        try:
+            # 1. Fetch the show list (refreshing it if stale)
+            shows_list = _get_show_list()
+            if not shows_list:
+                time.sleep(60)
+                continue
+
+            # 2. Find which shows are missing from the index
+            missing = []
+            for s in shows_list:
+                sid = str(s["id"])
+                if sid not in _show_index["shows"]:
+                    missing.append(s)
+
+            if missing:
+                logger.info("dog_crawler_missing_shows", count=len(missing))
+                # Crawl missing shows
+                for s in missing:
+                    sid = s["id"]
+                    try:
+                        url = f"{BASE_URL}?Id={sid}"
+                        soup = _fetch_page(url)
+                        detail = _parse_show_detail(soup, sid)
+                        
+                        # Add to index
+                        _show_index["shows"][str(sid)] = {
+                            "title": detail["title"],
+                            "breeds": detail["breeds"]
+                        }
+                        _show_index["last_updated"] = time.time()
+                        _save_index()
+                        
+                        logger.info("dog_crawler_indexed_show", show_id=sid, breed_count=len(detail["breeds"]))
+                    except Exception as e:
+                        logger.warning("dog_crawler_show_failed", show_id=sid, error=str(e))
+                    
+                    # Be very polite: sleep 1.5 seconds between requests
+                    time.sleep(1.5)
+            else:
+                # Nothing missing, check again in 1 hour
+                time.sleep(3600)
+        except Exception:
+            logger.exception("dog_crawler_loop_error")
+            time.sleep(60)
+
+@dog_bp.record
+def on_blueprint_ready(state):
+    app = state.app
+    if not app.config.get("TESTING"):
+        _load_index()
+        global _crawler_started
+        with _crawler_lock:
+            if not _crawler_started:
+                # Avoid starting background thread twice if in Flask reloader main process
+                if os.environ.get("WERKZEUG_RUN_MAIN") == "true" or not os.environ.get("FLASK_DEBUG"):
+                    t = threading.Thread(target=_background_crawler, daemon=True, name="DogShowCrawler")
+                    t.start()
+                    _crawler_started = True
+                    logger.info("dog_crawler_thread_launched")
 
 
 # ---------------------------------------------------------------------------
@@ -339,7 +435,7 @@ def breed_results(show_id):
 
 
 # ---------------------------------------------------------------------------
-# GET /api/dog/search?q=<query> — search shows by name
+# GET /api/dog/search?q=<query> — search breeds or shows
 # ---------------------------------------------------------------------------
 
 @dog_bp.route("/api/dog/search")
@@ -349,10 +445,36 @@ def search_shows():
     if not query:
         return jsonify({"error": "Missing required query parameter: q"}), 400
 
+    q_lower = query.lower()
+
     try:
+        # Load index first if it hasn't been loaded
+        if not _show_index["shows"]:
+            _load_index()
+
         shows = _get_show_list()
-        matches = [s for s in shows if query.lower() in s["name"].lower()]
-        return jsonify({"query": query, "results": matches})
+        results = []
+
+        for s in shows:
+            sid = str(s["id"])
+            if sid in _show_index["shows"]:
+                show_detail = _show_index["shows"][sid]
+                # Check for matching breeds in this show
+                for b in show_detail["breeds"]:
+                    if q_lower in b["name"].lower():
+                        results.append({
+                            "show": s,
+                            "breed": b
+                        })
+            else:
+                # If show detail is not cached/indexed yet, match by show name as a fallback
+                if q_lower in s["name"].lower():
+                    results.append({
+                        "show": s,
+                        "breed": None
+                    })
+
+        return jsonify({"query": query, "results": results})
     except requests.RequestException as exc:
         logger.warning("showlink_fetch_failed", endpoint="search", exc_info=True)
         return jsonify({"error": "Failed to fetch show list for search", "detail": str(exc)}), 502

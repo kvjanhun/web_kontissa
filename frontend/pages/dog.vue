@@ -138,6 +138,32 @@ function onSearchInput() {
   }, 300)
 }
 
+async function onSelectSearchResult(res) {
+  selectedShow.value = res.show
+  if (res.breed && res.breed.has_results) {
+    selectedBreed.value = res.breed
+    currentView.value = 'results'
+    resultsLoading.value = true
+    resultsError.value = ''
+    breedResults.value = null
+    expandedCritiques.value = new Set()
+    try {
+      const params = new URLSearchParams()
+      if (res.breed.group) params.set('group', res.breed.group)
+      if (res.breed.breed_id) params.set('breed', res.breed.breed_id)
+      const url = `/api/dog/shows/${res.show.id}/results?${params}`
+      const data = await $fetch(url)
+      breedResults.value = data
+    } catch (e) {
+      resultsError.value = 'Tulosten lataaminen epäonnistui.'
+    } finally {
+      resultsLoading.value = false
+    }
+  } else {
+    await fetchShowDetail(res.show)
+  }
+}
+
 // ─── Navigation ──────────────────────────────────────────────
 function goToList() {
   currentView.value = 'list'
@@ -336,13 +362,18 @@ onMounted(() => {
 
           <div v-else-if="searchResults.length">
             <button
-              v-for="show in searchResults"
-              :key="show.id"
+              v-for="res in searchResults"
+              :key="res.show.id + '-' + (res.breed ? res.breed.breed_id : '')"
               class="dog-show-row"
-              @click="fetchShowDetail(show)"
+              @click="onSelectSearchResult(res)"
             >
-              <span class="dog-show-date">{{ show.date }}</span>
-              <span class="dog-show-name">{{ show.name }}</span>
+              <div class="dog-search-result-info">
+                <span class="dog-show-date">{{ res.show.date }}</span>
+                <span class="dog-show-name">{{ res.show.name }}</span>
+                <span v-if="res.breed" class="dog-search-breed-tag">
+                  🐾 {{ res.breed.name }} ({{ res.breed.count }} koiraa)
+                </span>
+              </div>
               <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M7.21 14.77a.75.75 0 01.02-1.06L11.168 10 7.23 6.29a.75.75 0 111.04-1.08l4.5 4.25a.75.75 0 010 1.08l-4.5 4.25a.75.75 0 01-1.06-.02z" clip-rule="evenodd" />
               </svg>
@@ -807,6 +838,18 @@ onMounted(() => {
 .dog-show-name {
   flex: 1;
   color: var(--dog-accent);
+}
+.dog-search-result-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  flex: 1;
+}
+.dog-search-breed-tag {
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--dog-accent-2);
+  margin-top: 0.15rem;
 }
 .dog-arrow {
   width: 1rem;
