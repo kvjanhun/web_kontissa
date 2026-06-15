@@ -87,11 +87,13 @@ def clear_caches(monkeypatch, tmp_path):
     monkeypatch.setattr(dog_module, "INDEX_PATH", str(tmp_path / "dog_show_index.json"))
     monkeypatch.setattr(dog_module, "RESULT_CACHE_DIR", str(tmp_path / "dog_result_cache"))
     monkeypatch.setattr(dog_module, "RESULT_JOBS_PATH", str(tmp_path / "dog_result_jobs.json"))
+    monkeypatch.setattr(dog_module, "RESULT_IMMEDIATE_WARMUP", False)
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
     _show_detail_cache.clear()
     _breed_result_cache.clear()
     _show_all_results_cache.clear()
+    dog_module._immediate_warmups.clear()
     dog_module._show_index["shows"].clear()
     dog_module._show_index["last_updated"] = 0
     dog_module._show_index_mtime = 0
@@ -318,12 +320,38 @@ def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client
     assert data["retry_after"] == dog_module.RESULT_RETRY_AFTER_SECONDS
     assert data["progress"]["state"] == "queued"
     assert data["progress"]["total_breeds"] == 1
+    assert data["started"] is False
     mock_get.assert_not_called()
 
     with open(dog_module.RESULT_JOBS_PATH, encoding="utf-8") as f:
         jobs = json.load(f)
     assert jobs["jobs"]["14042"]["state"] == "queued"
     assert jobs["jobs"]["14042"]["reason"] == "user"
+
+
+@patch("app.api.dog.requests.get")
+def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeypatch, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    started = []
+    monkeypatch.setattr(dog_module, "RESULT_IMMEDIATE_WARMUP", True)
+    monkeypatch.setattr(
+        dog_module,
+        "_start_result_cache_warmup",
+        lambda show_id, reason="user-immediate": started.append((show_id, reason)) or True,
+    )
+
+    resp = client.get("/api/dog/shows/14042/all-results")
+
+    assert resp.status_code == 202
+    assert resp.get_json()["started"] is True
+    assert started == [(14042, "user-immediate")]
+    mock_get.assert_not_called()
 
 
 @patch("app.api.dog.requests.get")

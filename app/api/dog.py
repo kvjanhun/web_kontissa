@@ -3,6 +3,7 @@ import time
 import os
 import json
 import datetime
+import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
@@ -45,11 +46,13 @@ INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
 RESULT_CACHE_DIR = os.environ.get("DOG_RESULT_CACHE_DIR", os.path.join(INDEX_DIR, "dog_result_cache"))
 RESULT_JOBS_PATH = os.environ.get("DOG_RESULT_JOBS_PATH", os.path.join(INDEX_DIR, "dog_result_jobs.json"))
 RESULT_CACHE_VERSION = 1
-RESULT_RETRY_AFTER_SECONDS = 8
+RESULT_RETRY_AFTER_SECONDS = 2
 RESULT_JOB_STALE_SECONDS = 1800
 RESULT_JOB_BACKOFF_SECONDS = 300
 RESULT_CRAWL_DEFAULT_DELAY = 0.4
 RESULT_CRAWL_DEFAULT_WORKERS = 3
+RESULT_IMMEDIATE_WARMUP = os.environ.get("DOG_RESULT_IMMEDIATE_WARMUP", "true").lower() != "false"
+RESULT_IMMEDIATE_MAX_ACTIVE = int(os.environ.get("DOG_RESULT_IMMEDIATE_MAX_ACTIVE", "1"))
 
 FINNISH_MONTHS = [
     "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
@@ -62,6 +65,9 @@ _show_index = {
     "last_updated": 0
 }
 _show_index_mtime = 0
+_immediate_warmups = set()
+_immediate_warmups_lock = threading.Lock()
+_immediate_warmup_slots = threading.BoundedSemaphore(max(1, RESULT_IMMEDIATE_MAX_ACTIVE))
 
 
 def _is_recent_show(month_str):
@@ -330,6 +336,30 @@ def _set_result_job_running(show_id):
     sid = str(int(show_id))
     job = jobs.get(sid, {"show_id": int(show_id), "created_at": now, "attempts": 0})
     job["state"] = "running"
+    job["updated_at"] = now
+    job["last_started_at"] = now
+    jobs[sid] = job
+    jobs_doc["updated_at"] = now
+    _save_result_jobs(jobs_doc)
+    return job
+
+
+def _claim_result_cache_job(show_id, reason="user-immediate"):
+    now = time.time()
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    job = jobs.get(sid, {"show_id": int(show_id), "created_at": now, "attempts": 0})
+
+    if job.get("state") == "running" and not _result_job_due(job, now=now):
+        return None
+
+    job["state"] = "running"
+    job["show_id"] = int(show_id)
+    job["reason"] = reason
+    job.setdefault("created_at", now)
+    job.setdefault("attempts", 0)
+    job["requested_at"] = now
     job["updated_at"] = now
     job["last_started_at"] = now
     jobs[sid] = job
@@ -1133,6 +1163,62 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
     }
 
 
+def _finish_immediate_warmup(show_id):
+    with _immediate_warmups_lock:
+        _immediate_warmups.discard(int(show_id))
+    _immediate_warmup_slots.release()
+
+
+def _run_immediate_result_cache_warmup(show_id):
+    try:
+        summary = crawl_result_cache_for_show(
+            show_id,
+            delay=RESULT_CRAWL_DEFAULT_DELAY,
+            source="user-immediate",
+            workers=RESULT_CRAWL_DEFAULT_WORKERS,
+        )
+        status = summary.get("status")
+        if status in {"complete", "skipped"}:
+            _remove_result_cache_job(show_id)
+        else:
+            _defer_result_cache_job(show_id, summary.get("error") or status)
+    except Exception as exc:
+        logger.exception("dog_immediate_result_warmup_failed", show_id=show_id)
+        _defer_result_cache_job(show_id, exc)
+    finally:
+        _finish_immediate_warmup(show_id)
+
+
+def _start_result_cache_warmup(show_id, reason="user-immediate"):
+    if not RESULT_IMMEDIATE_WARMUP or not _result_cache_due(show_id):
+        return False
+
+    show_id = int(show_id)
+    with _immediate_warmups_lock:
+        if show_id in _immediate_warmups:
+            return False
+        _immediate_warmups.add(show_id)
+
+    if not _immediate_warmup_slots.acquire(blocking=False):
+        with _immediate_warmups_lock:
+            _immediate_warmups.discard(show_id)
+        return False
+
+    claimed = _claim_result_cache_job(show_id, reason=reason)
+    if not claimed:
+        _finish_immediate_warmup(show_id)
+        return False
+
+    thread = threading.Thread(
+        target=_run_immediate_result_cache_warmup,
+        args=(show_id,),
+        name=f"dog-result-warmup-{show_id}",
+        daemon=True,
+    )
+    thread.start()
+    return True
+
+
 # ---------------------------------------------------------------------------
 # GET /api/dog/shows — show listing
 # ---------------------------------------------------------------------------
@@ -1559,13 +1645,17 @@ def show_all_results(show_id):
             return jsonify(cached)
 
         job = _queue_result_cache_job(show_id, reason="user")
+        started = _start_result_cache_warmup(show_id, reason="user-immediate")
         doc = _load_result_cache_doc(show_id)
+        if started:
+            job = _load_result_jobs().get("jobs", {}).get(str(int(show_id)), job)
         return jsonify({
             "show_id": show_id,
             "status": "warming",
             "message": "Whole-show result cache is being prepared.",
             "retry_after": RESULT_RETRY_AFTER_SECONDS,
             "progress": _result_cache_progress(show_id, doc=doc, job=job),
+            "started": started,
         }), 202
     except Exception as e:
         logger.exception("show_all_results_error", show_id=show_id)
