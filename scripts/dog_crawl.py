@@ -30,7 +30,10 @@ def main():
     parser.add_argument("--no-results", action="store_true", help="Skip whole-show result cache warming")
     parser.add_argument("--no-auto-results", action="store_true", help="Only process queued result cache jobs")
     parser.add_argument("--result-limit", type=int, default=1, help="Maximum whole-show result caches to update per run")
-    parser.add_argument("--result-delay", type=float, default=1.0, help="Seconds between result page requests")
+    parser.add_argument("--queued-result-limit", type=int, default=None, help="Maximum queued result cache jobs to update per run")
+    parser.add_argument("--auto-result-limit", type=int, default=None, help="Maximum automatic result caches to update per run")
+    parser.add_argument("--result-delay", type=float, default=0.4, help="Seconds between result page request starts")
+    parser.add_argument("--result-workers", type=int, default=3, help="Maximum concurrent result page requests for one show")
     args = parser.parse_args()
 
     print({
@@ -41,6 +44,8 @@ def main():
 
     maintenance_interval = args.maintenance_interval if args.maintenance_interval is not None else args.interval
     auto_results_interval = args.auto_results_interval if args.auto_results_interval is not None else maintenance_interval
+    queued_result_limit = args.queued_result_limit if args.queued_result_limit is not None else args.result_limit
+    auto_result_limit = args.auto_result_limit if args.auto_result_limit is not None else args.result_limit
     next_maintenance_at = 0
     next_auto_results_at = 0
 
@@ -53,9 +58,10 @@ def main():
 
         if not args.no_results:
             summary["queued_results"] = crawl_result_cache_once(
-                limit=args.result_limit,
+                limit=queued_result_limit,
                 delay=args.result_delay,
                 auto_recent=False,
+                workers=args.result_workers,
             )
             queued_attempted = summary["queued_results"].get("attempted", 0)
 
@@ -72,9 +78,10 @@ def main():
                 summary["auto_results"] = {"attempted": 0, "skipped": 1, "reason": "queued_job_active"}
             else:
                 summary["auto_results"] = crawl_result_cache_once(
-                    limit=args.result_limit,
+                    limit=auto_result_limit,
                     delay=args.result_delay,
                     auto_recent=True,
+                    workers=args.result_workers,
                 )
             next_auto_results_at = time.time() + auto_results_interval
         else:

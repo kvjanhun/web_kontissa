@@ -371,6 +371,52 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
 
 
 @patch("app.api.dog.requests.get")
+def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2000 Basenji",
+        "month": "tammikuu 2000",
+        "breeds": [
+            { "name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
+        ],
+    }
+    dog_module._save_result_cache_doc(14042, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 14042,
+        "status": "complete",
+        "title": "14.06.2000 Basenji",
+        "source_url": dog_module._source_url(14042),
+        "started_at": 1000,
+        "updated_at": 1001,
+        "cached_at": 1001,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "failed_breeds": {},
+        "results": [
+            {
+                "number": 1,
+                "name": "Ajibu You Are My Thrill",
+                "grade": "ERI",
+                "breedName": "basenji",
+                "breedGroup": "5",
+                "breedId": "3",
+                "breedObj": { "name": "basenji", "group": "5", "breed_id": "3", "judge": "Paula Steele" },
+            },
+        ],
+    })
+
+    resp = client.get("/api/dog/shows/14042/results?group=5&breed=3")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breed"] == "basenji"
+    assert data["judge"] == "Paula Steele"
+    assert data["results"][0]["name"] == "Ajibu You Are My Thrill"
+    assert data["results"][0]["grade"] == "ERI"
+    assert data["cache"]["status"] == "show_all_results"
+    mock_get.assert_not_called()
+
+
+@patch("app.api.dog.requests.get")
 def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",

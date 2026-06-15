@@ -3,6 +3,7 @@ import time
 import os
 import json
 import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import requests
 import structlog
@@ -33,7 +34,11 @@ _breed_result_cache = {}  # {(show_id, group, breed): {"data": data, "ts": times
 BREED_RESULT_TTL = 600    # 10 minutes (for recent/ongoing shows)
 
 _show_all_results_cache = {} # {show_id: {"data": data, "ts": timestamp}}
-SHOW_ALL_RESULTS_TTL = 86400  # 24 hours
+SHOW_ALL_RESULTS_TTL = 86400  # 24 hours fallback when show date is unknown
+RESULT_CACHE_ACTIVE_TTL = int(os.environ.get("DOG_RESULT_ACTIVE_TTL", "21600"))  # 6 hours
+RESULT_CACHE_SETTLED_TTL = int(os.environ.get("DOG_RESULT_SETTLED_TTL", "604800"))  # 7 days
+RESULT_CACHE_SETTLED_AFTER_DAYS = int(os.environ.get("DOG_RESULT_SETTLED_AFTER_DAYS", "2"))
+RESULT_AUTO_WINDOW_DAYS = int(os.environ.get("DOG_RESULT_AUTO_WINDOW_DAYS", "7"))
 
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
@@ -43,7 +48,13 @@ RESULT_CACHE_VERSION = 1
 RESULT_RETRY_AFTER_SECONDS = 8
 RESULT_JOB_STALE_SECONDS = 1800
 RESULT_JOB_BACKOFF_SECONDS = 300
-RESULT_CRAWL_DEFAULT_DELAY = 2.0
+RESULT_CRAWL_DEFAULT_DELAY = 0.4
+RESULT_CRAWL_DEFAULT_WORKERS = 3
+
+FINNISH_MONTHS = [
+    "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
+    "heinäkuu", "elokuu", "syyskuu", "lokakuu", "marraskuu", "joulukuu"
+]
 
 # In-memory index representation
 _show_index = {
@@ -58,10 +69,6 @@ def _is_recent_show(month_str):
     if not month_str:
         return True  # Default to recent if unknown
 
-    FINNISH_MONTHS = [
-        "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
-        "heinäkuu", "elokuu", "syyskuu", "lokakuu", "marraskuu", "joulukuu"
-    ]
     try:
         now = datetime.datetime.now()
         cur_year = now.year
@@ -92,6 +99,83 @@ def _utc_iso(ts):
     if not ts:
         return None
     return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _month_year_from_label(month_str):
+    if not month_str:
+        return None, None
+
+    parts = month_str.lower().strip().split()
+    if len(parts) < 2:
+        return None, None
+
+    try:
+        month = FINNISH_MONTHS.index(parts[0]) + 1
+        year = int(parts[1])
+        return month, year
+    except (ValueError, IndexError):
+        return None, None
+
+
+def _parse_show_date(show):
+    """Parse Showlink list dates such as '14.06.' or '14.-15.06.'."""
+    if not show:
+        return None
+
+    date_str = str(show.get("date") or "").strip()
+    if not date_str:
+        return None
+
+    matches = re.findall(r"(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?", date_str)
+    if not matches:
+        return None
+
+    day_str, month_str, year_str = matches[-1]
+    month = int(month_str)
+    year = int(year_str) if year_str else None
+    if year is None:
+        month_from_label, year_from_label = _month_year_from_label(show.get("month", ""))
+        year = year_from_label
+        if month_from_label:
+            month = month_from_label
+    if year is None:
+        return None
+
+    try:
+        return datetime.date(year, month, int(day_str))
+    except ValueError:
+        return None
+
+
+def _show_list_item_for_id(show_id):
+    sid = str(show_id)
+    for show in _show_list_cache.get("data") or []:
+        if str(show.get("id")) == sid:
+            return show
+    return None
+
+
+def _indexed_show_as_list_item(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return None
+    return {
+        "id": int(show_id),
+        "date": indexed_show.get("date", ""),
+        "month": indexed_show.get("month", ""),
+    }
+
+
+def _show_date_for_id(show_id):
+    return _parse_show_date(_show_list_item_for_id(show_id) or _indexed_show_as_list_item(show_id))
+
+
+def _show_age_days(show, today=None):
+    show_date = _parse_show_date(show)
+    if not show_date:
+        return None
+    today = today or datetime.date.today()
+    return (today - show_date).days
 
 
 def _index_summary(total_show_count=None):
@@ -328,6 +412,16 @@ def _result_cache_doc_is_fresh(show_id, doc, now=None):
     now = now or time.time()
     if not _is_show_recent_by_id(show_id):
         return True
+
+    show_date = _show_date_for_id(show_id)
+    if show_date:
+        today = datetime.datetime.fromtimestamp(now).date()
+        age_days = (today - show_date).days
+        if age_days > RESULT_AUTO_WINDOW_DAYS:
+            return True
+        ttl = RESULT_CACHE_ACTIVE_TTL if age_days <= RESULT_CACHE_SETTLED_AFTER_DAYS else RESULT_CACHE_SETTLED_TTL
+        return (now - cached_at) < ttl
+
     return (now - cached_at) < SHOW_ALL_RESULTS_TTL
 
 
@@ -427,6 +521,66 @@ def _cached_all_results_response(show_id, allow_stale=False):
         "ts": doc.get("cached_at") or doc.get("updated_at") or now,
     }
     return response
+
+
+def _breed_results_from_all_results_cache(show_id, group, breed):
+    doc = _load_result_cache_doc(show_id)
+    if not _result_cache_doc_is_complete(doc):
+        return None
+
+    group = str(group)
+    breed = str(breed)
+    breed_key = f"{group}:{breed}"
+    completed_breeds = doc.get("completed_breeds") or {}
+    if breed_key not in completed_breeds:
+        return None
+
+    matched = [
+        dog for dog in doc.get("results", [])
+        if str(dog.get("breedGroup")) == group and str(dog.get("breedId")) == breed
+    ]
+
+    breed_obj = None
+    if matched:
+        breed_obj = matched[0].get("breedObj") or {}
+    else:
+        indexed_show = _indexed_show(show_id) or {}
+        for item in indexed_show.get("breeds", []):
+            if str(item.get("group")) == group and str(item.get("breed_id")) == breed:
+                breed_obj = item
+                break
+    breed_obj = breed_obj or {}
+
+    fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
+    return {
+        "show_id": int(show_id),
+        "title": doc.get("title", ""),
+        "breed": breed_obj.get("name", ""),
+        "judge": breed_obj.get("judge", ""),
+        "awards": [],
+        "results": [
+            {
+                "number": dog.get("number"),
+                "name": dog.get("name"),
+                "reg_url": dog.get("reg_url"),
+                "grade": dog.get("grade"),
+                "placement": dog.get("placement"),
+                "awards": dog.get("awards"),
+                "critique": dog.get("critique"),
+                "gender": dog.get("gender"),
+                "class_name": dog.get("class_name"),
+            }
+            for dog in matched
+        ],
+        "source_url": _source_url(show_id, group, breed),
+        "fetched_at": fetched_at,
+        "fetched_at_iso": _utc_iso(fetched_at),
+        "cache": {
+            "status": "show_all_results",
+            "cached_at": doc.get("cached_at"),
+            "cached_at_iso": _utc_iso(doc.get("cached_at")),
+        },
+    }
 
 
 def _fetch_page(url):
@@ -640,7 +794,135 @@ def _map_breed_results_to_all_results(show_id, breed, breed_data):
     return mapped
 
 
-def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force=False, source="manual"):
+def _breed_cache_key_from_breed(breed):
+    return f"{breed.get('group', '')}:{breed.get('breed_id', '')}"
+
+
+def _fetch_breed_results_for_show_cache(show_id, breed):
+    group = str(breed.get("group", ""))
+    breed_id = str(breed.get("breed_id", ""))
+    breed_url = _source_url(show_id, group, breed_id)
+    breed_soup = _fetch_page(breed_url)
+    breed_data = _parse_breed_results(breed_soup, show_id)
+    fetched_at = time.time()
+    breed_data["source_url"] = breed_url
+    breed_data["fetched_at"] = fetched_at
+    breed_data["fetched_at_iso"] = _utc_iso(fetched_at)
+    mapped_results = _map_breed_results_to_all_results(show_id, breed, breed_data)
+    return {
+        "breed": breed,
+        "breed_key": _breed_cache_key_from_breed(breed),
+        "breed_data": breed_data,
+        "mapped_results": mapped_results,
+        "fetched_at": fetched_at,
+    }
+
+
+def _save_result_doc_progress(show_id, doc, preserve_existing_complete):
+    if not preserve_existing_complete:
+        _save_result_cache_doc(show_id, doc)
+
+
+def _record_result_breed_failure(show_id, doc, breed, exc, preserve_existing_complete):
+    breed_key = _breed_cache_key_from_breed(breed)
+    now = time.time()
+    failed_breeds = doc.setdefault("failed_breeds", {})
+    failed_breeds[breed_key] = {
+        "name": breed.get("name", ""),
+        "error": str(exc)[:500],
+        "updated_at": now,
+        "updated_at_iso": _utc_iso(now),
+    }
+    doc["status"] = "partial"
+    doc["last_error"] = str(exc)
+    doc["updated_at"] = now
+    _save_result_doc_progress(show_id, doc, preserve_existing_complete)
+    logger.warning(
+        "dog_result_cache_breed_failed",
+        show_id=show_id,
+        group=breed.get("group", ""),
+        breed=breed.get("breed_id", ""),
+        error=str(exc),
+    )
+    return {
+        "show_id": show_id,
+        "status": "partial",
+        "error": str(exc),
+        "progress": _result_cache_progress(show_id, doc=doc),
+    }
+
+
+def _record_result_breed_success(show_id, doc, item, preserve_existing_complete):
+    breed = item["breed"]
+    group = str(breed.get("group", ""))
+    breed_id = str(breed.get("breed_id", ""))
+    fetched_at = item["fetched_at"]
+    mapped_results = item["mapped_results"]
+
+    _breed_result_cache[_breed_result_cache_key(show_id, group, breed_id)] = {
+        "data": item["breed_data"],
+        "ts": fetched_at,
+    }
+
+    doc.setdefault("results", []).extend(mapped_results)
+    doc.setdefault("completed_breeds", {})[item["breed_key"]] = {
+        "name": breed.get("name", ""),
+        "result_count": len(mapped_results),
+        "updated_at": fetched_at,
+        "updated_at_iso": _utc_iso(fetched_at),
+    }
+    doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
+    doc["updated_at"] = fetched_at
+    _save_result_doc_progress(show_id, doc, preserve_existing_complete)
+
+
+def _crawl_missing_breed_results(show_id, pending_breeds, doc, delay, workers, preserve_existing_complete):
+    workers = max(1, int(workers or 1))
+    if workers == 1:
+        for breed in pending_breeds:
+            if delay:
+                time.sleep(delay)
+            try:
+                item = _fetch_breed_results_for_show_cache(show_id, breed)
+            except Exception as exc:
+                return _record_result_breed_failure(show_id, doc, breed, exc, preserve_existing_complete)
+            _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
+        return None
+
+    breed_iter = iter(pending_breeds)
+    futures = {}
+
+    def submit_next(executor):
+        try:
+            breed = next(breed_iter)
+        except StopIteration:
+            return False
+        if delay:
+            time.sleep(delay)
+        futures[executor.submit(_fetch_breed_results_for_show_cache, show_id, breed)] = breed
+        return True
+
+    with ThreadPoolExecutor(max_workers=workers) as executor:
+        for _ in range(min(workers, len(pending_breeds))):
+            submit_next(executor)
+
+        while futures:
+            for future in as_completed(list(futures.keys())):
+                breed = futures.pop(future)
+                try:
+                    item = future.result()
+                except Exception as exc:
+                    for pending in futures:
+                        pending.cancel()
+                    return _record_result_breed_failure(show_id, doc, breed, exc, preserve_existing_complete)
+                _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
+                submit_next(executor)
+                break
+
+    return None
+
+
+def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force=False, source="manual", workers=RESULT_CRAWL_DEFAULT_WORKERS):
     """Build or resume the persisted whole-show results cache for one show."""
     show_id = int(show_id)
     now = time.time()
@@ -692,70 +974,22 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         _save_result_cache_doc(show_id, doc)
 
     completed_breeds = doc.setdefault("completed_breeds", {})
-    failed_breeds = doc.setdefault("failed_breeds", {})
-    results = doc.setdefault("results", [])
-
-    for breed in breeds_with_results:
-        group = str(breed.get("group", ""))
-        breed_id = str(breed.get("breed_id", ""))
-        breed_key = f"{group}:{breed_id}"
-        if breed_key in completed_breeds:
-            continue
-
-        if delay:
-            time.sleep(delay)
-
-        breed_url = _source_url(show_id, group, breed_id)
-        try:
-            breed_soup = _fetch_page(breed_url)
-            breed_data = _parse_breed_results(breed_soup, show_id)
-        except Exception as exc:
-            failed_breeds[breed_key] = {
-                "name": breed.get("name", ""),
-                "error": str(exc)[:500],
-                "updated_at": time.time(),
-                "updated_at_iso": _utc_iso(time.time()),
-            }
-            doc["status"] = "partial"
-            doc["last_error"] = str(exc)
-            doc["updated_at"] = time.time()
-            if not preserve_existing_complete:
-                _save_result_cache_doc(show_id, doc)
-            logger.warning(
-                "dog_result_cache_breed_failed",
-                show_id=show_id,
-                group=group,
-                breed=breed_id,
-                error=str(exc),
-            )
-            return {
-                "show_id": show_id,
-                "status": "partial",
-                "error": str(exc),
-                "progress": _result_cache_progress(show_id, doc=doc),
-            }
-
-        fetched_at = time.time()
-        breed_data["source_url"] = breed_url
-        breed_data["fetched_at"] = fetched_at
-        breed_data["fetched_at_iso"] = _utc_iso(fetched_at)
-        _breed_result_cache[_breed_result_cache_key(show_id, group, breed_id)] = {
-            "data": breed_data,
-            "ts": fetched_at,
-        }
-
-        mapped_results = _map_breed_results_to_all_results(show_id, breed, breed_data)
-        results.extend(mapped_results)
-        completed_breeds[breed_key] = {
-            "name": breed.get("name", ""),
-            "result_count": len(mapped_results),
-            "updated_at": fetched_at,
-            "updated_at_iso": _utc_iso(fetched_at),
-        }
-        failed_breeds.pop(breed_key, None)
-        doc["updated_at"] = fetched_at
-        if not preserve_existing_complete:
-            _save_result_cache_doc(show_id, doc)
+    doc.setdefault("failed_breeds", {})
+    doc.setdefault("results", [])
+    pending_breeds = [
+        breed for breed in breeds_with_results
+        if _breed_cache_key_from_breed(breed) not in completed_breeds
+    ]
+    failure = _crawl_missing_breed_results(
+        show_id,
+        pending_breeds,
+        doc,
+        delay=delay,
+        workers=workers,
+        preserve_existing_complete=preserve_existing_complete,
+    )
+    if failure:
+        return failure
 
     cached_at = time.time()
     doc["status"] = "complete"
@@ -770,7 +1004,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         "dog_result_cache_complete",
         show_id=show_id,
         breed_count=len(completed_breeds),
-        result_count=len(results),
+        result_count=len(doc.get("results", [])),
     )
     return {
         "show_id": show_id,
@@ -812,10 +1046,19 @@ def _auto_result_cache_candidates(now):
         logger.warning("dog_result_cache_auto_show_list_failed", exc_info=True)
         return candidates
 
+    today = datetime.datetime.fromtimestamp(now).date()
     for show in shows_list:
         show_id = int(show["id"])
-        if not _is_recent_show(show.get("month")):
+        age_days = _show_age_days(show, today=today)
+        if age_days is not None:
+            if age_days < 0 or age_days > RESULT_AUTO_WINDOW_DAYS:
+                continue
+            recency_rank = age_days
+        elif _is_recent_show(show.get("month")):
+            recency_rank = RESULT_AUTO_WINDOW_DAYS + 1
+        else:
             continue
+
         if not _result_cache_due(show_id, now=now):
             continue
 
@@ -824,12 +1067,22 @@ def _auto_result_cache_candidates(now):
         if indexed_breeds and not _result_breeds_with_results(indexed_breeds):
             continue
 
-        candidates.append({"show_id": show_id, "source": "auto", "job": None})
+        doc = _load_result_cache_doc(show_id)
+        cache_rank = 0 if not doc else 1
+        candidates.append({
+            "show_id": show_id,
+            "source": "auto",
+            "job": None,
+            "rank": (cache_rank, recency_rank, show_id),
+        })
 
+    candidates.sort(key=lambda item: item.get("rank", (99, 99, 0)))
+    for candidate in candidates:
+        candidate.pop("rank", None)
     return candidates
 
 
-def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_recent=True):
+def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_recent=True, workers=RESULT_CRAWL_DEFAULT_WORKERS):
     """Warm whole-show result caches without doing that work in web requests."""
     now = time.time()
     candidates = _queued_result_cache_candidates(now)
@@ -855,7 +1108,7 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
         if source == "queued":
             _set_result_job_running(show_id)
 
-        summary = crawl_result_cache_for_show(show_id, delay=delay, source=source)
+        summary = crawl_result_cache_for_show(show_id, delay=delay, source=source, workers=workers)
         attempted.append(summary)
 
         if summary.get("status") == "complete":
@@ -1252,6 +1505,11 @@ def breed_results(show_id):
             cached = _breed_result_cache[cache_key]
             if not is_recent or (now - cached["ts"]) < BREED_RESULT_TTL:
                 return jsonify(cached["data"])
+
+        persisted = _breed_results_from_all_results_cache(show_id, group, breed)
+        if persisted:
+            _breed_result_cache[cache_key] = {"data": persisted, "ts": now}
+            return jsonify(persisted)
 
         url = _source_url(show_id, group, breed)
         soup = _fetch_page(url)

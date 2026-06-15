@@ -28,7 +28,7 @@ services:
 
   dog-crawler:
     image: web-kontissa:latest
-    command: python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 300 --limit 6 --delay 2.0 --result-limit 1 --result-delay 1.0
+    command: python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --limit 6 --delay 2.0 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
     env_file: .env
     environment:
       - DOG_NO_CRAWLER=true
