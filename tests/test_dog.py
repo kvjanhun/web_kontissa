@@ -180,6 +180,57 @@ def test_get_shows_enriches_cached_index_stats(mock_get, client):
     assert "stats" not in data["shows"][1]
 
 
+def test_show_stats_include_live_result_progress(client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 2, "has_results": True},
+            {"name": "ibizanpodenco", "count": 1, "has_results": True},
+        ],
+    }
+    dog_module._save_result_cache_doc(14042, {
+        "status": "running",
+        "results": [{}, {}, {}, {}],
+    })
+
+    live_stats = dog_module._show_stats_from_index(
+        14042,
+        show={"id": 14042, "date": "14.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 14),
+    )
+    past_stats = dog_module._show_stats_from_index(
+        14042,
+        show={"id": 14042, "date": "14.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 15),
+    )
+
+    assert live_stats["show_state"] == "live"
+    assert live_stats["is_live"] is True
+    assert live_stats["entry_count"] == 3
+    assert live_stats["result_count"] == 3
+    assert past_stats["show_state"] == "past"
+    assert past_stats["is_live"] is False
+    assert "result_count" not in past_stats
+
+    dog_module._show_index["shows"]["14043"] = {
+        "title": "14.06.2026 Villakoira",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "villakoira", "count": 4, "has_results": True},
+        ],
+    }
+    uncached_live_stats = dog_module._show_stats_from_index(
+        14043,
+        show={"id": 14043, "date": "14.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 14),
+    )
+    assert uncached_live_stats["is_live"] is True
+    assert "result_count" not in uncached_live_stats
+
+
 @patch("app.api.dog.requests.get")
 def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {

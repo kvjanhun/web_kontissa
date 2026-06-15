@@ -15,7 +15,7 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 ## Public API
 
-- `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed.
+- `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed. Active shows also include current result progress from the whole-show result cache.
 - `GET /api/dog/shows/<show_id>`: breed list for one show.
 - `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page.
 - `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters.
@@ -29,7 +29,7 @@ Rate limits are intentionally lower than internal crawler throughput:
 ## Data Flow
 
 1. The browser loads `/dog` and calls `/api/dog/shows`.
-2. The show list is enriched from `dog_show_index.json` with breed count, entry count, and result-breed count when a show is indexed.
+2. The show list is enriched from `dog_show_index.json` with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches.
 3. Opening a show calls `/api/dog/shows/<show_id>`.
 4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
 5. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
@@ -124,7 +124,8 @@ The `/dog` page is a standalone Nuxt page. URL state is kept in query params:
 
 Important UI behavior:
 
-- The list page has show browsing and indexed breed search tabs.
+- The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache.
+- Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; past and upcoming show rows show only the full signup count.
 - The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
 - Whole-show filters run only against the persisted `/all-results` cache.
 - While `/all-results` is warming, the page shows an animated progress card and polls the API.

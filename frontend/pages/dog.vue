@@ -368,13 +368,16 @@ function hasShowStats(show) {
   return showStatItems(show).length > 0
 }
 
-function resultBreedLabel(count) {
-  return count === 1 ? 'tulosrotu' : 'tulosrotua'
-}
-
 function showStatItems(show) {
   const stats = show?.stats || {}
   const items = []
+  if (stats.is_live) {
+    items.push({
+      key: 'live',
+      label: 'Käynnissä',
+      live: true,
+    })
+  }
   if (typeof stats.breed_count === 'number') {
     items.push({
       key: 'breeds',
@@ -382,17 +385,18 @@ function showStatItems(show) {
     })
   }
   if (typeof stats.entry_count === 'number') {
+    if (stats.is_live && typeof stats.result_count === 'number') {
+      items.push({
+        key: 'entries',
+        label: `${formatStatNumber(stats.result_count)}/${formatStatNumber(stats.entry_count)} tulosta`,
+        title: `${formatStatNumber(stats.result_count)}/${formatStatNumber(stats.entry_count)} arvosteltua ilmoittautuneesta`,
+      })
+      return items
+    }
     items.push({
       key: 'entries',
-      label: `${formatStatNumber(stats.entry_count)} ilmoitt.`,
+      label: `${formatStatNumber(stats.entry_count)} koiraa`,
       title: `${formatStatNumber(stats.entry_count)} ilmoittautunutta`,
-    })
-  }
-  if (typeof stats.result_breed_count === 'number' && stats.result_breed_count > 0) {
-    items.push({
-      key: 'result-breeds',
-      label: `${formatStatNumber(stats.result_breed_count)} ${resultBreedLabel(stats.result_breed_count)}`,
-      soft: true,
     })
   }
   return items
@@ -401,14 +405,18 @@ function showStatItems(show) {
 function showStatsLabel(show) {
   const stats = show?.stats || {}
   const parts = []
+  if (stats.is_live) {
+    parts.push('käynnissä')
+  }
   if (typeof stats.breed_count === 'number') {
     parts.push(`${formatStatNumber(stats.breed_count)} rotua`)
   }
   if (typeof stats.entry_count === 'number') {
-    parts.push(`${formatStatNumber(stats.entry_count)} ilmoittautunutta`)
-  }
-  if (typeof stats.result_breed_count === 'number' && stats.result_breed_count > 0) {
-    parts.push(`tuloksia ${formatStatNumber(stats.result_breed_count)} rodulla`)
+    if (stats.is_live && typeof stats.result_count === 'number') {
+      parts.push(`${formatStatNumber(stats.result_count)}/${formatStatNumber(stats.entry_count)} tulosta`)
+    } else {
+      parts.push(`${formatStatNumber(stats.entry_count)} ilmoittautunutta`)
+    }
   }
   return parts.join(', ')
 }
@@ -422,7 +430,7 @@ async function refreshIndexStats() {
     const data = await $fetch('/api/dog/shows')
     shows.value = data.shows || shows.value
     indexStats.value = data.index || indexStats.value
-    if (!indexWarming.value && indexPollTimer) {
+    if (!showListShouldPoll.value && indexPollTimer) {
       clearInterval(indexPollTimer)
       indexPollTimer = null
     }
@@ -432,7 +440,7 @@ async function refreshIndexStats() {
 }
 
 function startIndexPolling() {
-  if (indexPollTimer || !indexWarming.value) return
+  if (indexPollTimer || !showListShouldPoll.value) return
   indexPollTimer = setInterval(refreshIndexStats, 15000)
 }
 
@@ -676,6 +684,14 @@ const selectedBreedSourceUrl = computed(() => (
 const indexWarming = computed(() => (
   indexStats.value?.total_show_count
   && indexStats.value.indexed_show_count < indexStats.value.total_show_count
+))
+
+const liveShowsPresent = computed(() => (
+  shows.value.some(show => show?.stats?.is_live)
+))
+
+const showListShouldPoll = computed(() => (
+  Boolean(indexWarming.value || liveShowsPresent.value)
 ))
 
 const routeSelectionKey = computed(() => [
@@ -968,7 +984,7 @@ onUnmounted(() => {
                   <span
                     v-for="stat in showStatItems(res.show)"
                     :key="stat.key"
-                    :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                    :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
                     :title="stat.title"
                   >
                     {{ stat.label }}
@@ -1020,7 +1036,7 @@ onUnmounted(() => {
                     <span
                       v-for="stat in showStatItems(show)"
                       :key="stat.key"
-                      :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                      :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
                       :title="stat.title"
                     >
                       {{ stat.label }}
@@ -1073,7 +1089,7 @@ onUnmounted(() => {
                         <span
                           v-for="stat in showStatItems(show)"
                           :key="stat.key"
-                          :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                          :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
                           :title="stat.title"
                         >
                           {{ stat.label }}
@@ -2114,6 +2130,11 @@ onUnmounted(() => {
   color: var(--dog-accent-2);
   border-color: color-mix(in srgb, var(--dog-accent-2) 30%, var(--dog-border));
   background: color-mix(in srgb, var(--dog-accent-2) 8%, var(--dog-surface-el));
+}
+.dog-show-stat-live {
+  color: var(--dog-bg);
+  border-color: var(--dog-accent);
+  background: var(--dog-accent);
 }
 .dog-search-result-info {
   display: flex;

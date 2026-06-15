@@ -158,34 +158,89 @@ def _month_year_from_label(month_str):
         return None, None
 
 
-def _parse_show_date(show):
-    """Parse Showlink list dates such as '14.06.' or '14.-15.06.'."""
-    if not show:
+def _show_year_from_month_label(show):
+    _month_from_label, year_from_label = _month_year_from_label(show.get("month", ""))
+    return year_from_label
+
+
+def _date_from_parts(year, month, day):
+    try:
+        return datetime.date(year, month, day)
+    except (TypeError, ValueError):
         return None
+
+
+def _parse_show_date_range(show):
+    """Parse Showlink list date ranges such as '14.06.' or '14.-15.06.'."""
+    if not show:
+        return None, None
 
     date_str = str(show.get("date") or "").strip()
     if not date_str:
-        return None
+        return None, None
 
-    matches = re.findall(r"(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?", date_str)
-    if not matches:
-        return None
+    # Cross-month range: 31.05.-01.06.
+    match = re.search(
+        r"(\d{1,2})\.(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?",
+        date_str,
+    )
+    if match:
+        start_day, start_month, end_day, end_month, year_str = match.groups()
+        end_month = int(end_month)
+        year = int(year_str) if year_str else _show_year_from_month_label(show)
+        if year is None:
+            return None, None
+        start_month = int(start_month)
+        start_year = year - 1 if start_month > end_month else year
+        return (
+            _date_from_parts(start_year, start_month, int(start_day)),
+            _date_from_parts(year, end_month, int(end_day)),
+        )
 
-    day_str, month_str, year_str = matches[-1]
+    # Same-month range: 14.-15.06.
+    match = re.search(r"(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?", date_str)
+    if match:
+        start_day, end_day, month_str, year_str = match.groups()
+        month = int(month_str)
+        year = int(year_str) if year_str else _show_year_from_month_label(show)
+        if year is None:
+            return None, None
+        return (
+            _date_from_parts(year, month, int(start_day)),
+            _date_from_parts(year, month, int(end_day)),
+        )
+
+    # Single date: 14.06.
+    match = re.search(r"(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?", date_str)
+    if not match:
+        return None, None
+
+    day_str, month_str, year_str = match.groups()
     month = int(month_str)
-    year = int(year_str) if year_str else None
+    year = int(year_str) if year_str else _show_year_from_month_label(show)
     if year is None:
-        month_from_label, year_from_label = _month_year_from_label(show.get("month", ""))
-        year = year_from_label
-        if month_from_label:
-            month = month_from_label
-    if year is None:
-        return None
+        return None, None
 
-    try:
-        return datetime.date(year, month, int(day_str))
-    except ValueError:
-        return None
+    date = _date_from_parts(year, month, int(day_str))
+    return date, date
+
+
+def _parse_show_date(show):
+    _start_date, end_date = _parse_show_date_range(show)
+    return end_date
+
+
+def _show_date_state(show, today=None):
+    start_date, end_date = _parse_show_date_range(show)
+    if not start_date or not end_date:
+        return "unknown"
+
+    today = today or datetime.date.today()
+    if start_date <= today <= end_date:
+        return "live"
+    if end_date < today:
+        return "past"
+    return "upcoming"
 
 
 def _show_list_item_for_id(show_id):
@@ -229,7 +284,36 @@ def _index_summary(total_show_count=None):
     }
 
 
-def _show_stats_from_index(show_id):
+def _result_count_from_cache_doc(show_id, entry_count=None):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return None
+
+    try:
+        count = len(doc.get("results") or [])
+    except TypeError:
+        return None
+
+    if isinstance(entry_count, int):
+        return min(count, entry_count)
+    return count
+
+
+def _show_item_for_stats(show_id, show=None):
+    if show:
+        return show
+
+    indexed_show = _show_index.get("shows", {}).get(str(show_id))
+    if indexed_show:
+        return {
+            "id": int(show_id),
+            "date": indexed_show.get("date", ""),
+            "month": indexed_show.get("month", ""),
+        }
+    return _show_list_item_for_id(show_id)
+
+
+def _show_stats_from_index(show_id, show=None, today=None):
     indexed_show = _show_index.get("shows", {}).get(str(show_id))
     if not indexed_show:
         return None
@@ -253,21 +337,32 @@ def _show_stats_from_index(show_id):
             continue
 
     updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
-    return {
+    show_state = _show_date_state(_show_item_for_stats(show_id, show=show), today=today)
+    stats = {
         "indexed": True,
         "breed_count": len(breeds),
         "entry_count": entry_count if entry_count_known else None,
         "result_breed_count": result_breed_count,
+        "show_state": show_state,
+        "is_live": show_state == "live",
         "updated_at": updated or None,
         "updated_at_iso": _utc_iso(updated),
     }
+    if show_state == "live":
+        result_count = _result_count_from_cache_doc(
+            show_id,
+            entry_count=entry_count if entry_count_known else None,
+        )
+        if result_count is not None:
+            stats["result_count"] = result_count
+    return stats
 
 
 def _shows_with_cached_stats(shows):
     enriched = []
     for show in shows:
         item = dict(show)
-        stats = _show_stats_from_index(show.get("id"))
+        stats = _show_stats_from_index(show.get("id"), show=show)
         if stats:
             item["stats"] = stats
         enriched.append(item)
@@ -289,7 +384,7 @@ def _show_from_index_for_search(show_id, indexed_show):
         "month": indexed_show.get("month", ""),
         "source_url": indexed_show.get("source_url") or _source_url(sid),
     }
-    stats = _show_stats_from_index(sid)
+    stats = _show_stats_from_index(sid, show=show)
     if stats:
         show["stats"] = stats
     return show

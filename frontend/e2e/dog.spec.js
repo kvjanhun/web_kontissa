@@ -21,7 +21,9 @@ test.describe('Dog Show Browser', () => {
                 indexed: true,
                 breed_count: 2,
                 entry_count: 90,
-                result_breed_count: 1,
+                result_count: 12,
+                is_live: true,
+                show_state: 'live',
               },
             },
           ],
@@ -51,7 +53,9 @@ test.describe('Dog Show Browser', () => {
                   indexed: true,
                   breed_count: 2,
                   entry_count: 90,
-                  result_breed_count: 1,
+                  result_count: 12,
+                  is_live: true,
+                  show_state: 'live',
                 },
               },
               breed: {
@@ -84,8 +88,10 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: 'Hae rotua', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Basenji/ })).toBeVisible()
     await expect(page.getByText('2 rotua')).toBeVisible()
-    await expect(page.getByText('90 ilmoitt.')).toBeVisible()
-    await expect(page.getByText('1 tulosrotu')).toBeVisible()
+    await expect(page.getByText('Käynnissä')).toBeVisible()
+    await expect(page.getByText('12/90 tulosta')).toBeVisible()
+    await expect(page.getByText('90 koiraa')).toHaveCount(0)
+    await expect(page.getByText('1 tulosrotu')).toHaveCount(0)
 
     await searchInput.fill('paula')
     await expect(page.getByText('basenji (90 koiraa)')).toBeVisible()
