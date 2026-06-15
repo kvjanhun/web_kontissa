@@ -1601,24 +1601,40 @@ onUnmounted(() => {
 <style scoped>
 /* ═══ Scoped design tokens ═══ */
 .dog-page {
-  /* Warm/neutral light theme colors */
-  --dog-bg: #fdfbf7;         /* Warm stone-like light bg */
-  --dog-surface: #f5f2eb;    /* Slightly darker surface */
-  --dog-surface-el: #eae6db; /* Elements background */
-  --dog-accent: #c2410c;     /* Warm rust/orange accent for light mode */
-  --dog-accent-2: #b45309;   /* Slightly deeper amber/orange accent */
-  --dog-text: #292524;       /* Dark text (warm stone) */
-  --dog-text-muted: #6b6661; /* Muted text */
-  --dog-border: #dcd7cc;     /* Light borders */
-  --dog-gold: #b45309;       /* Gold color for ERI in light mode (deeper for readability) */
-  --dog-silver: #475569;     /* Silver for EH */
-  --dog-bronze: #854d0e;     /* Bronze for H */
-  --dog-info: #0284c7;       /* Blue for KP */
+  /* Warm/neutral stone light theme colors - aligned with erez.ac style */
+  --dog-bg: #fafaf9;          /* var(--color-bg-secondary) */
+  --dog-surface: #ffffff;     /* var(--color-bg-primary) */
+  --dog-surface-el: #f5f5f4;  /* var(--color-bg-tertiary) */
+  --dog-accent: #ff643e;      /* var(--color-accent) */
+  --dog-accent-2: #e04f2c;    /* Deeper contrast version for text */
+  --dog-text: #292524;        /* var(--color-text-primary) */
+  --dog-text-muted: #78716c;  /* var(--color-text-secondary) */
+  --dog-border: #e7e5e4;      /* var(--color-border) */
+  --dog-border-strong: #d6d3d1;
+  --dog-gold: #d97706;        /* Gold color for ERI */
+  --dog-silver: #64748b;      /* Silver for EH */
+  --dog-bronze: #b45309;      /* Bronze for H */
+  --dog-info: #0284c7;        /* Blue for KP */
+  --dog-radius-sm: 0.375rem;
+  --dog-radius-md: 0.5rem;
+  --dog-radius-lg: 0.75rem;
+
+  --dog-page-bg: var(--dog-bg);
+  --dog-panel-bg: var(--dog-surface);
+  --dog-panel-bg-soft: var(--dog-surface-el);
+  --dog-row-bg: var(--dog-surface);
+  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 4%, var(--dog-surface));
+  --dog-control-bg: var(--dog-surface);
+  --dog-pill-bg: color-mix(in srgb, var(--dog-text-muted) 10%, transparent);
+  --dog-control-highlight: rgba(0, 0, 0, 0.02);
+
+  --dog-shadow-soft: 0 4px 20px -2px rgba(28, 25, 23, 0.06), 0 2px 6px -1px rgba(28, 25, 23, 0.04);
+  --dog-shadow-row: 0 10px 15px -3px rgba(28, 25, 23, 0.08), 0 4px 6px -4px rgba(28, 25, 23, 0.08);
 
   font-family: 'DM Sans', sans-serif;
-  font-weight: 300;
+  font-weight: 400;
   color: var(--dog-text);
-  background: var(--dog-bg);
+  background: var(--dog-page-bg);
   min-height: 100dvh;
   max-width: 960px;
   margin: 0 auto;
@@ -1628,19 +1644,27 @@ onUnmounted(() => {
 }
 
 :where(.dark) .dog-page {
-  /* Dark mode override */
-  --dog-bg: #121212;
-  --dog-surface: #1e1e1e;
-  --dog-surface-el: #2a2a2a;
-  --dog-accent: #e8a87c;
-  --dog-accent-2: #d4a373;
-  --dog-text: #e8e6e3;
-  --dog-text-muted: #9ca3af;
-  --dog-border: #333333;
-  --dog-gold: #f59e0b;
+  /* Dark mode override - aligned with erez.ac style */
+  --dog-bg: #1c1917;          /* var(--color-bg-primary) */
+  --dog-surface: #292524;     /* var(--color-bg-secondary) */
+  --dog-surface-el: #3a3632;  /* var(--color-bg-tertiary) */
+  --dog-accent: #ff643e;      /* var(--color-accent) */
+  --dog-accent-2: #ff7e5f;
+  --dog-text: #e7e5e4;        /* var(--color-text-primary) */
+  --dog-text-muted: #a8a29e;  /* var(--color-text-secondary) */
+  --dog-border: #44403c;      /* var(--color-border) */
+  --dog-border-strong: #57534e;
+  --dog-gold: #fbbf24;
   --dog-silver: #94a3b8;
   --dog-bronze: #cd7f32;
-  --dog-info: #60a5fa;
+  --dog-info: #38bdf8;
+
+  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 6%, var(--dog-surface));
+  --dog-pill-bg: color-mix(in srgb, var(--dog-text-muted) 12%, transparent);
+  --dog-control-highlight: rgba(255, 255, 255, 0.02);
+
+  --dog-shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.25), 0 2px 6px -1px rgba(0, 0, 0, 0.15);
+  --dog-shadow-row: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
 }
 
 /* ═══ Top bar / Header ═══ */
@@ -1648,9 +1672,13 @@ onUnmounted(() => {
   display: grid;
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
-  padding: 0.75rem 0;
+  padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
-  border-bottom: 1px solid var(--dog-border);
+  background: var(--dog-panel-bg-soft);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-lg);
+  box-shadow: var(--dog-shadow-soft);
+  min-height: 64px;
 }
 .dog-top-left {
   display: flex;
@@ -1663,6 +1691,8 @@ onUnmounted(() => {
   justify-content: center;
   align-items: center;
   min-width: 0;
+  overflow: hidden;
+  padding: 0 0.35rem;
 }
 .dog-top-title {
   font-size: 1.25rem;
@@ -1673,6 +1703,7 @@ onUnmounted(() => {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  max-width: 100%;
 }
 @media (max-width: 640px) {
   .dog-top-title {
@@ -1689,25 +1720,38 @@ onUnmounted(() => {
   align-items: center;
   gap: 0.35rem;
   font-size: 0.9rem;
-  color: var(--dog-text-muted);
+  color: var(--dog-text);
   text-decoration: none;
-  background: none;
-  border: none;
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
   font-family: inherit;
   font-weight: 500;
   cursor: pointer;
-  padding: 0;
-  min-height: 44px;
-  transition: color 0.15s;
+  padding: 0 0.85rem;
+  min-height: 38px;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
   white-space: nowrap;
+  max-width: 100%;
+  min-width: 0;
+}
+.dog-back-link span {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .dog-back-link:hover {
+  background: var(--dog-surface-el);
+  border-color: var(--dog-border-strong);
   color: var(--dog-accent);
 }
 .dog-back-icon {
   width: 1rem;
   height: 1rem;
   stroke-width: 2.5;
+  transition: transform 0.15s;
+}
+.dog-back-link:hover .dog-back-icon {
+  transform: translateX(-3px);
 }
 
 /* ═══ Page layout & metadata ═══ */
@@ -1730,7 +1774,7 @@ onUnmounted(() => {
   font-size: 0.8rem;
   padding: 0.35rem 0.75rem;
   border-radius: 999px;
-  background: var(--dog-surface);
+  background: var(--dog-pill-bg);
   border: 1px solid var(--dog-border);
   color: var(--dog-text-muted);
 }
@@ -1741,7 +1785,7 @@ onUnmounted(() => {
   transition: background-color 0.15s, border-color 0.15s;
 }
 .dog-source-link-pill:hover {
-  background: var(--dog-surface-el);
+  background: var(--dog-row-hover-bg);
   border-color: var(--dog-accent);
 }
 .dog-judge-pill strong {
@@ -1757,30 +1801,36 @@ onUnmounted(() => {
 /* ═══ Tabs ═══ */
 .dog-tabs {
   display: flex;
-  gap: 0;
-  border-bottom: 1px solid var(--dog-border);
+  gap: 0.25rem;
+  padding: 0.25rem;
+  background: var(--dog-panel-bg-soft);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-md);
   margin-bottom: 1.5rem;
+  box-shadow: var(--dog-shadow-soft);
 }
 .dog-tab {
   flex: 1;
   padding: 0.75rem 1rem;
-  background: none;
+  background: transparent;
   border: none;
-  border-bottom: 2px solid transparent;
+  border-radius: 0.6rem;
   color: var(--dog-text-muted);
   font-family: inherit;
   font-size: 0.95rem;
   font-weight: 500;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
   min-height: 44px;
 }
 .dog-tab:hover {
+  background: color-mix(in srgb, var(--dog-surface) 62%, transparent);
   color: var(--dog-text);
 }
 .dog-tab-active {
+  background: var(--dog-pill-bg);
   color: var(--dog-accent);
-  border-bottom-color: var(--dog-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dog-accent) 22%, transparent);
 }
 
 /* ═══ Search ═══ */
@@ -1801,15 +1851,16 @@ onUnmounted(() => {
 .dog-search-input {
   width: 100%;
   padding: 0.75rem 2.65rem 0.75rem 2.5rem;
-  background: var(--dog-surface);
+  background: var(--dog-control-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.5rem;
+  border-radius: var(--dog-radius-md);
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.95rem;
-  font-weight: 300;
+  font-weight: 400;
   outline: none;
-  transition: border-color 0.15s;
+  box-shadow: var(--dog-shadow-soft);
+  transition: border-color 0.15s, box-shadow 0.15s;
   box-sizing: border-box;
   min-height: 44px;
 }
@@ -1818,6 +1869,7 @@ onUnmounted(() => {
 }
 .dog-search-input:focus {
   border-color: var(--dog-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dog-accent) 16%, transparent), var(--dog-shadow-row);
 }
 .dog-search-spinner {
   position: absolute;
@@ -1835,11 +1887,10 @@ onUnmounted(() => {
 .dog-search-loading-card {
   padding: 0.9rem;
   margin-bottom: 1rem;
-  background:
-    linear-gradient(90deg, color-mix(in srgb, var(--dog-accent) 8%, transparent), transparent 45%),
-    var(--dog-surface);
+  background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.75rem;
+  border-radius: var(--dog-radius-md);
+  box-shadow: var(--dog-shadow-soft);
 }
 .dog-search-loading-card p {
   margin: 0 0 0.85rem;
@@ -1873,11 +1924,12 @@ onUnmounted(() => {
 
 /* ═══ Featured: Tällä viikolla ═══ */
 .dog-this-week-section {
-  background: var(--dog-surface);
+  background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.75rem;
+  border-radius: var(--dog-radius-lg);
   padding: 1.25rem;
   margin-bottom: 1.5rem;
+  box-shadow: var(--dog-shadow-soft);
 }
 .dog-this-week-heading {
   display: flex;
@@ -1899,12 +1951,12 @@ onUnmounted(() => {
   gap: 0.35rem;
 }
 .dog-show-row-featured {
-  background: var(--dog-surface-el);
-  border-radius: 0.5rem;
-  border-bottom: none;
+  background: var(--dog-row-bg);
+  border-radius: var(--dog-radius-sm);
+  border-color: color-mix(in srgb, var(--dog-accent) 18%, var(--dog-border));
 }
 .dog-show-row-featured:hover {
-  background: color-mix(in srgb, var(--dog-surface-el) 92%, var(--dog-accent));
+  background: var(--dog-row-hover-bg);
 }
 
 /* ═══ Skeleton ═══ */
@@ -1915,8 +1967,11 @@ onUnmounted(() => {
 }
 .dog-skeleton-row {
   height: 3rem;
-  background: var(--dog-surface);
-  border-radius: 0.5rem;
+  background:
+    linear-gradient(90deg, transparent, color-mix(in srgb, var(--dog-accent) 10%, transparent), transparent),
+    var(--dog-row-bg);
+  border: 1px solid color-mix(in srgb, var(--dog-border) 70%, transparent);
+  border-radius: var(--dog-radius-sm);
   animation: dog-pulse 1.5s ease-in-out infinite;
 }
 .dog-skeleton-tall {
@@ -1941,11 +1996,10 @@ onUnmounted(() => {
   gap: 1rem;
   padding: 1.25rem;
   margin-bottom: 1.5rem;
-  background:
-    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--dog-accent) 18%, transparent), transparent 34%),
-    linear-gradient(135deg, var(--dog-surface), var(--dog-surface-el));
+  background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.9rem;
+  border-radius: var(--dog-radius-lg);
+  box-shadow: var(--dog-shadow-soft);
   overflow: hidden;
 }
 @media (max-width: 520px) {
@@ -2012,7 +2066,7 @@ onUnmounted(() => {
   display: block;
   width: 0;
   height: 100%;
-  background: linear-gradient(90deg, var(--dog-accent), var(--dog-accent-2));
+  background: var(--dog-accent);
   border-radius: inherit;
   transition: width 0.3s ease;
 }
@@ -2047,18 +2101,20 @@ onUnmounted(() => {
   margin-top: 0.75rem;
   padding: 0.6rem 1.5rem;
   background: var(--dog-accent);
-  color: var(--dog-bg);
-  border: none;
-  border-radius: 0.5rem;
+  color: #ffffff;
+  border: 1px solid var(--dog-accent-2);
+  border-radius: var(--dog-radius-sm);
   font-family: inherit;
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: opacity 0.15s;
+  box-shadow: var(--dog-shadow-soft);
+  transition: opacity 0.15s, transform 0.15s;
   min-height: 44px;
 }
 .dog-btn:hover {
   opacity: 0.85;
+  transform: translateY(-1px);
 }
 
 /* ═══ Empty ═══ */
@@ -2066,6 +2122,9 @@ onUnmounted(() => {
   text-align: center;
   padding: 2rem;
   color: var(--dog-text-muted);
+  background: var(--dog-panel-bg-soft);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-md);
 }
 .dog-empty-hint {
   font-size: 0.85rem;
@@ -2080,9 +2139,9 @@ onUnmounted(() => {
   align-items: center;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--dog-surface-el);
-  border: none;
-  border-radius: 0.5rem;
+  background: var(--dog-panel-bg-soft);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-md);
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.95rem;
@@ -2090,10 +2149,11 @@ onUnmounted(() => {
   cursor: pointer;
   gap: 0.5rem;
   min-height: 44px;
-  transition: background 0.15s;
+  transition: background 0.15s, border-color 0.15s;
 }
 .dog-month-header:hover {
-  background: color-mix(in srgb, var(--dog-surface-el) 95%, var(--dog-text));
+  background: var(--dog-row-hover-bg);
+  border-color: var(--dog-accent);
 }
 .dog-month-label {
   flex: 1;
@@ -2101,22 +2161,29 @@ onUnmounted(() => {
 }
 .dog-month-count {
   font-size: 0.8rem;
-  font-weight: 400;
-  color: var(--dog-text-muted);
-  background: var(--dog-surface);
+  font-weight: 500;
+  color: var(--dog-text);
+  background: var(--dog-surface-el);
+  border: 1px solid var(--dog-border-strong);
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
 }
 .dog-chevron {
   width: 1.25rem;
   height: 1.25rem;
-  transition: transform 0.2s;
+  transition: transform 0.2s, color 0.15s, opacity 0.15s;
   transform: rotate(-90deg);
-  color: var(--dog-text-muted);
+  color: var(--dog-text);
+  stroke-width: 2.2px;
+  opacity: 0.8;
   flex-shrink: 0;
 }
 .dog-chevron-open {
   transform: rotate(0deg);
+}
+.dog-month-header:hover .dog-chevron {
+  color: var(--dog-accent);
+  opacity: 1;
 }
 
 /* ═══ Show rows ═══ */
@@ -2131,22 +2198,24 @@ onUnmounted(() => {
   align-items: center;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--dog-surface);
+  background: var(--dog-row-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.5rem;
+  border-radius: var(--dog-radius-sm);
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.9rem;
-  font-weight: 300;
+  font-weight: 400;
   cursor: pointer;
   text-align: left;
   gap: 0.75rem;
   min-height: 44px;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
 }
 .dog-show-row:hover {
-  background: var(--dog-surface-el);
+  background: var(--dog-row-hover-bg);
   border-color: var(--dog-accent);
+  box-shadow: var(--dog-shadow-row);
+  transform: translateY(-1px);
 }
 .dog-show-date {
   font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -2182,11 +2251,11 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   white-space: nowrap;
-  border: 1px solid var(--dog-border);
+  border: 1px solid var(--dog-border-strong);
   border-radius: 999px;
   padding: 0.15rem 0.45rem;
   background: var(--dog-surface-el);
-  color: var(--dog-text-muted);
+  color: var(--dog-text);
   font-size: 0.72rem;
   font-weight: 500;
   line-height: 1.2;
@@ -2197,9 +2266,10 @@ onUnmounted(() => {
   background: color-mix(in srgb, var(--dog-accent-2) 8%, var(--dog-surface-el));
 }
 .dog-show-stat-live {
-  color: var(--dog-bg);
-  border-color: var(--dog-accent);
+  color: #ffffff;
+  border-color: var(--dog-accent-2);
   background: var(--dog-accent);
+  font-weight: 600;
 }
 .dog-search-result-info {
   display: flex;
@@ -2230,8 +2300,17 @@ onUnmounted(() => {
 .dog-arrow {
   width: 1rem;
   height: 1rem;
-  color: var(--dog-text-muted);
+  color: var(--dog-text);
+  stroke-width: 2.5px;
+  opacity: 0.8;
   flex-shrink: 0;
+  transition: color 0.15s, transform 0.15s, opacity 0.15s;
+}
+.dog-show-row:hover .dog-arrow,
+.dog-breed-row:hover .dog-arrow {
+  color: var(--dog-accent);
+  opacity: 1;
+  transform: translateX(3px);
 }
 @media (max-width: 520px) {
   .dog-show-row {
@@ -2265,7 +2344,12 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
+  padding: 1rem;
   margin-bottom: 1.5rem;
+  background: var(--dog-panel-bg-soft);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-md);
+  box-shadow: var(--dog-shadow-soft);
 }
 @media (min-width: 640px) {
   .dog-detail-filter-bar {
@@ -2283,7 +2367,11 @@ onUnmounted(() => {
   display: inline-flex;
   align-items: center;
   gap: 0.45rem;
+  padding: 0 0.75rem;
   min-height: 44px;
+  background: var(--dog-control-bg);
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
   color: var(--dog-text-muted);
   font-size: 0.85rem;
   cursor: pointer;
@@ -2304,21 +2392,23 @@ onUnmounted(() => {
   justify-content: space-between;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--dog-surface);
+  background: var(--dog-row-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.5rem;
+  border-radius: var(--dog-radius-sm);
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.9rem;
-  font-weight: 300;
+  font-weight: 400;
   cursor: pointer;
   text-align: left;
   min-height: 44px;
-  transition: background 0.12s, border-color 0.12s;
+  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
 }
 .dog-breed-row:hover:not(:disabled) {
-  background: var(--dog-surface-el);
+  background: var(--dog-row-hover-bg);
   border-color: var(--dog-accent);
+  box-shadow: var(--dog-shadow-row);
+  transform: translateY(-1px);
 }
 .dog-breed-row-disabled {
   cursor: default;
@@ -2355,11 +2445,12 @@ onUnmounted(() => {
 
 /* ═══ Filter Panel (results view) ═══ */
 .dog-results-filter-panel {
-  background: var(--dog-surface);
+  background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.75rem;
+  border-radius: var(--dog-radius-lg);
   padding: 1.25rem;
   margin-bottom: 1.5rem;
+  box-shadow: var(--dog-shadow-soft);
 }
 .dog-results-filter-grid {
   display: grid;
@@ -2386,9 +2477,9 @@ onUnmounted(() => {
 .dog-filter-select {
   width: 100%;
   padding: 0.5rem 0.75rem;
-  background: var(--dog-surface-el);
+  background: var(--dog-control-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.375rem;
+  border-radius: var(--dog-radius-sm);
   color: var(--dog-text);
   font-family: inherit;
   font-size: 0.85rem;
@@ -2396,9 +2487,11 @@ onUnmounted(() => {
   min-height: 38px;
   cursor: pointer;
   box-sizing: border-box;
+  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
 }
 .dog-filter-select:focus {
   border-color: var(--dog-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--dog-accent) 15%, transparent);
 }
 .dog-filter-search {
   margin-bottom: 0;
@@ -2407,7 +2500,8 @@ onUnmounted(() => {
   padding: 0.5rem 0.75rem 0.5rem 2.25rem;
   font-size: 0.85rem;
   min-height: 38px;
-  background: var(--dog-surface-el);
+  background: var(--dog-control-bg);
+  box-shadow: none;
 }
 .dog-filter-search .dog-search-icon {
   width: 1rem;
@@ -2427,9 +2521,9 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 0.15rem;
   padding: 0.6rem 1rem;
-  background: linear-gradient(135deg, var(--dog-surface-el), var(--dog-surface));
-  border: 1px solid var(--dog-accent-2);
-  border-radius: 0.5rem;
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-sm);
   min-width: 100px;
 }
 .dog-award-type {
@@ -2480,10 +2574,11 @@ onUnmounted(() => {
 .dog-class-badge {
   font-size: 0.7rem;
   font-weight: 600;
-  background: var(--dog-surface-el);
+  background: var(--dog-pill-bg);
   color: var(--dog-text-muted);
   padding: 0.15rem 0.45rem;
-  border-radius: 0.25rem;
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
@@ -2500,14 +2595,18 @@ onUnmounted(() => {
 
 /* ═══ Result card ═══ */
 .dog-result-card {
-  background: var(--dog-surface);
+  background: var(--dog-row-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.5rem;
+  border-radius: var(--dog-radius-md);
   overflow: hidden;
-  transition: border-color 0.15s;
+  box-shadow: var(--dog-shadow-soft);
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, transform 0.15s;
 }
 .dog-result-card:hover {
-  border-color: var(--dog-accent-2);
+  background: var(--dog-row-hover-bg);
+  border-color: var(--dog-accent);
+  box-shadow: var(--dog-shadow-row);
+  transform: translateY(-1px);
 }
 .dog-result-main {
   padding: 0.85rem 1.25rem;
@@ -2523,9 +2622,10 @@ onUnmounted(() => {
   font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
   font-size: 0.75rem;
   color: var(--dog-text-muted);
-  background: var(--dog-surface-el);
+  background: var(--dog-pill-bg);
   padding: 0.1rem 0.4rem;
-  border-radius: 0.25rem;
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
   flex-shrink: 0;
 }
 .dog-placement-badge {
@@ -2589,32 +2689,32 @@ onUnmounted(() => {
   letter-spacing: 0.03em;
 }
 .dog-badge-gold {
-  background: color-mix(in srgb, var(--dog-gold) 15%, transparent);
+  background: color-mix(in srgb, var(--dog-gold) 12%, var(--dog-surface));
   color: var(--dog-gold);
-  border: 1px solid color-mix(in srgb, var(--dog-gold) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-gold) 30%, var(--dog-border));
 }
 .dog-badge-silver {
-  background: color-mix(in srgb, var(--dog-silver) 15%, transparent);
+  background: color-mix(in srgb, var(--dog-silver) 12%, var(--dog-surface));
   color: var(--dog-silver);
-  border: 1px solid color-mix(in srgb, var(--dog-silver) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-silver) 30%, var(--dog-border));
 }
 .dog-badge-bronze {
-  background: color-mix(in srgb, var(--dog-bronze) 15%, transparent);
+  background: color-mix(in srgb, var(--dog-bronze) 12%, var(--dog-surface));
   color: var(--dog-bronze);
-  border: 1px solid color-mix(in srgb, var(--dog-bronze) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-bronze) 30%, var(--dog-border));
 }
 .dog-badge-info {
-  background: color-mix(in srgb, var(--dog-info) 15%, transparent);
+  background: color-mix(in srgb, var(--dog-info) 12%, var(--dog-surface));
   color: var(--dog-info);
-  border: 1px solid color-mix(in srgb, var(--dog-info) 30%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-info) 30%, var(--dog-border));
 }
 .dog-badge-muted {
-  background: color-mix(in srgb, var(--dog-text-muted) 10%, transparent);
+  background: color-mix(in srgb, var(--dog-text-muted) 10%, var(--dog-surface));
   color: var(--dog-text-muted);
-  border: 1px solid color-mix(in srgb, var(--dog-text-muted) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-text-muted) 20%, var(--dog-border));
 }
 .dog-badge-default {
-  background: var(--dog-surface-el);
+  background: var(--dog-pill-bg);
   color: var(--dog-text);
   border: 1px solid var(--dog-border);
 }
@@ -2625,9 +2725,9 @@ onUnmounted(() => {
   border-radius: 0.25rem;
   font-size: 0.7rem;
   font-weight: 600;
-  background: color-mix(in srgb, var(--dog-accent) 12%, transparent);
+  background: color-mix(in srgb, var(--dog-accent) 12%, var(--dog-surface));
   color: var(--dog-accent);
-  border: 1px solid color-mix(in srgb, var(--dog-accent) 25%, transparent);
+  border: 1px solid color-mix(in srgb, var(--dog-accent) 30%, var(--dog-border));
 }
 
 /* ═══ Critique ═══ */
@@ -2637,7 +2737,7 @@ onUnmounted(() => {
   gap: 0.35rem;
   width: 100%;
   padding: 0.6rem 1.25rem;
-  background: var(--dog-surface-el);
+  background: color-mix(in srgb, var(--dog-surface-el) 30%, transparent);
   border: none;
   border-top: 1px solid var(--dog-border);
   color: var(--dog-text-muted);
@@ -2646,9 +2746,10 @@ onUnmounted(() => {
   font-weight: 400;
   cursor: pointer;
   min-height: 44px;
-  transition: color 0.12s;
+  transition: background-color 0.12s, color 0.12s;
 }
 .dog-critique-toggle:hover {
+  background: color-mix(in srgb, var(--dog-accent) 6%, var(--dog-surface-el));
   color: var(--dog-text);
 }
 .dog-critique-icon {
@@ -2667,10 +2768,10 @@ onUnmounted(() => {
 .dog-critique-text {
   padding: 0.85rem 1.25rem;
   font-size: 0.85rem;
-  font-weight: 300;
+  font-weight: 400;
   line-height: 1.6;
   color: var(--dog-text-muted);
-  background: var(--dog-surface-el);
+  background: color-mix(in srgb, var(--dog-surface-el) 30%, var(--dog-surface));
   border-top: 1px solid var(--dog-border);
   font-style: italic;
 }
@@ -2705,11 +2806,12 @@ onUnmounted(() => {
   margin-top: 0.5rem;
 }
 .dog-breed-group-section {
-  background: var(--dog-surface-el);
+  background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: 0.75rem;
+  border-radius: var(--dog-radius-lg);
   padding: 1rem;
   margin-bottom: 1.5rem;
+  box-shadow: var(--dog-shadow-soft);
 }
 .dog-breed-group-header-btn {
   display: flex;
@@ -2737,7 +2839,7 @@ onUnmounted(() => {
   font-size: 0.8rem;
   font-weight: 400;
   color: var(--dog-text-muted);
-  background: var(--dog-surface);
+  background: var(--dog-pill-bg);
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
   border: 1px solid var(--dog-border);
@@ -2745,27 +2847,26 @@ onUnmounted(() => {
 .dog-arrow-sm {
   width: 1rem;
   height: 1rem;
-  color: var(--dog-text-muted);
-  transition: transform 0.15s;
+  color: var(--dog-text);
+  opacity: 0.6;
+  transition: transform 0.15s, color 0.15s, opacity 0.15s;
 }
 .dog-breed-group-header-btn:hover .dog-arrow-sm {
-  transform: translateX(2px);
+  transform: translateX(3px);
   color: var(--dog-accent);
+  opacity: 1;
 }
 .dog-class-badge-inline,
 .dog-gender-badge-inline {
   font-size: 0.75rem;
   font-weight: 500;
-  background: var(--dog-surface-el);
+  background: var(--dog-pill-bg);
   color: var(--dog-text-muted);
   padding: 0.15rem 0.45rem;
-  border-radius: 0.25rem;
-}
-.dog-gender-badge-inline {
-  background: none;
   border: 1px solid var(--dog-border);
-  font-size: 0.8rem;
+  border-radius: 999px;
 }
+
 
 /* ═══ Responsive ═══ */
 @media (min-width: 640px) {
