@@ -17,6 +17,12 @@ test.describe('Dog Show Browser', () => {
               name: 'Basenji',
               month: 'kesäkuu 2026',
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+              stats: {
+                indexed: true,
+                breed_count: 2,
+                entry_count: 90,
+                result_breed_count: 1,
+              },
             },
           ],
           index: {
@@ -38,6 +44,9 @@ test.describe('Dog Show Browser', () => {
     await expect(showsTab).toBeVisible()
     await expect(searchTab).toBeVisible()
     await expect(page.getByRole('button', { name: /Basenji/ })).toBeVisible()
+    await expect(page.getByText('2 rotua')).toBeVisible()
+    await expect(page.getByText('90 ilmoitt.')).toBeVisible()
+    await expect(page.getByText('1 tulosrotu')).toBeVisible()
   })
 
   test('browser back restores the previous dog page view', async ({ page }) => {

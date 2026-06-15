@@ -118,6 +118,36 @@ def test_get_shows(mock_get, client):
     assert data["shows"][1]["name"] == "Villakoira erikoisnäyttely"
     assert data["index"]["total_show_count"] == 2
 
+
+@patch("app.api.dog.requests.get")
+def test_get_shows_enriches_cached_index_stats(mock_get, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "month": "kesäkuu 2026",
+        "updated_at": 1781431200,
+        "breeds": [
+            {"name": "basenji", "count": 78, "has_results": True},
+            {"name": "ibizanpodenco", "count": 12, "has_results": False},
+        ],
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    stats = data["shows"][0]["stats"]
+    assert stats["indexed"] is True
+    assert stats["breed_count"] == 2
+    assert stats["entry_count"] == 90
+    assert stats["result_breed_count"] == 1
+    assert stats["updated_at_iso"] == "2026-06-14T10:00:00Z"
+    assert "stats" not in data["shows"][1]
+
+
 @patch("app.api.dog.requests.get")
 def test_get_show_detail(mock_get, client):
     mock_resp = MagicMock()

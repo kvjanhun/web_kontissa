@@ -15,7 +15,7 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 ## Public API
 
-- `GET /api/dog/shows`: current Showlink show list plus index status.
+- `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed.
 - `GET /api/dog/shows/<show_id>`: breed list for one show.
 - `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page.
 - `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters.
@@ -29,14 +29,15 @@ Rate limits are intentionally lower than internal crawler throughput:
 ## Data Flow
 
 1. The browser loads `/dog` and calls `/api/dog/shows`.
-2. Opening a show calls `/api/dog/shows/<show_id>`.
-3. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
-4. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
-5. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
-6. Opening the `Koirat & Tulokset` tab calls `/api/dog/shows/<show_id>/all-results`.
-7. If the whole-show cache is missing or stale, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
-8. The crawler service also processes queued jobs and proactively warms recent shows.
-9. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
+2. The show list is enriched from `dog_show_index.json` with breed count, entry count, and result-breed count when a show is indexed.
+3. Opening a show calls `/api/dog/shows/<show_id>`.
+4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
+5. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
+6. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
+7. Opening the `Koirat & Tulokset` tab calls `/api/dog/shows/<show_id>/all-results`.
+8. If the whole-show cache is missing or stale, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
+9. The crawler service also processes queued jobs and proactively warms recent shows.
+10. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
 ## Persistent Files
 

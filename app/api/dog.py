@@ -194,6 +194,48 @@ def _index_summary(total_show_count=None):
     }
 
 
+def _show_stats_from_index(show_id):
+    indexed_show = _show_index.get("shows", {}).get(str(show_id))
+    if not indexed_show:
+        return None
+
+    breeds = indexed_show.get("breeds") or []
+    entry_count = 0
+    entry_count_known = False
+    result_breed_count = 0
+
+    for breed in breeds:
+        if breed.get("has_results"):
+            result_breed_count += 1
+
+        try:
+            entry_count += int(breed.get("count"))
+            entry_count_known = True
+        except (TypeError, ValueError):
+            continue
+
+    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    return {
+        "indexed": True,
+        "breed_count": len(breeds),
+        "entry_count": entry_count if entry_count_known else None,
+        "result_breed_count": result_breed_count,
+        "updated_at": updated or None,
+        "updated_at_iso": _utc_iso(updated),
+    }
+
+
+def _shows_with_cached_stats(shows):
+    enriched = []
+    for show in shows:
+        item = dict(show)
+        stats = _show_stats_from_index(show.get("id"))
+        if stats:
+            item["stats"] = stats
+        enriched.append(item)
+    return enriched
+
+
 def _load_index(force=False):
     """Load the persisted breed index when missing or changed on disk."""
     global _show_index, _show_index_mtime
@@ -1286,12 +1328,18 @@ def show_list():
     try:
         shows = _get_show_list()
         _load_index()
-        return jsonify({"shows": shows, "index": _index_summary(total_show_count=len(shows))})
+        return jsonify({
+            "shows": _shows_with_cached_stats(shows),
+            "index": _index_summary(total_show_count=len(shows)),
+        })
     except requests.RequestException as exc:
         logger.warning("showlink_fetch_failed", endpoint="shows", exc_info=True)
         if _show_list_cache["data"]:
             shows = _show_list_cache["data"]
-            return jsonify({"shows": shows, "index": _index_summary(total_show_count=len(shows))})
+            return jsonify({
+                "shows": _shows_with_cached_stats(shows),
+                "index": _index_summary(total_show_count=len(shows)),
+            })
         return jsonify({"error": "Failed to fetch show list", "detail": str(exc)}), 502
     except Exception:
         logger.exception("show_list_error")
@@ -1679,9 +1727,10 @@ def search_shows():
         _load_index()
 
         shows = _get_show_list()
+        enriched_shows = _shows_with_cached_stats(shows)
         results = []
 
-        for show in shows:
+        for show in enriched_shows:
             sid = str(show["id"])
             show_text = " ".join([
                 show.get("name", ""),
@@ -1716,7 +1765,7 @@ def search_shows():
         return jsonify({
             "query": query,
             "results": results,
-            "index": _index_summary(total_show_count=len(shows)),
+            "index": _index_summary(total_show_count=len(enriched_shows)),
         })
     except requests.RequestException as exc:
         logger.warning("showlink_fetch_failed", endpoint="search", exc_info=True)

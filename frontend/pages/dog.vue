@@ -360,6 +360,60 @@ function formatTimestamp(value) {
   }).format(date)
 }
 
+function formatStatNumber(value) {
+  if (typeof value !== 'number') return ''
+  return new Intl.NumberFormat('fi-FI').format(value)
+}
+
+function hasShowStats(show) {
+  return showStatItems(show).length > 0
+}
+
+function resultBreedLabel(count) {
+  return count === 1 ? 'tulosrotu' : 'tulosrotua'
+}
+
+function showStatItems(show) {
+  const stats = show?.stats || {}
+  const items = []
+  if (typeof stats.breed_count === 'number') {
+    items.push({
+      key: 'breeds',
+      label: `${formatStatNumber(stats.breed_count)} rotua`,
+    })
+  }
+  if (typeof stats.entry_count === 'number') {
+    items.push({
+      key: 'entries',
+      label: `${formatStatNumber(stats.entry_count)} ilmoitt.`,
+      title: `${formatStatNumber(stats.entry_count)} ilmoittautunutta`,
+    })
+  }
+  if (typeof stats.result_breed_count === 'number' && stats.result_breed_count > 0) {
+    items.push({
+      key: 'result-breeds',
+      label: `${formatStatNumber(stats.result_breed_count)} ${resultBreedLabel(stats.result_breed_count)}`,
+      soft: true,
+    })
+  }
+  return items
+}
+
+function showStatsLabel(show) {
+  const stats = show?.stats || {}
+  const parts = []
+  if (typeof stats.breed_count === 'number') {
+    parts.push(`${formatStatNumber(stats.breed_count)} rotua`)
+  }
+  if (typeof stats.entry_count === 'number') {
+    parts.push(`${formatStatNumber(stats.entry_count)} ilmoittautunutta`)
+  }
+  if (typeof stats.result_breed_count === 'number' && stats.result_breed_count > 0) {
+    parts.push(`tuloksia ${formatStatNumber(stats.result_breed_count)} rodulla`)
+  }
+  return parts.join(', ')
+}
+
 function sourceForShow(show) {
   return show?.source_url || (show?.id ? `https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=${show.id}` : '')
 }
@@ -910,7 +964,19 @@ onUnmounted(() => {
                 @click="openShow(show)"
               >
                 <span class="dog-show-date">{{ show.date }}</span>
-                <span class="dog-show-name">{{ show.name }}</span>
+                <span class="dog-show-body">
+                  <span class="dog-show-name">{{ show.name }}</span>
+                  <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
+                    <span
+                      v-for="stat in showStatItems(show)"
+                      :key="stat.key"
+                      :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                      :title="stat.title"
+                    >
+                      {{ stat.label }}
+                    </span>
+                  </span>
+                </span>
                 <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                   <polyline points="96 48 176 128 96 208" />
                 </svg>
@@ -951,7 +1017,19 @@ onUnmounted(() => {
                     @click="openShow(show)"
                   >
                     <span class="dog-show-date">{{ show.date }}</span>
-                    <span class="dog-show-name">{{ show.name }}</span>
+                    <span class="dog-show-body">
+                      <span class="dog-show-name">{{ show.name }}</span>
+                      <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
+                        <span
+                          v-for="stat in showStatItems(show)"
+                          :key="stat.key"
+                          :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                          :title="stat.title"
+                        >
+                          {{ stat.label }}
+                        </span>
+                      </span>
+                    </span>
                     <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                       <polyline points="96 48 176 128 96 208" />
                     </svg>
@@ -1005,8 +1083,20 @@ onUnmounted(() => {
               @click="onSelectSearchResult(res)"
             >
               <div class="dog-search-result-info">
-                <span class="dog-show-date">{{ res.show.date }}</span>
-                <span class="dog-show-name">{{ res.show.name }}</span>
+                <span class="dog-search-show-line">
+                  <span class="dog-show-date">{{ res.show.date }}</span>
+                  <span class="dog-show-name">{{ res.show.name }}</span>
+                </span>
+                <span v-if="hasShowStats(res.show)" class="dog-show-stats" :aria-label="showStatsLabel(res.show)">
+                  <span
+                    v-for="stat in showStatItems(res.show)"
+                    :key="stat.key"
+                    :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                    :title="stat.title"
+                  >
+                    {{ stat.label }}
+                  </span>
+                </span>
                 <span v-if="res.breed" class="dog-search-breed-tag">
                   🐾 {{ res.breed.name }} ({{ res.breed.count }} koiraa)
                   <span v-if="res.breed.judge" class="dog-search-judge-sub">
@@ -2009,15 +2099,59 @@ onUnmounted(() => {
   white-space: nowrap;
   flex-shrink: 0;
 }
+.dog-show-body {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex: 1;
+  min-width: 0;
+}
 .dog-show-name {
   flex: 1;
+  min-width: 0;
   color: var(--dog-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.dog-show-stats {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  flex-shrink: 0;
+}
+.dog-show-stat {
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
+  padding: 0.15rem 0.45rem;
+  background: var(--dog-surface-el);
+  color: var(--dog-text-muted);
+  font-size: 0.72rem;
+  font-weight: 500;
+  line-height: 1.2;
+}
+.dog-show-stat-soft {
+  color: var(--dog-accent-2);
+  border-color: color-mix(in srgb, var(--dog-accent-2) 30%, var(--dog-border));
+  background: color-mix(in srgb, var(--dog-accent-2) 8%, var(--dog-surface-el));
 }
 .dog-search-result-info {
   display: flex;
   flex-direction: column;
-  gap: 0.15rem;
+  gap: 0.25rem;
   flex: 1;
+  min-width: 0;
+}
+.dog-search-show-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
 }
 .dog-search-breed-tag {
   font-size: 0.8rem;
@@ -2037,6 +2171,30 @@ onUnmounted(() => {
   height: 1rem;
   color: var(--dog-text-muted);
   flex-shrink: 0;
+}
+@media (max-width: 520px) {
+  .dog-show-row {
+    align-items: flex-start;
+    gap: 0.55rem;
+  }
+  .dog-show-body {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.35rem;
+  }
+  .dog-show-stats {
+    justify-content: flex-start;
+  }
+  .dog-show-stat {
+    font-size: 0.68rem;
+    padding: 0.12rem 0.4rem;
+  }
+  .dog-search-show-line {
+    align-items: flex-start;
+  }
+  .dog-arrow {
+    align-self: center;
+  }
 }
 
 
