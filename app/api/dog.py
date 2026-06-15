@@ -37,6 +37,13 @@ SHOW_ALL_RESULTS_TTL = 86400  # 24 hours
 
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
+RESULT_CACHE_DIR = os.environ.get("DOG_RESULT_CACHE_DIR", os.path.join(INDEX_DIR, "dog_result_cache"))
+RESULT_JOBS_PATH = os.environ.get("DOG_RESULT_JOBS_PATH", os.path.join(INDEX_DIR, "dog_result_jobs.json"))
+RESULT_CACHE_VERSION = 1
+RESULT_RETRY_AFTER_SECONDS = 8
+RESULT_JOB_STALE_SECONDS = 1800
+RESULT_JOB_BACKOFF_SECONDS = 300
+RESULT_CRAWL_DEFAULT_DELAY = 2.0
 
 # In-memory index representation
 _show_index = {
@@ -147,6 +154,279 @@ def _save_index():
                 os.unlink(tmp_path)
         except OSError:
             pass
+
+
+def _atomic_write_json(path, data):
+    tmp_path = f"{path}.{os.getpid()}.tmp"
+    try:
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(tmp_path, path)
+    except Exception:
+        logger.exception("dog_json_save_failed", path=path)
+        try:
+            if os.path.exists(tmp_path):
+                os.unlink(tmp_path)
+        except OSError:
+            pass
+        raise
+
+
+def _result_cache_path(show_id):
+    return os.path.join(RESULT_CACHE_DIR, f"{int(show_id)}.json")
+
+
+def _load_result_cache_doc(show_id):
+    try:
+        with open(_result_cache_path(show_id), "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return None
+    except Exception:
+        logger.exception("dog_result_cache_load_failed", show_id=show_id)
+        return None
+
+    if not isinstance(data, dict):
+        logger.warning("dog_result_cache_invalid_shape", show_id=show_id)
+        return None
+    return data
+
+
+def _save_result_cache_doc(show_id, doc):
+    _atomic_write_json(_result_cache_path(show_id), doc)
+
+
+def _load_result_jobs():
+    try:
+        with open(RESULT_JOBS_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except FileNotFoundError:
+        return {"jobs": {}, "updated_at": 0}
+    except Exception:
+        logger.exception("dog_result_jobs_load_failed")
+        return {"jobs": {}, "updated_at": 0}
+
+    if not isinstance(data, dict) or not isinstance(data.get("jobs"), dict):
+        logger.warning("dog_result_jobs_invalid_shape")
+        return {"jobs": {}, "updated_at": 0}
+    return data
+
+
+def _save_result_jobs(data):
+    _atomic_write_json(RESULT_JOBS_PATH, data)
+
+
+def _queue_result_cache_job(show_id, reason="user"):
+    now = time.time()
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    job = jobs.get(sid, {})
+
+    if job.get("state") != "running":
+        job["state"] = "queued"
+    job["show_id"] = int(show_id)
+    job["reason"] = reason
+    job.setdefault("created_at", now)
+    job.setdefault("attempts", 0)
+    job["requested_at"] = now
+    job["updated_at"] = now
+    job.setdefault("next_attempt_at", now)
+    jobs[sid] = job
+    jobs_doc["updated_at"] = now
+    _save_result_jobs(jobs_doc)
+    return job
+
+
+def _set_result_job_running(show_id):
+    now = time.time()
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    job = jobs.get(sid, {"show_id": int(show_id), "created_at": now, "attempts": 0})
+    job["state"] = "running"
+    job["updated_at"] = now
+    job["last_started_at"] = now
+    jobs[sid] = job
+    jobs_doc["updated_at"] = now
+    _save_result_jobs(jobs_doc)
+    return job
+
+
+def _remove_result_cache_job(show_id):
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    if sid in jobs:
+        jobs.pop(sid, None)
+        jobs_doc["updated_at"] = time.time()
+        _save_result_jobs(jobs_doc)
+
+
+def _defer_result_cache_job(show_id, error):
+    now = time.time()
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    job = jobs.get(sid, {"show_id": int(show_id), "created_at": now})
+    attempts = int(job.get("attempts") or 0) + 1
+    backoff = min(3600, RESULT_JOB_BACKOFF_SECONDS * attempts)
+    job.update({
+        "state": "queued",
+        "attempts": attempts,
+        "last_error": str(error)[:500],
+        "next_attempt_at": now + backoff,
+        "updated_at": now,
+    })
+    jobs[sid] = job
+    jobs_doc["updated_at"] = now
+    _save_result_jobs(jobs_doc)
+    return job
+
+
+def _result_job_due(job, now=None):
+    now = now or time.time()
+    if job.get("state") == "running":
+        updated_at = job.get("updated_at") or 0
+        if (now - updated_at) < RESULT_JOB_STALE_SECONDS:
+            return False
+    return (job.get("next_attempt_at") or 0) <= now
+
+
+def _indexed_show(show_id):
+    _load_index()
+    return _show_index.get("shows", {}).get(str(show_id))
+
+
+def _result_breeds_from_index(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return []
+    return [dict(breed) for breed in indexed_show.get("breeds", [])]
+
+
+def _result_breeds_with_results(breeds):
+    return [
+        breed for breed in breeds
+        if breed.get("has_results") and breed.get("group") and breed.get("breed_id")
+    ]
+
+
+def _result_cache_doc_is_complete(doc):
+    return bool(doc and doc.get("status") == "complete")
+
+
+def _result_cache_doc_is_fresh(show_id, doc, now=None):
+    if not _result_cache_doc_is_complete(doc):
+        return False
+
+    cached_at = doc.get("cached_at") or doc.get("updated_at") or 0
+    if not cached_at:
+        return False
+
+    now = now or time.time()
+    if not _is_show_recent_by_id(show_id):
+        return True
+    return (now - cached_at) < SHOW_ALL_RESULTS_TTL
+
+
+def _result_cache_due(show_id, now=None):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return True
+    return not _result_cache_doc_is_fresh(show_id, doc, now=now)
+
+
+def _result_cache_progress(show_id, doc=None, job=None):
+    doc = doc or _load_result_cache_doc(show_id) or {}
+    job = job or _load_result_jobs().get("jobs", {}).get(str(int(show_id)), {})
+
+    completed_breeds = doc.get("completed_breeds") or {}
+    failed_breeds = doc.get("failed_breeds") or {}
+    total_breeds = doc.get("total_breeds")
+    if total_breeds is None:
+        total_breeds = len(_result_breeds_with_results(_result_breeds_from_index(show_id)))
+        if total_breeds == 0:
+            total_breeds = None
+
+    fetched_breeds = len(completed_breeds)
+    percent = None
+    if total_breeds:
+        percent = min(100, round((fetched_breeds / total_breeds) * 100))
+    elif doc.get("status") == "complete":
+        percent = 100
+
+    state = job.get("state") or doc.get("status") or "queued"
+    return {
+        "state": state,
+        "total_breeds": total_breeds,
+        "fetched_breeds": fetched_breeds,
+        "failed_breeds": len(failed_breeds),
+        "total_dogs": len(doc.get("results") or []),
+        "percent": percent,
+        "started_at": doc.get("started_at") or job.get("last_started_at"),
+        "started_at_iso": _utc_iso(doc.get("started_at") or job.get("last_started_at")),
+        "updated_at": doc.get("updated_at") or job.get("updated_at"),
+        "updated_at_iso": _utc_iso(doc.get("updated_at") or job.get("updated_at")),
+        "next_attempt_at": job.get("next_attempt_at"),
+        "next_attempt_at_iso": _utc_iso(job.get("next_attempt_at")),
+        "last_error": doc.get("last_error") or job.get("last_error"),
+    }
+
+
+def _result_response_from_doc(show_id, doc, stale=False):
+    fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
+    progress = _result_cache_progress(show_id, doc=doc)
+    return {
+        "show_id": int(show_id),
+        "title": doc.get("title", ""),
+        "source_url": doc.get("source_url") or _source_url(show_id),
+        "results": doc.get("results") or [],
+        "fetched_at": fetched_at,
+        "fetched_at_iso": _utc_iso(fetched_at),
+        "cache": {
+            "status": "stale" if stale else "complete",
+            "stale": stale,
+            "total_breeds": progress["total_breeds"],
+            "fetched_breeds": progress["fetched_breeds"],
+            "failed_breeds": progress["failed_breeds"],
+            "total_dogs": progress["total_dogs"],
+            "percent": progress["percent"],
+            "cached_at": doc.get("cached_at"),
+            "cached_at_iso": _utc_iso(doc.get("cached_at")),
+        },
+    }
+
+
+def _cached_all_results_response(show_id, allow_stale=False):
+    now = time.time()
+
+    cached = _show_all_results_cache.get(int(show_id))
+    if cached and cached.get("data"):
+        stale = _is_show_recent_by_id(show_id) and (now - (cached.get("ts") or 0)) >= SHOW_ALL_RESULTS_TTL
+        if not stale or allow_stale:
+            data = dict(cached["data"])
+            if data.get("cache"):
+                data["cache"] = dict(data["cache"])
+                data["cache"]["status"] = "stale" if stale else "complete"
+                data["cache"]["stale"] = stale
+            return data
+
+    doc = _load_result_cache_doc(show_id)
+    if not _result_cache_doc_is_complete(doc):
+        return None
+
+    stale = not _result_cache_doc_is_fresh(show_id, doc, now=now)
+    if stale and not allow_stale:
+        return None
+
+    response = _result_response_from_doc(show_id, doc, stale=stale)
+    _show_all_results_cache[int(show_id)] = {
+        "data": response,
+        "ts": doc.get("cached_at") or doc.get("updated_at") or now,
+    }
+    return response
 
 
 def _fetch_page(url):
@@ -261,6 +541,320 @@ def crawl_index_once(limit=None, delay=1.5):
         "updated": updated,
         "skipped": len(shows_list) - len(to_update),
         "index": _index_summary(total_show_count=len(shows_list)),
+    }
+
+
+def _show_detail_for_result_cache(show_id):
+    indexed_show = _indexed_show(show_id)
+    if indexed_show and indexed_show.get("breeds"):
+        return {
+            "id": int(show_id),
+            "title": indexed_show.get("title") or indexed_show.get("name", ""),
+            "source_url": indexed_show.get("source_url") or _source_url(show_id),
+            "breeds": [dict(breed) for breed in indexed_show.get("breeds", [])],
+        }
+
+    cached = _cached_show_detail(show_id, allow_stale=True)
+    if cached and cached.get("breeds"):
+        return cached
+
+    soup = _fetch_page(_source_url(show_id))
+    detail = _parse_show_detail(soup, show_id)
+    fetched_at = time.time()
+    detail["fetched_at"] = fetched_at
+    detail["fetched_at_iso"] = _utc_iso(fetched_at)
+    _show_detail_cache[int(show_id)] = {"data": detail, "ts": fetched_at}
+    return detail
+
+
+def _all_results_doc_base(show_id, source, existing=None):
+    now = time.time()
+    existing = existing if isinstance(existing, dict) else {}
+    return {
+        "version": RESULT_CACHE_VERSION,
+        "show_id": int(show_id),
+        "status": "running",
+        "source": source,
+        "title": existing.get("title", ""),
+        "source_url": existing.get("source_url") or _source_url(show_id),
+        "started_at": existing.get("started_at") or now,
+        "updated_at": now,
+        "cached_at": None,
+        "total_breeds": existing.get("total_breeds"),
+        "completed_breeds": existing.get("completed_breeds") or {},
+        "failed_breeds": existing.get("failed_breeds") or {},
+        "results": existing.get("results") or [],
+    }
+
+
+def _breed_result_cache_key(show_id, group, breed_id):
+    return (int(show_id), str(group), str(breed_id))
+
+
+def _map_breed_results_to_all_results(show_id, breed, breed_data):
+    group = str(breed.get("group", ""))
+    breed_id = str(breed.get("breed_id", ""))
+    breed_obj = dict(breed)
+    if breed_data.get("judge"):
+        breed_obj["judge"] = breed_data.get("judge")
+
+    mapped = []
+    for dog in breed_data.get("results", []):
+        mapped.append({
+            "number": dog.get("number"),
+            "name": dog.get("name"),
+            "reg_url": dog.get("reg_url"),
+            "grade": dog.get("grade"),
+            "placement": dog.get("placement"),
+            "awards": dog.get("awards"),
+            "critique": dog.get("critique"),
+            "gender": dog.get("gender"),
+            "class_name": dog.get("class_name"),
+            "breedName": breed.get("name"),
+            "breedGroup": group,
+            "breedId": breed_id,
+            "breedObj": breed_obj,
+        })
+    return mapped
+
+
+def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force=False, source="manual"):
+    """Build or resume the persisted whole-show results cache for one show."""
+    show_id = int(show_id)
+    now = time.time()
+    existing = _load_result_cache_doc(show_id)
+    if not force and _result_cache_doc_is_fresh(show_id, existing, now=now):
+        return {
+            "show_id": show_id,
+            "status": "skipped",
+            "reason": "fresh",
+            "progress": _result_cache_progress(show_id, doc=existing),
+        }
+
+    preserve_existing_complete = (
+        _result_cache_doc_is_complete(existing)
+        and not _result_cache_doc_is_fresh(show_id, existing, now=now)
+        and not force
+    )
+    resumable = (
+        isinstance(existing, dict)
+        and existing.get("status") in {"running", "partial", "failed"}
+        and not force
+    )
+    doc = _all_results_doc_base(show_id, source, existing=existing if resumable else None)
+    if not preserve_existing_complete:
+        _save_result_cache_doc(show_id, doc)
+
+    try:
+        show_detail_data = _show_detail_for_result_cache(show_id)
+    except Exception as exc:
+        doc["status"] = "failed"
+        doc["last_error"] = str(exc)
+        doc["updated_at"] = time.time()
+        if not preserve_existing_complete:
+            _save_result_cache_doc(show_id, doc)
+        logger.warning("dog_result_cache_detail_failed", show_id=show_id, error=str(exc))
+        return {
+            "show_id": show_id,
+            "status": "failed",
+            "error": str(exc),
+            "progress": _result_cache_progress(show_id, doc=doc),
+        }
+
+    breeds_with_results = _result_breeds_with_results(show_detail_data.get("breeds", []))
+    doc["title"] = show_detail_data.get("title", "")
+    doc["source_url"] = show_detail_data.get("source_url") or _source_url(show_id)
+    doc["total_breeds"] = len(breeds_with_results)
+    doc["updated_at"] = time.time()
+    if not preserve_existing_complete:
+        _save_result_cache_doc(show_id, doc)
+
+    completed_breeds = doc.setdefault("completed_breeds", {})
+    failed_breeds = doc.setdefault("failed_breeds", {})
+    results = doc.setdefault("results", [])
+
+    for breed in breeds_with_results:
+        group = str(breed.get("group", ""))
+        breed_id = str(breed.get("breed_id", ""))
+        breed_key = f"{group}:{breed_id}"
+        if breed_key in completed_breeds:
+            continue
+
+        if delay:
+            time.sleep(delay)
+
+        breed_url = _source_url(show_id, group, breed_id)
+        try:
+            breed_soup = _fetch_page(breed_url)
+            breed_data = _parse_breed_results(breed_soup, show_id)
+        except Exception as exc:
+            failed_breeds[breed_key] = {
+                "name": breed.get("name", ""),
+                "error": str(exc)[:500],
+                "updated_at": time.time(),
+                "updated_at_iso": _utc_iso(time.time()),
+            }
+            doc["status"] = "partial"
+            doc["last_error"] = str(exc)
+            doc["updated_at"] = time.time()
+            if not preserve_existing_complete:
+                _save_result_cache_doc(show_id, doc)
+            logger.warning(
+                "dog_result_cache_breed_failed",
+                show_id=show_id,
+                group=group,
+                breed=breed_id,
+                error=str(exc),
+            )
+            return {
+                "show_id": show_id,
+                "status": "partial",
+                "error": str(exc),
+                "progress": _result_cache_progress(show_id, doc=doc),
+            }
+
+        fetched_at = time.time()
+        breed_data["source_url"] = breed_url
+        breed_data["fetched_at"] = fetched_at
+        breed_data["fetched_at_iso"] = _utc_iso(fetched_at)
+        _breed_result_cache[_breed_result_cache_key(show_id, group, breed_id)] = {
+            "data": breed_data,
+            "ts": fetched_at,
+        }
+
+        mapped_results = _map_breed_results_to_all_results(show_id, breed, breed_data)
+        results.extend(mapped_results)
+        completed_breeds[breed_key] = {
+            "name": breed.get("name", ""),
+            "result_count": len(mapped_results),
+            "updated_at": fetched_at,
+            "updated_at_iso": _utc_iso(fetched_at),
+        }
+        failed_breeds.pop(breed_key, None)
+        doc["updated_at"] = fetched_at
+        if not preserve_existing_complete:
+            _save_result_cache_doc(show_id, doc)
+
+    cached_at = time.time()
+    doc["status"] = "complete"
+    doc["cached_at"] = cached_at
+    doc["updated_at"] = cached_at
+    doc["last_error"] = None
+    _save_result_cache_doc(show_id, doc)
+
+    response = _result_response_from_doc(show_id, doc)
+    _show_all_results_cache[show_id] = {"data": response, "ts": cached_at}
+    logger.info(
+        "dog_result_cache_complete",
+        show_id=show_id,
+        breed_count=len(completed_breeds),
+        result_count=len(results),
+    )
+    return {
+        "show_id": show_id,
+        "status": "complete",
+        "progress": _result_cache_progress(show_id, doc=doc),
+    }
+
+
+def _queued_result_cache_candidates(now):
+    jobs_doc = _load_result_jobs()
+    candidates = []
+    stale_complete_jobs = []
+    for sid, job in sorted(
+        jobs_doc.get("jobs", {}).items(),
+        key=lambda item: item[1].get("requested_at") or item[1].get("created_at") or 0,
+    ):
+        try:
+            show_id = int(sid)
+        except (TypeError, ValueError):
+            continue
+
+        if not _result_cache_due(show_id, now=now):
+            stale_complete_jobs.append(show_id)
+            continue
+
+        if _result_job_due(job, now=now):
+            candidates.append({"show_id": show_id, "source": "queued", "job": job})
+
+    for show_id in stale_complete_jobs:
+        _remove_result_cache_job(show_id)
+    return candidates
+
+
+def _auto_result_cache_candidates(now):
+    candidates = []
+    try:
+        shows_list = _get_show_list()
+    except Exception:
+        logger.warning("dog_result_cache_auto_show_list_failed", exc_info=True)
+        return candidates
+
+    for show in shows_list:
+        show_id = int(show["id"])
+        if not _is_recent_show(show.get("month")):
+            continue
+        if not _result_cache_due(show_id, now=now):
+            continue
+
+        indexed_show = _indexed_show(show_id)
+        indexed_breeds = indexed_show.get("breeds", []) if indexed_show else []
+        if indexed_breeds and not _result_breeds_with_results(indexed_breeds):
+            continue
+
+        candidates.append({"show_id": show_id, "source": "auto", "job": None})
+
+    return candidates
+
+
+def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_recent=True):
+    """Warm whole-show result caches without doing that work in web requests."""
+    now = time.time()
+    candidates = _queued_result_cache_candidates(now)
+    queued_count = len(candidates)
+
+    if auto_recent:
+        queued_ids = {candidate["show_id"] for candidate in candidates}
+        for candidate in _auto_result_cache_candidates(now):
+            if candidate["show_id"] not in queued_ids:
+                candidates.append(candidate)
+
+    if limit is not None:
+        candidates = candidates[:max(0, limit)]
+
+    attempted = []
+    completed = 0
+    failed = 0
+    skipped = 0
+
+    for candidate in candidates:
+        show_id = candidate["show_id"]
+        source = candidate["source"]
+        if source == "queued":
+            _set_result_job_running(show_id)
+
+        summary = crawl_result_cache_for_show(show_id, delay=delay, source=source)
+        attempted.append(summary)
+
+        if summary.get("status") == "complete":
+            completed += 1
+            _remove_result_cache_job(show_id)
+        elif summary.get("status") == "skipped":
+            skipped += 1
+            _remove_result_cache_job(show_id)
+        else:
+            failed += 1
+            if source == "queued":
+                _defer_result_cache_job(show_id, summary.get("error") or summary.get("status"))
+
+    return {
+        "attempted": len(attempted),
+        "completed": completed,
+        "failed": failed,
+        "skipped": skipped,
+        "queued_candidates": queued_count,
+        "auto_recent": bool(auto_recent),
+        "items": attempted,
     }
 
 
@@ -670,82 +1264,27 @@ def breed_results(show_id):
 
 
 @dog_bp.route("/api/dog/shows/<int:show_id>/all-results")
-@limiter.limit("10/minute")
+@limiter.limit("20/minute")
 def show_all_results(show_id):
-    now = time.time()
-    is_recent = _is_show_recent_by_id(show_id)
-
-    if show_id in _show_all_results_cache:
-        cached = _show_all_results_cache[show_id]
-        if not is_recent or (now - cached["ts"]) < SHOW_ALL_RESULTS_TTL:
-            return jsonify(cached["data"])
-
     try:
-        show_detail_data = _cached_show_detail(show_id)
-        if not show_detail_data:
-            url = _source_url(show_id)
-            soup = _fetch_page(url)
-            show_detail_data = _parse_show_detail(soup, show_id)
-            show_detail_data["fetched_at"] = now
-            show_detail_data["fetched_at_iso"] = _utc_iso(now)
-            _show_detail_cache[show_id] = {"data": show_detail_data, "ts": now}
+        cached = _cached_all_results_response(show_id, allow_stale=True)
+        if cached:
+            if cached.get("cache", {}).get("stale"):
+                _queue_result_cache_job(show_id, reason="stale-refresh")
+            return jsonify(cached)
 
-        breeds_with_results = [b for b in show_detail_data.get("breeds", []) if b.get("has_results")]
-
-        all_results = []
-        for breed in breeds_with_results:
-            group = breed.get("group", "")
-            breed_id = breed.get("breed_id", "")
-            if not group or not breed_id:
-                continue
-
-            cache_key = (show_id, str(group), str(breed_id))
-            breed_data = None
-            if cache_key in _breed_result_cache:
-                cached_breed = _breed_result_cache[cache_key]
-                if not is_recent or (now - cached_breed["ts"]) < BREED_RESULT_TTL:
-                    breed_data = cached_breed["data"]
-
-            if not breed_data:
-                # Polite delay to prevent rate limits or IP bans from external server
-                time.sleep(0.3)
-                breed_url = _source_url(show_id, group, breed_id)
-                breed_soup = _fetch_page(breed_url)
-                breed_data = _parse_breed_results(breed_soup, show_id)
-                breed_data["source_url"] = breed_url
-                breed_data["fetched_at"] = now
-                breed_data["fetched_at_iso"] = _utc_iso(now)
-                _breed_result_cache[cache_key] = {"data": breed_data, "ts": now}
-
-            # Map dogs
-            for dog in breed_data.get("results", []):
-                all_results.append({
-                    "number": dog.get("number"),
-                    "name": dog.get("name"),
-                    "reg_url": dog.get("reg_url"),
-                    "grade": dog.get("grade"),
-                    "placement": dog.get("placement"),
-                    "awards": dog.get("awards"),
-                    "critique": dog.get("critique"),
-                    "gender": dog.get("gender"),
-                    "class_name": dog.get("class_name"),
-                    "breedName": breed.get("name"),
-                    "breedGroup": group,
-                    "breedId": breed_id,
-                    "breedObj": breed
-                })
-
-        response_data = {
+        job = _queue_result_cache_job(show_id, reason="user")
+        doc = _load_result_cache_doc(show_id)
+        return jsonify({
             "show_id": show_id,
-            "results": all_results,
-            "fetched_at": now,
-            "fetched_at_iso": _utc_iso(now)
-        }
-        _show_all_results_cache[show_id] = {"data": response_data, "ts": now}
-        return jsonify(response_data)
+            "status": "warming",
+            "message": "Whole-show result cache is being prepared.",
+            "retry_after": RESULT_RETRY_AFTER_SECONDS,
+            "progress": _result_cache_progress(show_id, doc=doc, job=job),
+        }), 202
     except Exception as e:
         logger.exception("show_all_results_error", show_id=show_id)
-        return jsonify({"error": "Failed to fetch show all results", "detail": str(e)}), 500
+        return jsonify({"error": "Failed to load show all results cache", "detail": str(e)}), 500
 
 
 # ---------------------------------------------------------------------------

@@ -60,26 +60,60 @@ const allDogsLoading = ref(false)
 const allDogsLoaded = ref(false)
 const allDogsError = ref('')
 const allDogsResults = ref([])
+const allDogsProgress = ref(null)
 
 function onSelectDogsTab() {
   showDetailTab.value = 'dogs'
   loadAllShowResults()
 }
 
-async function loadAllShowResults() {
-  if (allDogsLoaded.value || allDogsLoading.value) return
+async function loadAllShowResults(options = {}) {
+  const { poll = false } = options
+  const showId = selectedShow.value?.id
+  if (!showId) return
+  if (allDogsLoaded.value || (allDogsLoading.value && !poll)) return
+  clearAllDogsPoll()
   allDogsLoading.value = true
   allDogsError.value = ''
+  let keepLoading = false
   try {
-    const data = await $fetch(`/api/dog/shows/${selectedShow.value.id}/all-results`)
+    const data = await $fetch(`/api/dog/shows/${showId}/all-results`)
+    if (!selectedShow.value?.id || !sameId(selectedShow.value.id, showId)) return
+    if (data.status === 'warming') {
+      allDogsProgress.value = data.progress || null
+      scheduleAllDogsPoll(data.retry_after)
+      keepLoading = true
+      return
+    }
     allDogsResults.value = data.results || []
+    allDogsProgress.value = data.cache || null
     allDogsLoaded.value = true
   } catch (e) {
     allDogsError.value = 'Tulosten hakeminen epäonnistui.'
   } finally {
-    allDogsLoading.value = false
+    if (!keepLoading) {
+      allDogsLoading.value = false
+    }
   }
 }
+
+const allDogsProgressPercent = computed(() => {
+  const percent = allDogsProgress.value?.percent
+  return typeof percent === 'number' ? Math.max(0, Math.min(100, percent)) : null
+})
+
+const allDogsProgressText = computed(() => {
+  const progress = allDogsProgress.value
+  if (!progress) return 'Tarkistetaan välimuistia...'
+  const fetched = progress.fetched_breeds ?? 0
+  const total = progress.total_breeds
+  const dogs = progress.total_dogs ?? 0
+  const state = progress.state === 'running' ? 'Haetaan tuloksia' : 'Tulokset jonossa'
+  if (total) {
+    return `${state}: ${fetched}/${total} rotua, ${dogs} koiraa välimuistissa.`
+  }
+  return `${state}. Taustaprosessi hakee tiedot rauhallisesti.`
+})
 
 
 const filteredAllDogs = computed(() => {
@@ -168,7 +202,24 @@ const expandedCritiques = ref(new Set())
 // ─── Debounce timer ──────────────────────────────────────────
 let searchTimer = null
 let indexPollTimer = null
+let allDogsPollTimer = null
 let routeSyncToken = 0
+
+function clearAllDogsPoll() {
+  if (allDogsPollTimer) {
+    clearTimeout(allDogsPollTimer)
+    allDogsPollTimer = null
+  }
+}
+
+function scheduleAllDogsPoll(retryAfterSeconds) {
+  clearAllDogsPoll()
+  const delay = Math.max(5, Number(retryAfterSeconds) || 8)
+  allDogsPollTimer = setTimeout(() => {
+    allDogsPollTimer = null
+    loadAllShowResults({ poll: true })
+  }, delay * 1000)
+}
 
 function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value
@@ -245,6 +296,7 @@ function shouldCollapseMonth(monthLabel) {
 }
 
 function resetDogSelection() {
+  clearAllDogsPoll()
   currentView.value = 'list'
   selectedShow.value = null
   showDetail.value = null
@@ -266,6 +318,7 @@ function resetDogSelection() {
   allDogsLoaded.value = false
   allDogsError.value = ''
   allDogsResults.value = []
+  allDogsProgress.value = null
 }
 
 function formatTimestamp(value) {
@@ -347,10 +400,12 @@ async function fetchShowDetail(show, options = {}) {
   breedResults.value = null
   
   showDetailTab.value = 'breeds'
+  clearAllDogsPoll()
   allDogsLoading.value = false
   allDogsLoaded.value = false
   allDogsError.value = ''
   allDogsResults.value = []
+  allDogsProgress.value = null
   
   try {
     const data = await $fetch(`/api/dog/shows/${show.id}`)
@@ -721,6 +776,7 @@ onMounted(async () => {
 onUnmounted(() => {
   clearTimeout(searchTimer)
   if (indexPollTimer) clearInterval(indexPollTimer)
+  clearAllDogsPoll()
 })
 </script>
 
@@ -1045,8 +1101,27 @@ onUnmounted(() => {
 
           <!-- TAB 2: DOG RESULTS & SEARCH -->
           <div v-else-if="showDetailTab === 'dogs'">
-            <div v-if="allDogsLoading" class="dog-skeleton-list">
-              <div v-for="i in 5" :key="i" class="dog-skeleton-row" />
+            <div v-if="allDogsLoading" class="dog-progress-card" role="status" aria-live="polite">
+              <div class="dog-progress-orbit" aria-hidden="true">
+                <span />
+                <span />
+                <span />
+              </div>
+              <div class="dog-progress-content">
+                <h2 class="dog-progress-title">Koko näyttelyn tuloksia valmistellaan</h2>
+                <p class="dog-progress-copy">{{ allDogsProgressText }}</p>
+                <div
+                  :class="['dog-progress-track', allDogsProgressPercent === null && 'dog-progress-track-indeterminate']"
+                >
+                  <span
+                    class="dog-progress-fill"
+                    :style="allDogsProgressPercent !== null ? { width: `${allDogsProgressPercent}%` } : undefined"
+                  />
+                </div>
+                <p class="dog-progress-note">
+                  Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla tarkoituksella hitaasti.
+                </p>
+              </div>
             </div>
 
             <div v-else-if="allDogsError" class="dog-error">
@@ -1678,6 +1753,106 @@ onUnmounted(() => {
 @keyframes dog-pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.7; }
+}
+
+/* ═══ Whole-show result cache progress ═══ */
+.dog-progress-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem;
+  margin-bottom: 1.5rem;
+  background:
+    radial-gradient(circle at 15% 20%, color-mix(in srgb, var(--dog-accent) 18%, transparent), transparent 34%),
+    linear-gradient(135deg, var(--dog-surface), var(--dog-surface-el));
+  border: 1px solid var(--dog-border);
+  border-radius: 0.9rem;
+  overflow: hidden;
+}
+@media (max-width: 520px) {
+  .dog-progress-card {
+    align-items: flex-start;
+  }
+}
+.dog-progress-orbit {
+  position: relative;
+  width: 3rem;
+  height: 3rem;
+  flex-shrink: 0;
+  border: 1px solid color-mix(in srgb, var(--dog-accent) 35%, transparent);
+  border-radius: 999px;
+  animation: dog-orbit-spin 2.8s linear infinite;
+}
+.dog-progress-orbit span {
+  position: absolute;
+  width: 0.55rem;
+  height: 0.55rem;
+  background: var(--dog-accent);
+  border-radius: 999px;
+}
+.dog-progress-orbit span:nth-child(1) {
+  top: -0.3rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.dog-progress-orbit span:nth-child(2) {
+  right: 0.2rem;
+  bottom: 0.35rem;
+  opacity: 0.75;
+}
+.dog-progress-orbit span:nth-child(3) {
+  left: 0.2rem;
+  bottom: 0.35rem;
+  opacity: 0.45;
+}
+.dog-progress-content {
+  min-width: 0;
+  flex: 1;
+}
+.dog-progress-title {
+  margin: 0 0 0.35rem;
+  color: var(--dog-text);
+  font-size: 1rem;
+  font-weight: 600;
+}
+.dog-progress-copy,
+.dog-progress-note {
+  margin: 0;
+  color: var(--dog-text-muted);
+  font-size: 0.85rem;
+}
+.dog-progress-track {
+  position: relative;
+  height: 0.45rem;
+  margin: 0.85rem 0 0.55rem;
+  background: color-mix(in srgb, var(--dog-surface-el) 80%, var(--dog-text-muted));
+  border-radius: 999px;
+  overflow: hidden;
+}
+.dog-progress-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: linear-gradient(90deg, var(--dog-accent), var(--dog-accent-2));
+  border-radius: inherit;
+  transition: width 0.3s ease;
+}
+.dog-progress-track-indeterminate .dog-progress-fill {
+  width: 38%;
+  animation: dog-progress-slide 1.6s ease-in-out infinite;
+}
+@keyframes dog-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+@keyframes dog-progress-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(290%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dog-progress-orbit,
+  .dog-progress-track-indeterminate .dog-progress-fill {
+    animation: none;
+  }
 }
 
 /* ═══ Error ═══ */
