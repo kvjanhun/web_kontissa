@@ -62,7 +62,7 @@ Do not delete `app/data` or the whole `dog_result_cache` directory casually. To 
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
 - Old shows are treated as stable once cached.
-- Empty indexed breed lists without an `empty_breed_list_confirmed` marker are refreshed by the crawler. This self-heals older cache entries created before parser fixes.
+- Empty indexed breed lists without an `empty_breed_list_confirmed` marker are prioritized by the crawler. This self-heals older cache entries created before parser fixes.
 
 ## Showlink Page Shapes
 

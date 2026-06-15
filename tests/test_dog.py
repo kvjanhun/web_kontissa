@@ -360,6 +360,13 @@ def test_get_show_detail_general(mock_get, client):
 
 @patch("app.api.dog.requests.get")
 def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
+    dog_module._show_index["shows"]["13934"] = {
+        "title": "stale empty index",
+        "name": "Kanakoirakerho",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [],
+    }
     mock_resp_main = MagicMock()
     mock_resp_main.text = SAMPLE_AGGREGATE_SHOW_MAIN_HTML
     mock_resp_main.status_code = 200
@@ -383,6 +390,8 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     assert data["breeds"][0]["has_results"] is True
     assert data["breeds"][1]["name"] == "gordoninsetteri"
     assert mock_get.call_args_list[1].args[0].endswith("Id=13934&R=R")
+    assert len(dog_module._show_index["shows"]["13934"]["breeds"]) == 2
+    assert "empty_breed_list_confirmed" not in dog_module._show_index["shows"]["13934"]
 
 
 @patch("app.api.dog.requests.get")

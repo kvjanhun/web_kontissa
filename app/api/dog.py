@@ -239,6 +239,30 @@ def _shows_with_cached_stats(shows):
     return enriched
 
 
+def _persist_show_detail_to_index(show_id, detail, updated_at):
+    breeds = detail.get("breeds") or []
+    if not breeds:
+        return
+
+    _load_index()
+    sid = str(int(show_id))
+    existing = _show_index.get("shows", {}).get(sid) or {}
+    list_item = _show_list_item_for_id(show_id) or {}
+
+    _show_index.setdefault("shows", {})[sid] = {
+        "title": detail.get("title") or existing.get("title", ""),
+        "name": list_item.get("name") or existing.get("name") or detail.get("title", ""),
+        "date": list_item.get("date") or existing.get("date", ""),
+        "month": list_item.get("month") or existing.get("month", ""),
+        "source_url": detail.get("source_url") or existing.get("source_url") or _source_url(show_id),
+        "breeds": breeds,
+        "updated_at": updated_at,
+        "updated_at_iso": _utc_iso(updated_at),
+    }
+    _show_index["last_updated"] = updated_at
+    _save_index()
+
+
 def _load_index(force=False):
     """Load the persisted breed index when missing or changed on disk."""
     global _show_index, _show_index_mtime
@@ -726,7 +750,7 @@ def crawl_index_once(limit=None, delay=1.5):
         elif _is_recent_show(show.get("month")):
             recent.append(show)
 
-    to_update = missing + empty_indexed + recent
+    to_update = empty_indexed + missing + recent
 
     if limit is not None:
         to_update = to_update[:limit]
@@ -1506,6 +1530,11 @@ def show_detail(show_id):
                         breed_data["judge"] = idx_breeds[key]
         except Exception as e:
             logger.warning("dog_detail_judge_enrich_failed", show_id=show_id, error=str(e))
+
+        try:
+            _persist_show_detail_to_index(show_id, data, fetched_at)
+        except Exception as e:
+            logger.warning("dog_detail_index_persist_failed", show_id=show_id, error=str(e))
 
         _show_detail_cache[show_id] = {"data": data, "ts": fetched_at}
         return jsonify(data)
