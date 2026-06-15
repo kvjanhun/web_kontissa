@@ -81,6 +81,38 @@ SAMPLE_BREED_RESULTS_HTML = """
 </table>
 """
 
+SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML = """
+<div id="divOtsikko">
+    <h1>18.-19.04.2026 Vaasa KV</h1>
+</div>
+<table>
+    <tr class="ropotsikko">
+        <td>
+            <span class="left">sileäkarvainen noutaja</span>
+            <div class="floatright">
+                <span>Tuomari<span>Tarja Kolkka</span></span>
+            </div>
+        </td>
+    </tr>
+</table>
+<table class="roduntulokset">
+    <tr class="sukupuoli">
+        <td colspan="6">Nartut</td>
+    </tr>
+    <tr class="luokka">
+        <td colspan="6"><span class="left">Avoin luokka</span></td>
+    </tr>
+    <tr class="tulos">
+        <td>1</td>
+        <td>Test Dog</td>
+        <td>ERI</td>
+        <td>1</td>
+        <td></td>
+        <td>SA</td>
+    </tr>
+</table>
+"""
+
 @pytest.fixture(autouse=True)
 def clear_caches(monkeypatch, tmp_path):
     monkeypatch.setattr(dog_module, "INDEX_DIR", str(tmp_path))
@@ -505,6 +537,37 @@ def test_get_breed_results(mock_get, client):
 
 
 @patch("app.api.dog.requests.get")
+def test_get_breed_results_strips_glued_judge_label(mock_get, client):
+    dog_module._show_index["shows"]["13763"] = {
+        "title": "18.-19.04.2026 Vaasa KV",
+        "name": "Vaasa KV",
+        "month": "huhtikuu 2026",
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 28,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": True,
+                "judge": "TuomariTarja Kolkka",
+            }
+        ],
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows/13763/results?group=8&breed=124")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breed"] == "sileäkarvainen noutaja"
+    assert data["judge"] == "Tarja Kolkka"
+    assert dog_module._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
+
+
+@patch("app.api.dog.requests.get")
 def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -828,4 +891,41 @@ def test_search_shows_by_judge(mock_get, client):
     assert len(data["results"]) == 1
     assert data["results"][0]["show"]["name"] == "Basenji"
     assert data["results"][0]["breed"]["judge"] == "Paula Steele"
+    assert data["results"][0]["match"] == "breed"
+
+
+@patch("app.api.dog.requests.get")
+def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+    dog_module._show_index["shows"]["13763"] = {
+        "title": "18.-19.04.2026 Vaasa KV",
+        "name": "Vaasa KV",
+        "date": "18.-19.04.",
+        "month": "huhtikuu 2026",
+        "source_url": dog_module._source_url(13763),
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 28,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": True,
+                "judge": "TuomariTarja Kolkka",
+            }
+        ],
+    }
+    mock_get.return_value = mock_resp_list
+
+    resp = client.get("/api/dog/search?q=tuomari%20tarja")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["query"] == "tuomari tarja"
+    assert len(data["results"]) == 1
+    assert data["results"][0]["show"]["id"] == 13763
+    assert data["results"][0]["show"]["name"] == "Vaasa KV"
+    assert data["results"][0]["breed"]["name"] == "sileäkarvainen noutaja"
+    assert data["results"][0]["breed"]["judge"] == "Tarja Kolkka"
     assert data["results"][0]["match"] == "breed"

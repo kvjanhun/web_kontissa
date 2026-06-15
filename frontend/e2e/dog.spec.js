@@ -5,7 +5,7 @@ test.describe('Dog Show Browser', () => {
     viewport: { width: 390, height: 844 },
   })
 
-  test('dog page loads with heading and tabs', async ({ page }) => {
+  test('dog page loads with heading and merged search', async ({ page }) => {
     await page.route('**/api/dog/shows', async route => {
       await route.fulfill({
         contentType: 'application/json',
@@ -34,19 +34,62 @@ test.describe('Dog Show Browser', () => {
         }),
       })
     })
+    await page.route('**/api/dog/search**', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          query: 'paula',
+          results: [
+            {
+              show: {
+                id: 14042,
+                date: '14.06.',
+                name: 'Basenji',
+                month: 'kesäkuu 2026',
+                source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+                stats: {
+                  indexed: true,
+                  breed_count: 2,
+                  entry_count: 90,
+                  result_breed_count: 1,
+                },
+              },
+              breed: {
+                name: 'basenji',
+                count: 90,
+                group: '5',
+                breed_id: '3',
+                has_results: true,
+                judge: 'Paula Steele',
+              },
+              match: 'breed',
+            },
+          ],
+          index: {
+            indexed_show_count: 1,
+            total_show_count: 1,
+            last_updated: 1781431200,
+            last_updated_iso: '2026-06-14T10:00:00Z',
+          },
+        }),
+      })
+    })
 
     await page.goto('/dog')
 
     await expect(page.locator('h1:has-text("Näyttelytulokset")')).toBeVisible({ timeout: 10000 })
 
-    const showsTab = page.getByRole('button', { name: 'Näyttelyt', exact: true })
-    const searchTab = page.getByRole('button', { name: 'Hae rotua', exact: true })
-    await expect(showsTab).toBeVisible()
-    await expect(searchTab).toBeVisible()
+    const searchInput = page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')
+    await expect(searchInput).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Hae rotua', exact: true })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /Basenji/ })).toBeVisible()
     await expect(page.getByText('2 rotua')).toBeVisible()
     await expect(page.getByText('90 ilmoitt.')).toBeVisible()
     await expect(page.getByText('1 tulosrotu')).toBeVisible()
+
+    await searchInput.fill('paula')
+    await expect(page.getByText('basenji (90 koiraa)')).toBeVisible()
+    await expect(page.getByText('Tuomari: Paula Steele')).toBeVisible()
   })
 
   test('browser back restores the previous dog page view', async ({ page }) => {
@@ -142,7 +185,7 @@ test.describe('Dog Show Browser', () => {
 
     await page.goBack()
     await expect(page).toHaveURL(/\/dog$/)
-    await expect(page.getByRole('button', { name: 'Näyttelyt', exact: true })).toBeVisible()
+    await expect(page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')).toBeVisible()
   })
 
   test('show links open the breed list from the top of the page', async ({ page }) => {

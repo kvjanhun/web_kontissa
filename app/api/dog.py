@@ -107,6 +107,41 @@ def _utc_iso(ts):
     return datetime.datetime.fromtimestamp(ts, tz=datetime.timezone.utc).isoformat().replace("+00:00", "Z")
 
 
+def _clean_judge_name(value):
+    """Normalize Showlink judge labels such as 'TuomariTarja Kolkka'."""
+    if not value:
+        return ""
+    text = " ".join(str(value).split())
+    return re.sub(r"^tuomari\s*", "", text, flags=re.IGNORECASE).strip()
+
+
+def _clean_breed_data(breed):
+    item = dict(breed or {})
+    if "judge" in item:
+        judge = _clean_judge_name(item.get("judge"))
+        if judge:
+            item["judge"] = judge
+        else:
+            item.pop("judge", None)
+    return item
+
+
+def _clean_breed_list(breeds):
+    return [_clean_breed_data(breed) for breed in (breeds or [])]
+
+
+def _clean_all_result_item(result):
+    item = dict(result or {})
+    breed_obj = item.get("breedObj")
+    if isinstance(breed_obj, dict):
+        item["breedObj"] = _clean_breed_data(breed_obj)
+    return item
+
+
+def _clean_all_results(results):
+    return [_clean_all_result_item(result) for result in (results or [])]
+
+
 def _month_year_from_label(month_str):
     if not month_str:
         return None, None
@@ -239,6 +274,58 @@ def _shows_with_cached_stats(shows):
     return enriched
 
 
+def _show_from_index_for_search(show_id, indexed_show):
+    try:
+        sid = int(show_id)
+    except (TypeError, ValueError):
+        return None
+
+    title = indexed_show.get("title", "")
+    show = {
+        "id": sid,
+        "date": indexed_show.get("date", ""),
+        "name": indexed_show.get("name") or title,
+        "title": title,
+        "month": indexed_show.get("month", ""),
+        "source_url": indexed_show.get("source_url") or _source_url(sid),
+    }
+    stats = _show_stats_from_index(sid)
+    if stats:
+        show["stats"] = stats
+    return show
+
+
+def _search_query_variants(query):
+    variants = []
+    for value in (query, _clean_judge_name(query)):
+        q = value.lower().strip()
+        if q and q not in variants:
+            variants.append(q)
+    return variants
+
+
+def _text_matches_query_variants(text, variants):
+    haystack = str(text or "").lower()
+    return any(query in haystack for query in variants)
+
+
+def _normalize_show_index_judges():
+    changed = False
+    for show in _show_index.get("shows", {}).values():
+        for breed in show.get("breeds", []) or []:
+            if "judge" not in breed:
+                continue
+            current = breed.get("judge")
+            cleaned = _clean_judge_name(current)
+            if cleaned != current:
+                changed = True
+                if cleaned:
+                    breed["judge"] = cleaned
+                else:
+                    breed.pop("judge", None)
+    return changed
+
+
 def _persist_show_detail_to_index(show_id, detail, updated_at):
     breeds = detail.get("breeds") or []
     if not breeds:
@@ -305,6 +392,8 @@ def _load_index(force=False):
             "last_updated": data.get("last_updated", 0),
         }
         _show_index_mtime = mtime
+        if _normalize_show_index_judges():
+            _save_index()
         logger.info("dog_index_loaded", count=len(_show_index["shows"]))
         return True
     except Exception:
@@ -502,7 +591,7 @@ def _result_breeds_from_index(show_id):
     indexed_show = _indexed_show(show_id)
     if not indexed_show:
         return []
-    return [dict(breed) for breed in indexed_show.get("breeds", [])]
+    return _clean_breed_list(indexed_show.get("breeds", []))
 
 
 def _result_breeds_with_results(breeds):
@@ -591,7 +680,7 @@ def _result_response_from_doc(show_id, doc, stale=False):
         "show_id": int(show_id),
         "title": doc.get("title", ""),
         "source_url": doc.get("source_url") or _source_url(show_id),
-        "results": doc.get("results") or [],
+        "results": _clean_all_results(doc.get("results") or []),
         "fetched_at": fetched_at,
         "fetched_at_iso": _utc_iso(fetched_at),
         "cache": {
@@ -664,7 +753,7 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
             if str(item.get("group")) == group and str(item.get("breed_id")) == breed:
                 breed_obj = item
                 break
-    breed_obj = breed_obj or {}
+    breed_obj = _clean_breed_data(breed_obj or {})
 
     fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
     return {
@@ -863,7 +952,7 @@ def _show_detail_for_result_cache(show_id):
             "id": int(show_id),
             "title": indexed_show.get("title") or indexed_show.get("name", ""),
             "source_url": indexed_show.get("source_url") or _source_url(show_id),
-            "breeds": [dict(breed) for breed in indexed_show.get("breeds", [])],
+            "breeds": _clean_breed_list(indexed_show.get("breeds", [])),
         }
 
     cached = _cached_show_detail(show_id, allow_stale=True)
@@ -888,7 +977,7 @@ def _show_detail_from_index(show_id):
     return {
         "id": int(show_id),
         "title": indexed_show.get("title") or indexed_show.get("name", ""),
-        "breeds": [dict(breed) for breed in indexed_show.get("breeds", [])],
+        "breeds": _clean_breed_list(indexed_show.get("breeds", [])),
         "source_url": indexed_show.get("source_url") or _source_url(show_id),
         "fetched_at": updated_at,
         "fetched_at_iso": _utc_iso(updated_at),
@@ -928,9 +1017,9 @@ def _breed_result_cache_key(show_id, group, breed_id):
 def _map_breed_results_to_all_results(show_id, breed, breed_data):
     group = str(breed.get("group", ""))
     breed_id = str(breed.get("breed_id", ""))
-    breed_obj = dict(breed)
+    breed_obj = _clean_breed_data(breed)
     if breed_data.get("judge"):
-        breed_obj["judge"] = breed_data.get("judge")
+        breed_obj["judge"] = _clean_judge_name(breed_data.get("judge"))
 
     mapped = []
     for dog in breed_data.get("results", []):
@@ -1573,7 +1662,11 @@ def show_detail(show_id):
             sid_str = str(show_id)
             if sid_str in _show_index["shows"]:
                 idx_show = _show_index["shows"][sid_str]
-                idx_breeds = { (str(b.get("group")), str(b.get("breed_id"))): b.get("judge") for b in idx_show.get("breeds", []) if b.get("judge") }
+                idx_breeds = {
+                    (str(b.get("group")), str(b.get("breed_id"))): _clean_judge_name(b.get("judge"))
+                    for b in idx_show.get("breeds", [])
+                    if b.get("judge")
+                }
                 for breed_data in data.get("breeds", []):
                     key = (str(breed_data.get("group")), str(breed_data.get("breed_id")))
                     if key in idx_breeds:
@@ -1616,14 +1709,9 @@ def _parse_breed_results(soup, show_id):
 
     # Judge
     judge = ""
-    judge_el = soup.select_one("tr.ropotsikko div.floatright span")
+    judge_el = soup.select_one("tr.ropotsikko div.floatright")
     if judge_el:
-        judge_text = judge_el.get_text(strip=True)
-        # Strip "Tuomari " prefix
-        if judge_text.startswith("Tuomari "):
-            judge = judge_text[len("Tuomari "):]
-        else:
-            judge = judge_text
+        judge = _clean_judge_name(judge_el.get_text(" ", strip=True))
 
     # Awards (ROP table)
     awards = []
@@ -1771,8 +1859,9 @@ def breed_results(show_id):
                 updated_index = False
                 for b_data in show_data.get("breeds", []):
                     if str(b_data.get("group")) == str(group) and str(b_data.get("breed_id")) == str(breed):
-                        if b_data.get("judge") != data.get("judge"):
-                            b_data["judge"] = data.get("judge")
+                        judge = _clean_judge_name(data.get("judge"))
+                        if b_data.get("judge") != judge:
+                            b_data["judge"] = judge
                             updated_index = True
                 if updated_index:
                     _save_index()
@@ -1831,32 +1920,49 @@ def search_shows():
     if not query:
         return jsonify({"error": "Missing required query parameter: q"}), 400
 
-    q_lower = query.lower()
+    query_variants = _search_query_variants(query)
 
     try:
         _load_index()
 
-        shows = _get_show_list()
+        try:
+            shows = _get_show_list()
+        except requests.RequestException:
+            logger.warning("showlink_fetch_failed", endpoint="search", exc_info=True)
+            shows = _show_list_cache["data"] or []
         enriched_shows = _shows_with_cached_stats(shows)
+        searchable_shows = {str(show["id"]): show for show in enriched_shows}
+        for sid, indexed_show in _show_index.get("shows", {}).items():
+            if sid in searchable_shows:
+                continue
+            show = _show_from_index_for_search(sid, indexed_show)
+            if show:
+                searchable_shows[sid] = show
+
         results = []
 
-        for show in enriched_shows:
+        for sid, show in searchable_shows.items():
             sid = str(show["id"])
             show_text = " ".join([
                 show.get("name", ""),
+                show.get("title", ""),
                 show.get("date", ""),
                 show.get("month", ""),
             ]).lower()
-            show_matches = q_lower in show_text
+            show_matches = any(q in show_text for q in query_variants)
 
             indexed_show = _show_index["shows"].get(sid)
             breed_matches = []
             if indexed_show:
                 for breed_data in indexed_show.get("breeds", []):
-                    breed_name = breed_data.get("name", "").lower()
-                    judge_name = breed_data.get("judge", "").lower()
-                    if q_lower in breed_name or q_lower in judge_name:
-                        breed_matches.append(breed_data)
+                    cleaned_breed = _clean_breed_data(breed_data)
+                    breed_name = cleaned_breed.get("name", "")
+                    judge_name = cleaned_breed.get("judge", "")
+                    if (
+                        _text_matches_query_variants(breed_name, query_variants)
+                        or _text_matches_query_variants(judge_name, query_variants)
+                    ):
+                        breed_matches.append(cleaned_breed)
 
             if breed_matches:
                 for breed_data in breed_matches:
@@ -1875,11 +1981,8 @@ def search_shows():
         return jsonify({
             "query": query,
             "results": results,
-            "index": _index_summary(total_show_count=len(enriched_shows)),
+            "index": _index_summary(total_show_count=len(searchable_shows)),
         })
-    except requests.RequestException as exc:
-        logger.warning("showlink_fetch_failed", endpoint="search", exc_info=True)
-        return jsonify({"error": "Failed to fetch show list for search", "detail": str(exc)}), 502
     except Exception:
         logger.exception("search_error")
         return jsonify({"error": "Internal server error"}), 500

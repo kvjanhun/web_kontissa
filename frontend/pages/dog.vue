@@ -19,7 +19,6 @@ const router = useRouter()
 // ─── View state ──────────────────────────────────────────────
 // 'list' | 'detail' | 'results'
 const currentView = ref('list')
-const activeTab = ref('shows') // 'shows' | 'search'
 
 // ─── Data refs ───────────────────────────────────────────────
 const shows = ref([])
@@ -39,7 +38,6 @@ const resultsError = ref('')
 
 // ─── Filters ─────────────────────────────────────────────────
 const filterText = ref('')
-const searchQuery = ref('')
 const searchResults = ref([])
 const searchLoading = ref(false)
 const searchError = ref('')
@@ -210,6 +208,7 @@ const expandedCritiques = ref(new Set())
 
 // ─── Debounce timer ──────────────────────────────────────────
 let searchTimer = null
+let searchRequestId = 0
 let indexPollTimer = null
 let allDogsPollTimer = null
 let routeSyncToken = 0
@@ -546,10 +545,13 @@ async function fetchBreedResults(breed, options = {}) {
 // ─── Search breeds ───────────────────────────────────────────
 function onSearchInput() {
   clearTimeout(searchTimer)
-  const q = searchQuery.value.trim()
+  const q = filterText.value.trim()
+  searchRequestId += 1
+  const requestId = searchRequestId
   if (q.length < 2) {
     searchResults.value = []
     searchLoading.value = false
+    searchError.value = ''
     return
   }
   searchLoading.value = true
@@ -557,11 +559,14 @@ function onSearchInput() {
   searchTimer = setTimeout(async () => {
     try {
       const data = await $fetch(`/api/dog/search?q=${encodeURIComponent(q)}`)
+      if (requestId !== searchRequestId) return
       searchResults.value = data.results || []
       indexStats.value = data.index || indexStats.value
     } catch (e) {
+      if (requestId !== searchRequestId) return
       searchError.value = 'Haku epäonnistui.'
     } finally {
+      if (requestId !== searchRequestId) return
       searchLoading.value = false
     }
   }, 300)
@@ -627,6 +632,8 @@ const filteredShows = computed(() => {
     s.name.toLowerCase().includes(q) || s.date?.toLowerCase().includes(q)
   )
 })
+
+const indexedSearchActive = computed(() => filterText.value.trim().length >= 2)
 
 const groupedShows = computed(() => {
   const groups = {}
@@ -910,41 +917,84 @@ onUnmounted(() => {
     <!-- ═══ VIEW: SHOW LIST ═══ -->
     <Transition name="dog-fade" mode="out-in">
       <div v-if="currentView === 'list'" key="list">
-        <!-- Space helper to separate header from tabs in list view -->
+        <!-- Space helper to separate header from search in list view -->
         <div class="dog-view-spacing" />
 
-        <!-- Tabs -->
-        <div class="dog-tabs">
-          <button
-            :class="['dog-tab', activeTab === 'shows' && 'dog-tab-active']"
-            @click="activeTab = 'shows'"
-          >
-            Näyttelyt
-          </button>
-          <button
-            :class="['dog-tab', activeTab === 'search' && 'dog-tab-active']"
-            @click="activeTab = 'search'"
-          >
-            Hae rotua
-          </button>
+        <!-- Unified show/breed/judge search -->
+        <div class="dog-search-wrap">
+          <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="116" cy="116" r="84" />
+            <line x1="175.4" y1="175.4" x2="224" y2="224" />
+          </svg>
+          <input
+            v-model="filterText"
+            type="text"
+            class="dog-search-input"
+            placeholder="Hae näyttelyä, rotua tai tuomaria..."
+            @input="onSearchInput"
+          />
         </div>
 
-        <!-- Shows tab -->
-        <div v-if="activeTab === 'shows'">
-          <!-- Filter -->
-          <div class="dog-search-wrap">
-            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="116" cy="116" r="84" />
-              <line x1="175.4" y1="175.4" x2="224" y2="224" />
-            </svg>
-            <input
-              v-model="filterText"
-              type="text"
-              class="dog-search-input"
-              placeholder="Suodata näyttelyt..."
-            />
+        <p v-if="indexedSearchActive && indexWarming" class="dog-status-note">
+          Haku päivittyy: {{ indexStats.indexed_show_count }}/{{ indexStats.total_show_count }} näyttelyä.
+        </p>
+        <p v-else-if="indexedSearchActive && indexStats?.last_updated_iso" class="dog-status-note">
+          Haku päivitetty {{ formatTimestamp(indexStats.last_updated_iso) }}.
+        </p>
+
+        <!-- Indexed search results -->
+        <div v-if="indexedSearchActive">
+          <div v-if="searchLoading" class="dog-skeleton-list">
+            <div v-for="i in 4" :key="i" class="dog-skeleton-row" />
           </div>
 
+          <div v-else-if="searchError" class="dog-error">
+            <p>{{ searchError }}</p>
+          </div>
+
+          <div v-else-if="searchResults.length">
+            <button
+              v-for="res in searchResults"
+              :key="res.show.id + '-' + (res.breed ? res.breed.breed_id : '')"
+              class="dog-show-row"
+              @click="onSelectSearchResult(res)"
+            >
+              <div class="dog-search-result-info">
+                <span class="dog-search-show-line">
+                  <span class="dog-show-date">{{ res.show.date }}</span>
+                  <span class="dog-show-name">{{ res.show.name }}</span>
+                </span>
+                <span v-if="hasShowStats(res.show)" class="dog-show-stats" :aria-label="showStatsLabel(res.show)">
+                  <span
+                    v-for="stat in showStatItems(res.show)"
+                    :key="stat.key"
+                    :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
+                    :title="stat.title"
+                  >
+                    {{ stat.label }}
+                  </span>
+                </span>
+                <span v-if="res.breed" class="dog-search-breed-tag">
+                  {{ res.breed.name }} ({{ res.breed.count }} koiraa)
+                  <span v-if="res.breed.judge" class="dog-search-judge-sub">
+                    Tuomari: {{ res.breed.judge }}
+                  </span>
+                </span>
+                <span v-else class="dog-search-breed-tag">Näyttely</span>
+              </div>
+              <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="96 48 176 128 96 208" />
+              </svg>
+            </button>
+          </div>
+
+          <div v-else-if="!searchLoading" class="dog-empty">
+            <p>Ei hakutuloksia.</p>
+          </div>
+        </div>
+
+        <!-- Show list -->
+        <div v-else>
           <!-- Featured: Tällä viikolla -->
           <div v-if="!filterText && thisWeekShows.length" class="dog-this-week-section">
             <h2 class="dog-this-week-heading">
@@ -1042,81 +1092,6 @@ onUnmounted(() => {
           <!-- Empty state -->
           <div v-else class="dog-empty">
             <p>Ei näyttelyitä.</p>
-          </div>
-        </div>
-
-        <!-- Search tab -->
-        <div v-if="activeTab === 'search'">
-          <div class="dog-search-wrap">
-            <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="116" cy="116" r="84" />
-              <line x1="175.4" y1="175.4" x2="224" y2="224" />
-            </svg>
-            <input
-              v-model="searchQuery"
-              type="text"
-              class="dog-search-input"
-              placeholder="Esim. basenji, tuomarin nimi..."
-              @input="onSearchInput"
-            />
-          </div>
-          <p v-if="indexWarming" class="dog-status-note">
-            Rotuhaku päivittyy: {{ indexStats.indexed_show_count }}/{{ indexStats.total_show_count }} näyttelyä.
-          </p>
-          <p v-else-if="indexStats?.last_updated_iso" class="dog-status-note">
-            Rotuhaku päivitetty {{ formatTimestamp(indexStats.last_updated_iso) }}.
-          </p>
-
-          <div v-if="searchLoading" class="dog-skeleton-list">
-            <div v-for="i in 4" :key="i" class="dog-skeleton-row" />
-          </div>
-
-          <div v-else-if="searchError" class="dog-error">
-            <p>{{ searchError }}</p>
-          </div>
-
-          <div v-else-if="searchResults.length">
-            <button
-              v-for="res in searchResults"
-              :key="res.show.id + '-' + (res.breed ? res.breed.breed_id : '')"
-              class="dog-show-row"
-              @click="onSelectSearchResult(res)"
-            >
-              <div class="dog-search-result-info">
-                <span class="dog-search-show-line">
-                  <span class="dog-show-date">{{ res.show.date }}</span>
-                  <span class="dog-show-name">{{ res.show.name }}</span>
-                </span>
-                <span v-if="hasShowStats(res.show)" class="dog-show-stats" :aria-label="showStatsLabel(res.show)">
-                  <span
-                    v-for="stat in showStatItems(res.show)"
-                    :key="stat.key"
-                    :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft']"
-                    :title="stat.title"
-                  >
-                    {{ stat.label }}
-                  </span>
-                </span>
-                <span v-if="res.breed" class="dog-search-breed-tag">
-                  🐾 {{ res.breed.name }} ({{ res.breed.count }} koiraa)
-                  <span v-if="res.breed.judge" class="dog-search-judge-sub">
-                    Tuomari: {{ res.breed.judge }}
-                  </span>
-                </span>
-                <span v-else class="dog-search-breed-tag">Näyttely</span>
-              </div>
-              <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                <polyline points="96 48 176 128 96 208" />
-              </svg>
-            </button>
-          </div>
-
-          <div v-else-if="searchQuery.trim().length >= 2 && !searchLoading" class="dog-empty">
-            <p>Ei hakutuloksia.</p>
-          </div>
-
-          <div v-else-if="searchQuery.trim().length < 2" class="dog-empty dog-empty-hint">
-            <p>Kirjoita vähintään 2 merkkiä hakeaksesi.</p>
           </div>
         </div>
       </div>
