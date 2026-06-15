@@ -37,6 +37,7 @@ test.describe('Dog Show Browser', () => {
       })
     })
     await page.route('**/api/dog/search**', async route => {
+      await new Promise(resolve => setTimeout(resolve, 500))
       await route.fulfill({
         contentType: 'application/json',
         body: JSON.stringify({
@@ -94,6 +95,7 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByText('1 tulosrotu')).toHaveCount(0)
 
     await searchInput.fill('paula')
+    await expect(page.getByText('Haetaan...')).toBeVisible()
     await expect(page.getByText('basenji (90 koiraa)')).toBeVisible()
     await expect(page.getByText('Tuomari: Paula Steele')).toBeVisible()
   })

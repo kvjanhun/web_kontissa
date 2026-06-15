@@ -949,6 +949,7 @@ onUnmounted(() => {
             placeholder="Hae näyttelyä, rotua tai tuomaria..."
             @input="onSearchInput"
           />
+          <span v-if="searchLoading" class="dog-search-spinner" aria-hidden="true" />
         </div>
 
         <p v-if="indexedSearchActive && indexWarming" class="dog-status-note">
@@ -960,8 +961,16 @@ onUnmounted(() => {
 
         <!-- Indexed search results -->
         <div v-if="indexedSearchActive">
-          <div v-if="searchLoading" class="dog-skeleton-list">
-            <div v-for="i in 4" :key="i" class="dog-skeleton-row" />
+          <div v-if="searchLoading" class="dog-search-loading-card" role="status" aria-live="polite">
+            <div class="dog-search-loading-dots" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <p>Haetaan...</p>
+            <div class="dog-skeleton-list">
+              <div v-for="i in 4" :key="i" class="dog-skeleton-row" />
+            </div>
           </div>
 
           <div v-else-if="searchError" class="dog-error">
@@ -1791,7 +1800,7 @@ onUnmounted(() => {
 }
 .dog-search-input {
   width: 100%;
-  padding: 0.75rem 1rem 0.75rem 2.5rem;
+  padding: 0.75rem 2.65rem 0.75rem 2.5rem;
   background: var(--dog-surface);
   border: 1px solid var(--dog-border);
   border-radius: 0.5rem;
@@ -1809,6 +1818,52 @@ onUnmounted(() => {
 }
 .dog-search-input:focus {
   border-color: var(--dog-accent);
+}
+.dog-search-spinner {
+  position: absolute;
+  right: 0.95rem;
+  top: 50%;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid color-mix(in srgb, var(--dog-accent) 22%, transparent);
+  border-top-color: var(--dog-accent);
+  border-radius: 999px;
+  transform: translateY(-50%);
+  animation: dog-search-spin 0.75s linear infinite;
+  pointer-events: none;
+}
+.dog-search-loading-card {
+  padding: 0.9rem;
+  margin-bottom: 1rem;
+  background:
+    linear-gradient(90deg, color-mix(in srgb, var(--dog-accent) 8%, transparent), transparent 45%),
+    var(--dog-surface);
+  border: 1px solid var(--dog-border);
+  border-radius: 0.75rem;
+}
+.dog-search-loading-card p {
+  margin: 0 0 0.85rem;
+  color: var(--dog-text-muted);
+  font-size: 0.85rem;
+}
+.dog-search-loading-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-bottom: 0.45rem;
+}
+.dog-search-loading-dots span {
+  width: 0.4rem;
+  height: 0.4rem;
+  border-radius: 999px;
+  background: var(--dog-accent);
+  animation: dog-search-dot 1s ease-in-out infinite;
+}
+.dog-search-loading-dots span:nth-child(2) {
+  animation-delay: 0.14s;
+}
+.dog-search-loading-dots span:nth-child(3) {
+  animation-delay: 0.28s;
 }
 .dog-status-note {
   margin: -0.85rem 0 1.5rem;
@@ -1870,6 +1925,13 @@ onUnmounted(() => {
 @keyframes dog-pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.7; }
+}
+@keyframes dog-search-spin {
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+@keyframes dog-search-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.45; }
+  40% { transform: translateY(-0.22rem); opacity: 1; }
 }
 
 /* ═══ Whole-show result cache progress ═══ */
@@ -1966,6 +2028,9 @@ onUnmounted(() => {
   100% { transform: translateX(290%); }
 }
 @media (prefers-reduced-motion: reduce) {
+  .dog-search-spinner,
+  .dog-search-loading-dots span,
+  .dog-skeleton-row,
   .dog-progress-orbit,
   .dog-progress-track-indeterminate .dog-progress-fill {
     animation: none;
