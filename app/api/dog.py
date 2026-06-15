@@ -249,18 +249,34 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
     existing = _show_index.get("shows", {}).get(sid) or {}
     list_item = _show_list_item_for_id(show_id) or {}
 
-    _show_index.setdefault("shows", {})[sid] = {
-        "title": detail.get("title") or existing.get("title", ""),
-        "name": list_item.get("name") or existing.get("name") or detail.get("title", ""),
-        "date": list_item.get("date") or existing.get("date", ""),
-        "month": list_item.get("month") or existing.get("month", ""),
-        "source_url": detail.get("source_url") or existing.get("source_url") or _source_url(show_id),
-        "breeds": breeds,
+    _show_index.setdefault("shows", {})[sid] = _index_entry_from_detail(
+        show_id,
+        {
+            "name": list_item.get("name") or existing.get("name") or detail.get("title", ""),
+            "date": list_item.get("date") or existing.get("date", ""),
+            "month": list_item.get("month") or existing.get("month", ""),
+        },
+        detail,
+        updated_at,
+    )
+    _show_index["last_updated"] = updated_at
+    _save_index()
+
+
+def _index_entry_from_detail(show_id, show, detail, updated_at):
+    entry = {
+        "title": detail.get("title") or show.get("title", "") or show.get("name", ""),
+        "name": show.get("name", ""),
+        "date": show.get("date", ""),
+        "month": show.get("month", ""),
+        "source_url": detail.get("source_url") or _source_url(show_id),
+        "breeds": detail.get("breeds") or [],
         "updated_at": updated_at,
         "updated_at_iso": _utc_iso(updated_at),
     }
-    _show_index["last_updated"] = updated_at
-    _save_index()
+    if not entry["breeds"]:
+        entry["empty_breed_list_confirmed"] = True
+    return entry
 
 
 def _load_index(force=False):
@@ -727,6 +743,46 @@ def _cached_show_detail(show_id, allow_stale=False):
     return None
 
 
+def _update_index_show(show):
+    sid = show["id"]
+    soup = _fetch_page(_source_url(sid))
+    detail = _parse_show_detail(soup, sid)
+    show_updated = time.time()
+
+    _show_index["shows"][str(sid)] = _index_entry_from_detail(sid, show, detail, show_updated)
+    _show_index["last_updated"] = show_updated
+    _save_index()
+    _show_detail_cache.pop(sid, None)
+
+    logger.info("dog_crawler_indexed_show", show_id=sid, breed_count=len(detail["breeds"]))
+    return detail
+
+
+def _crawl_index_candidates(candidates, total_count, delay=1.5, reason="maintenance"):
+    updated = 0
+    failed = 0
+
+    for idx, show in enumerate(candidates):
+        sid = show["id"]
+        try:
+            _update_index_show(show)
+            updated += 1
+        except Exception as e:
+            failed += 1
+            logger.warning("dog_crawler_show_failed", show_id=sid, reason=reason, error=str(e))
+
+        if delay and idx < len(candidates) - 1:
+            time.sleep(delay)
+
+    return {
+        "total": total_count,
+        "updated": updated,
+        "failed": failed,
+        "skipped": total_count - len(candidates),
+        "index": _index_summary(total_show_count=total_count),
+    }
+
+
 def crawl_index_once(limit=None, delay=1.5):
     """Refresh missing and recent show breed indexes once.
 
@@ -755,7 +811,6 @@ def crawl_index_once(limit=None, delay=1.5):
     if limit is not None:
         to_update = to_update[:limit]
 
-    updated = 0
     logger.info(
         "dog_crawler_updating_shows",
         count=len(to_update),
@@ -765,45 +820,40 @@ def crawl_index_once(limit=None, delay=1.5):
         total=len(shows_list),
     )
 
-    for idx, show in enumerate(to_update):
-        sid = show["id"]
-        try:
-            soup = _fetch_page(_source_url(sid))
-            detail = _parse_show_detail(soup, sid)
-            show_updated = time.time()
+    summary = _crawl_index_candidates(to_update, len(shows_list), delay=delay, reason="maintenance")
+    summary["missing_candidates"] = len(missing)
+    summary["empty_candidates"] = len(empty_indexed)
+    summary["recent_candidates"] = len(recent)
+    return summary
 
-            indexed_entry = {
-                "title": detail["title"],
-                "name": show.get("name", ""),
-                "date": show.get("date", ""),
-                "month": show.get("month", ""),
-                "source_url": detail["source_url"],
-                "breeds": detail["breeds"],
-                "updated_at": show_updated,
-                "updated_at_iso": _utc_iso(show_updated),
-            }
-            if not detail["breeds"]:
-                indexed_entry["empty_breed_list_confirmed"] = True
 
-            _show_index["shows"][str(sid)] = indexed_entry
-            _show_index["last_updated"] = show_updated
-            _save_index()
-            _show_detail_cache.pop(sid, None)
-            updated += 1
+def crawl_empty_index_once(limit=20, delay=0.5):
+    """Repair stale empty breed indexes created by older parser versions."""
+    _load_index()
+    shows_list = _get_show_list()
+    if not shows_list:
+        return {"total": 0, "updated": 0, "failed": 0, "skipped": 0, "empty_candidates": 0}
 
-            logger.info("dog_crawler_indexed_show", show_id=sid, breed_count=len(detail["breeds"]))
-        except Exception as e:
-            logger.warning("dog_crawler_show_failed", show_id=sid, error=str(e))
+    candidates = []
+    for show in shows_list:
+        indexed_show = _show_index["shows"].get(str(show["id"]))
+        if indexed_show and not indexed_show.get("breeds") and not indexed_show.get("empty_breed_list_confirmed"):
+            candidates.append(show)
 
-        if delay and idx < len(to_update) - 1:
-            time.sleep(delay)
+    to_update = candidates
+    if limit is not None:
+        to_update = to_update[:limit]
 
-    return {
-        "total": len(shows_list),
-        "updated": updated,
-        "skipped": len(shows_list) - len(to_update),
-        "index": _index_summary(total_show_count=len(shows_list)),
-    }
+    logger.info(
+        "dog_crawler_repairing_empty_indexes",
+        count=len(to_update),
+        empty_candidates=len(candidates),
+        total=len(shows_list),
+    )
+
+    summary = _crawl_index_candidates(to_update, len(shows_list), delay=delay, reason="empty_index_repair")
+    summary["empty_candidates"] = len(candidates)
+    return summary
 
 
 def _show_detail_for_result_cache(show_id):

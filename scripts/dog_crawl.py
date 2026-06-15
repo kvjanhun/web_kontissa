@@ -16,7 +16,7 @@ if REPO_ROOT not in sys.path:
 os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 
-from app.api.dog import INDEX_PATH, RESULT_CACHE_DIR, crawl_index_once, crawl_result_cache_once  # noqa: E402
+from app.api.dog import INDEX_PATH, RESULT_CACHE_DIR, crawl_empty_index_once, crawl_index_once, crawl_result_cache_once  # noqa: E402
 
 
 def main():
@@ -25,8 +25,13 @@ def main():
     parser.add_argument("--interval", type=int, default=3600, help="Seconds between loop runs")
     parser.add_argument("--maintenance-interval", type=int, default=None, help="Seconds between index and auto-result maintenance runs")
     parser.add_argument("--auto-results-interval", type=int, default=None, help="Seconds between automatic recent-show result cache runs")
+    parser.add_argument("--empty-index-interval", type=int, default=None, help="Seconds between stale empty breed-index repair runs")
     parser.add_argument("--limit", type=int, default=None, help="Maximum shows to update per run")
     parser.add_argument("--delay", type=float, default=1.5, help="Seconds between Showlink show requests")
+    parser.add_argument("--no-index-maintenance", action="store_true", help="Skip normal missing/recent breed-index maintenance")
+    parser.add_argument("--no-empty-index-repair", action="store_true", help="Skip stale empty breed-index repair")
+    parser.add_argument("--empty-index-limit", type=int, default=20, help="Maximum stale empty breed indexes to repair per run")
+    parser.add_argument("--empty-index-delay", type=float, default=0.5, help="Seconds between stale empty breed-index repair requests")
     parser.add_argument("--no-results", action="store_true", help="Skip whole-show result cache warming")
     parser.add_argument("--no-auto-results", action="store_true", help="Only process queued result cache jobs")
     parser.add_argument("--result-limit", type=int, default=1, help="Maximum whole-show result caches to update per run")
@@ -44,17 +49,29 @@ def main():
 
     maintenance_interval = args.maintenance_interval if args.maintenance_interval is not None else args.interval
     auto_results_interval = args.auto_results_interval if args.auto_results_interval is not None else maintenance_interval
+    empty_index_interval = args.empty_index_interval if args.empty_index_interval is not None else args.interval
     queued_result_limit = args.queued_result_limit if args.queued_result_limit is not None else args.result_limit
     auto_result_limit = args.auto_result_limit if args.auto_result_limit is not None else args.result_limit
     next_maintenance_at = 0
     next_auto_results_at = 0
+    next_empty_index_at = 0
 
     while True:
         now = time.time()
         run_maintenance = now >= next_maintenance_at
         run_auto_results = now >= next_auto_results_at
+        run_empty_index = now >= next_empty_index_at
         summary = {}
         queued_attempted = 0
+
+        if run_empty_index and not args.no_empty_index_repair:
+            summary["empty_index"] = crawl_empty_index_once(
+                limit=args.empty_index_limit,
+                delay=args.empty_index_delay,
+            )
+            next_empty_index_at = time.time() + empty_index_interval
+        else:
+            summary["next_empty_index_in"] = max(0, round(next_empty_index_at - now))
 
         if not args.no_results:
             summary["queued_results"] = crawl_result_cache_once(
@@ -65,7 +82,7 @@ def main():
             )
             queued_attempted = summary["queued_results"].get("attempted", 0)
 
-        if run_maintenance:
+        if run_maintenance and not args.no_index_maintenance:
             index_summary = crawl_index_once(limit=args.limit, delay=args.delay)
             summary["index"] = index_summary
             next_maintenance_at = time.time() + maintenance_interval

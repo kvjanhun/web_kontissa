@@ -91,11 +91,12 @@ Environment knobs:
 Current `docker-compose.yml` command:
 
 ```bash
-python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --limit 6 --delay 2.0 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
+python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
 ```
 
 This means:
 
+- Every 30 seconds: repair up to 20 stale empty breed-index entries with 0.5 seconds between requests.
 - Every 30 seconds: process queued whole-show result jobs.
 - Every 15 minutes: update up to 6 show breed indexes with 2.0 seconds between show-detail requests.
 - Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active.
@@ -147,6 +148,12 @@ Process queued result jobs without automatic recent warming:
 
 ```bash
 SECRET_KEY=dev python3 scripts/dog_crawl.py --no-auto-results --result-limit 1 --result-workers 3 --result-delay 0.4
+```
+
+Repair stale empty breed-index entries without warming result caches:
+
+```bash
+SECRET_KEY=dev DOG_INDEX_DIR="$(pwd)/app/data" python3 scripts/dog_crawl.py --no-results --no-index-maintenance --empty-index-limit 20 --empty-index-delay 0.5
 ```
 
 Disable user-triggered immediate warmup for a test run:

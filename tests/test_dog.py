@@ -433,6 +433,46 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
 
 
 @patch("app.api.dog.requests.get")
+def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "stale empty index",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "tammikuu 2000",
+        "breeds": [],
+    }
+    dog_module._show_index["shows"]["14043"] = {
+        "title": "already indexed",
+        "name": "Villakoira erikoisnäyttely",
+        "date": "15.06.",
+        "month": "tammikuu 2000",
+        "breeds": [
+            {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
+        ],
+    }
+    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: None)
+
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+
+    mock_resp_detail = MagicMock()
+    mock_resp_detail.text = SAMPLE_SHOW_DETAIL_HTML
+    mock_resp_detail.status_code = 200
+
+    mock_get.side_effect = [mock_resp_list, mock_resp_detail]
+
+    summary = dog_module.crawl_empty_index_once(limit=10, delay=0)
+
+    assert summary["updated"] == 1
+    assert summary["empty_candidates"] == 1
+    assert len(dog_module._show_index["shows"]["14042"]["breeds"]) == 2
+    assert len(dog_module._show_index["shows"]["14043"]["breeds"]) == 1
+    assert len(mock_get.call_args_list) == 2
+    assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
+
+
+@patch("app.api.dog.requests.get")
 def test_get_breed_results(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
