@@ -43,8 +43,8 @@ Rate limits are intentionally lower than internal crawler throughput:
 
 All dog crawler state is JSON under `DOG_INDEX_DIR`. In Docker this is `/app/data`, backed by the host bind mount `./app/data:/app/data`.
 
-- `dog_show_index.json`: show metadata and breed lists for search and fast show-detail reads.
-- `dog_result_cache/<show_id>.json`: whole-show result cache documents.
+- `dog_show_index.json`: show metadata, breed lists, and known breed judges for search and fast show-detail reads.
+- `dog_result_cache/<show_id>.json`: whole-show result cache documents. These also carry breed-level judges; search can use this data and backfill missing judges into `dog_show_index.json`.
 - `dog_result_jobs.json`: durable queue for missing or stale whole-show caches.
 
 These files are not SQLite tables. Litestream currently replicates `/data/site.db` only, so these JSON files are persistent on disk but not covered by the Litestream database backup policy.
@@ -124,7 +124,7 @@ The `/dog` page is a standalone Nuxt page. URL state is kept in query params:
 
 Important UI behavior:
 
-- The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache.
+- The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache. If a judge is only present in a warmed whole-show result cache, search uses that cache and writes the judge back to the compact index.
 - Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; past and upcoming show rows show only the full signup count.
 - The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
 - Whole-show filters run only against the persisted `/all-results` cache.

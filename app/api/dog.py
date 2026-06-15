@@ -404,6 +404,78 @@ def _text_matches_query_variants(text, variants):
     return any(query in haystack for query in variants)
 
 
+def _breed_identity_from_result(result):
+    breed_obj = result.get("breedObj") or {}
+    group = result.get("breedGroup") or breed_obj.get("group")
+    breed_id = result.get("breedId") or breed_obj.get("breed_id")
+    if not group or not breed_id:
+        return None
+    return str(group), str(breed_id)
+
+
+def _cached_result_breed_map(show_id):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return {}
+
+    breeds = {}
+    for key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict) or ":" not in key:
+            continue
+        group, breed_id = key.split(":", 1)
+        breed = _clean_breed_data({
+            "name": breed_data.get("name", ""),
+            "group": group,
+            "breed_id": breed_id,
+            "has_results": True,
+            "judge": breed_data.get("judge", ""),
+        })
+        if breed.get("judge"):
+            breeds[(group, breed_id)] = breed
+
+    for result in doc.get("results") or []:
+        key = _breed_identity_from_result(result)
+        if not key:
+            continue
+        breed = _clean_breed_data(result.get("breedObj") or {})
+        if breed.get("judge"):
+            breed.setdefault("group", key[0])
+            breed.setdefault("breed_id", key[1])
+            breed.setdefault("has_results", True)
+            breeds[key] = breed
+
+    return breeds
+
+
+def _update_index_breed_judge(show_id, group, breed_id, judge):
+    judge = _clean_judge_name(judge)
+    if not judge:
+        return False
+
+    _load_index()
+    show_data = _show_index.get("shows", {}).get(str(int(show_id)))
+    if not show_data:
+        return False
+
+    for breed in show_data.get("breeds", []) or []:
+        if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
+            if _clean_judge_name(breed.get("judge")) == judge:
+                return False
+            breed["judge"] = judge
+            return True
+    return False
+
+
+def _update_index_breed_judges(show_id, breed_map):
+    updated = False
+    for (group, breed_id), breed in breed_map.items():
+        if _update_index_breed_judge(show_id, group, breed_id, breed.get("judge")):
+            updated = True
+    if updated:
+        _save_index()
+    return updated
+
+
 def _normalize_show_index_judges():
     changed = False
     for show in _show_index.get("shows", {}).values():
@@ -849,6 +921,8 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
                 breed_obj = item
                 break
     breed_obj = _clean_breed_data(breed_obj or {})
+    if breed_obj.get("judge") and _update_index_breed_judge(show_id, group, breed, breed_obj.get("judge")):
+        _save_index()
 
     fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
     return {
@@ -1200,6 +1274,7 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     breed_id = str(breed.get("breed_id", ""))
     fetched_at = item["fetched_at"]
     mapped_results = item["mapped_results"]
+    judge = _clean_judge_name(item["breed_data"].get("judge"))
 
     _breed_result_cache[_breed_result_cache_key(show_id, group, breed_id)] = {
         "data": item["breed_data"],
@@ -1210,12 +1285,15 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     doc.setdefault("completed_breeds", {})[item["breed_key"]] = {
         "name": breed.get("name", ""),
         "result_count": len(mapped_results),
+        "judge": judge,
         "updated_at": fetched_at,
         "updated_at_iso": _utc_iso(fetched_at),
     }
     doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
     doc["updated_at"] = fetched_at
     _save_result_doc_progress(show_id, doc, preserve_existing_complete)
+    if judge and _update_index_breed_judge(show_id, group, breed_id, judge):
+        _save_index()
 
 
 def _crawl_missing_breed_results(show_id, pending_breeds, doc, delay, workers, preserve_existing_complete):
@@ -2048,9 +2126,13 @@ def search_shows():
 
             indexed_show = _show_index["shows"].get(sid)
             breed_matches = []
+            seen_breed_keys = set()
+            indexed_breeds = {}
             if indexed_show:
                 for breed_data in indexed_show.get("breeds", []):
                     cleaned_breed = _clean_breed_data(breed_data)
+                    key = (str(cleaned_breed.get("group")), str(cleaned_breed.get("breed_id")))
+                    indexed_breeds[key] = cleaned_breed
                     breed_name = cleaned_breed.get("name", "")
                     judge_name = cleaned_breed.get("judge", "")
                     if (
@@ -2058,6 +2140,23 @@ def search_shows():
                         or _text_matches_query_variants(judge_name, query_variants)
                     ):
                         breed_matches.append(cleaned_breed)
+                        seen_breed_keys.add(key)
+
+            if not breed_matches:
+                cached_breed_map = _cached_result_breed_map(sid)
+                cached_matches = []
+                for key, cached_breed in cached_breed_map.items():
+                    merged_breed = dict(indexed_breeds.get(key) or {})
+                    merged_breed.update({k: v for k, v in cached_breed.items() if v not in ("", None)})
+                    if (
+                        key not in seen_breed_keys
+                        and _text_matches_query_variants(merged_breed.get("judge", ""), query_variants)
+                    ):
+                        cached_matches.append(merged_breed)
+                        seen_breed_keys.add(key)
+                if cached_matches:
+                    breed_matches.extend(cached_matches)
+                    _update_index_breed_judges(sid, cached_breed_map)
 
             if breed_matches:
                 for breed_data in breed_matches:

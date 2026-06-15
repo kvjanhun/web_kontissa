@@ -762,6 +762,57 @@ def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
 
 
 @patch("app.api.dog.requests.get")
+def test_cached_breed_results_backfill_index_judge(mock_get, client):
+    dog_module._show_index["shows"]["13992"] = {
+        "title": "27.07.2025 Pertunmaa Pentunäyttely",
+        "name": "Pertunmaa Pentunäyttely",
+        "month": "heinäkuu 2025",
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 1,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": True,
+            },
+        ],
+    }
+    dog_module._save_result_cache_doc(13992, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13992,
+        "status": "complete",
+        "title": "27.07.2025 Pertunmaa Pentunäyttely",
+        "source_url": dog_module._source_url(13992),
+        "cached_at": 1001,
+        "completed_breeds": {"8:124": {"name": "sileäkarvainen noutaja", "result_count": 1}},
+        "results": [
+            {
+                "number": 1,
+                "name": "Test Retriever",
+                "grade": "ERI",
+                "breedName": "sileäkarvainen noutaja",
+                "breedGroup": "8",
+                "breedId": "124",
+                "breedObj": {
+                    "name": "sileäkarvainen noutaja",
+                    "group": "8",
+                    "breed_id": "124",
+                    "judge": "Tarja Kolkka",
+                },
+            },
+        ],
+    })
+
+    resp = client.get("/api/dog/shows/13992/results?group=8&breed=124")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["judge"] == "Tarja Kolkka"
+    assert dog_module._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
+    mock_get.assert_not_called()
+
+
+@patch("app.api.dog.requests.get")
 def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",
@@ -788,6 +839,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
     assert doc["status"] == "complete"
     assert doc["total_breeds"] == 1
     assert doc["completed_breeds"]["5:3"]["result_count"] == 1
+    assert doc["completed_breeds"]["5:3"]["judge"] == "Paula Steele"
     assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
     assert doc["results"][0]["breedName"] == "basenji"
 
@@ -980,3 +1032,64 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     assert data["results"][0]["breed"]["name"] == "sileäkarvainen noutaja"
     assert data["results"][0]["breed"]["judge"] == "Tarja Kolkka"
     assert data["results"][0]["match"] == "breed"
+
+
+@patch("app.api.dog.requests.get")
+def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+    dog_module._show_index["shows"]["13992"] = {
+        "title": "27.07.2025 Pertunmaa Pentunäyttely",
+        "name": "Pertunmaa Pentunäyttely",
+        "date": "27.07.",
+        "month": "heinäkuu 2025",
+        "source_url": dog_module._source_url(13992),
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 1,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": True,
+            }
+        ],
+    }
+    dog_module._save_result_cache_doc(13992, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13992,
+        "status": "complete",
+        "title": "27.07.2025 Pertunmaa Pentunäyttely",
+        "source_url": dog_module._source_url(13992),
+        "cached_at": 1001,
+        "completed_breeds": {"8:124": {"name": "sileäkarvainen noutaja", "result_count": 1}},
+        "results": [
+            {
+                "number": 1,
+                "name": "Test Retriever",
+                "grade": "ERI",
+                "breedName": "sileäkarvainen noutaja",
+                "breedGroup": "8",
+                "breedId": "124",
+                "breedObj": {
+                    "name": "sileäkarvainen noutaja",
+                    "count": 1,
+                    "group": "8",
+                    "breed_id": "124",
+                    "has_results": True,
+                    "judge": "Tarja Kolkka",
+                },
+            },
+        ],
+    })
+    mock_get.return_value = mock_resp_list
+
+    resp = client.get("/api/dog/search?q=kolkka")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert len(data["results"]) == 1
+    assert data["results"][0]["show"]["id"] == 13992
+    assert data["results"][0]["breed"]["name"] == "sileäkarvainen noutaja"
+    assert data["results"][0]["breed"]["judge"] == "Tarja Kolkka"
+    assert dog_module._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
