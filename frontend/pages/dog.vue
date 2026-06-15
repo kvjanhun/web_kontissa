@@ -213,6 +213,7 @@ let searchTimer = null
 let indexPollTimer = null
 let allDogsPollTimer = null
 let routeSyncToken = 0
+let pendingLinkScrollToTop = false
 
 function clearAllDogsPoll() {
   if (allDogsPollTimer) {
@@ -242,8 +243,27 @@ function buildDogQuery(query) {
   return clean
 }
 
-function pushDogQuery(query) {
-  return router.push({ path: '/dog', query: buildDogQuery(query) }).catch(() => {})
+function scrollDogPageToTop() {
+  if (!import.meta.client || !pendingLinkScrollToTop) return
+  pendingLinkScrollToTop = false
+  nextTick(() => {
+    requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, left: 0, behavior: 'auto' })
+    })
+  })
+}
+
+function pushDogQuery(query, options = {}) {
+  const shouldScrollToTop = Boolean(options.scrollToTop)
+  if (shouldScrollToTop) pendingLinkScrollToTop = true
+  return router.push({ path: '/dog', query: buildDogQuery(query) })
+    .then((failure) => {
+      if (failure && shouldScrollToTop) scrollDogPageToTop()
+      return failure
+    })
+    .catch(() => {
+      if (shouldScrollToTop) pendingLinkScrollToTop = false
+    })
 }
 
 function sameId(left, right) {
@@ -402,6 +422,7 @@ async function fetchShowDetail(show, options = {}) {
   if (syncToken !== null && syncToken !== routeSyncToken) return
   selectedShow.value = show
   currentView.value = 'detail'
+  scrollDogPageToTop()
   detailLoading.value = true
   detailError.value = ''
   showDetail.value = null
@@ -438,6 +459,7 @@ async function fetchBreedResults(breed, options = {}) {
   if (syncToken !== null && syncToken !== routeSyncToken) return
   selectedBreed.value = breed
   currentView.value = 'results'
+  scrollDogPageToTop()
   resultsLoading.value = true
   resultsError.value = ''
   breedResults.value = null
@@ -498,25 +520,25 @@ async function onSelectSearchResult(res) {
       show: res.show.id,
       group: res.breed.group,
       breed: res.breed.breed_id,
-    })
+    }, { scrollToTop: true })
   }
-  return pushDogQuery({ show: res.show.id })
+  return pushDogQuery({ show: res.show.id }, { scrollToTop: true })
 }
 
 // ─── Navigation ──────────────────────────────────────────────
 function goToList() {
-  return pushDogQuery({})
+  return pushDogQuery({}, { scrollToTop: true })
 }
 
 function goToDetail() {
   if (selectedShow.value) {
-    return pushDogQuery({ show: selectedShow.value.id })
+    return pushDogQuery({ show: selectedShow.value.id }, { scrollToTop: true })
   }
 }
 
 function openShow(show) {
   if (!show?.id) return
-  pushDogQuery({ show: show.id })
+  pushDogQuery({ show: show.id }, { scrollToTop: true })
 }
 
 function openBreed(breed) {
@@ -525,7 +547,7 @@ function openBreed(breed) {
     show: selectedShow.value.id,
     group: breed.group,
     breed: breed.breed_id,
-  })
+  }, { scrollToTop: true })
 }
 
 // ─── Toggle helpers ──────────────────────────────────────────
@@ -696,6 +718,7 @@ async function syncRouteState() {
 
   if (!showId || !isNumericString(showId)) {
     resetDogSelection()
+    scrollDogPageToTop()
     return
   }
 
@@ -709,11 +732,13 @@ async function syncRouteState() {
   if (!showMatches) {
     await fetchShowDetail(show, { syncToken })
     if (syncToken !== routeSyncToken) return
+    scrollDogPageToTop()
   } else {
     selectedShow.value = show
     currentView.value = 'detail'
     detailLoading.value = false
     detailError.value = ''
+    scrollDogPageToTop()
   }
 
   if (!groupId || !breedId) {
@@ -723,6 +748,7 @@ async function syncRouteState() {
     resultsLoading.value = false
     resultsError.value = ''
     expandedCritiques.value = new Set()
+    scrollDogPageToTop()
     return
   }
 
@@ -733,6 +759,7 @@ async function syncRouteState() {
     resultsLoading.value = false
     resultsError.value = ''
     expandedCritiques.value = new Set()
+    scrollDogPageToTop()
     return
   }
 
@@ -746,6 +773,7 @@ async function syncRouteState() {
     resultsLoading.value = false
     resultsError.value = ''
     expandedCritiques.value = new Set()
+    scrollDogPageToTop()
     return
   }
 
@@ -758,10 +786,12 @@ async function syncRouteState() {
   if (!resultsMatch) {
     await fetchBreedResults(breed, { syncToken })
     if (syncToken !== routeSyncToken) return
+    scrollDogPageToTop()
   } else {
     currentView.value = 'results'
     resultsLoading.value = false
     resultsError.value = ''
+    scrollDogPageToTop()
   }
 }
 

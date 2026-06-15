@@ -136,6 +136,65 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: 'Näyttelyt', exact: true })).toBeVisible()
   })
 
+  test('show links open the breed list from the top of the page', async ({ page }) => {
+    const shows = Array.from({ length: 35 }, (_, index) => ({
+      id: index === 34 ? 14042 : 13000 + index,
+      date: `${String(index + 1).padStart(2, '0')}.06.`,
+      name: index === 34 ? 'Target Basenji Show' : `Scroll Test Show ${index + 1}`,
+      month: 'Tänään',
+      source_url: `https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=${index === 34 ? 14042 : 13000 + index}`,
+    }))
+
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows,
+          index: {
+            indexed_show_count: 1,
+            total_show_count: shows.length,
+            last_updated: 1781431200,
+            last_updated_iso: '2026-06-14T10:00:00Z',
+          },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14042,
+          title: 'Target Basenji Show',
+          breeds: [
+            {
+              name: 'Basenji',
+              count: 3,
+              group: '6',
+              breed_id: '123',
+              has_results: true,
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042&R=6&RO=123',
+            },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    const targetShow = page.getByRole('button', { name: /Target Basenji Show/ })
+    await targetShow.scrollIntoViewIfNeeded()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100)
+
+    await targetShow.click()
+
+    await expect(page).toHaveURL(/\/dog\?show=14042$/)
+    await expect(page.getByRole('checkbox', { name: 'Vain tuloksia' })).toBeVisible()
+    await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
+  })
+
   test('show-wide results can be searched and filtered by rank without selecting a breed', async ({ page }) => {
     await page.route('**/api/dog/shows', async route => {
       await route.fulfill({
