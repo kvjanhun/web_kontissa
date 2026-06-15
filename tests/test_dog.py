@@ -173,6 +173,29 @@ def test_old_show_detail_cache_is_reused(mock_get, client):
     mock_get.assert_not_called()
 
 
+@patch("app.api.dog.requests.get")
+def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14042),
+        "updated_at": 1781431200,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
+        ],
+    }
+
+    resp = client.get("/api/dog/shows/14042")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["title"] == "14.06.2026 Basenji"
+    assert data["breeds"][0]["name"] == "basenji"
+    assert data["breeds"][0]["judge"] == "Paula Steele"
+    assert data["cache"]["status"] == "indexed"
+    mock_get.assert_not_called()
+
+
 SAMPLE_GENERAL_SHOW_MAIN_HTML = """
 <div id="divOtsikko">
     <h1>10.05.2026 Kouvola</h1>

@@ -567,6 +567,28 @@ def _show_detail_for_result_cache(show_id):
     return detail
 
 
+def _show_detail_from_index(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show or not indexed_show.get("breeds"):
+        return None
+
+    updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()
+    return {
+        "id": int(show_id),
+        "title": indexed_show.get("title") or indexed_show.get("name", ""),
+        "breeds": [dict(breed) for breed in indexed_show.get("breeds", [])],
+        "source_url": indexed_show.get("source_url") or _source_url(show_id),
+        "fetched_at": updated_at,
+        "fetched_at_iso": _utc_iso(updated_at),
+        "cache": {
+            "status": "indexed",
+            "source": "dog_show_index",
+            "updated_at": updated_at,
+            "updated_at_iso": _utc_iso(updated_at),
+        },
+    }
+
+
 def _all_results_doc_base(show_id, source, existing=None):
     now = time.time()
     existing = existing if isinstance(existing, dict) else {}
@@ -1040,6 +1062,11 @@ def show_detail(show_id):
         cached = _cached_show_detail(show_id)
         if cached:
             return jsonify(cached)
+
+        indexed = _show_detail_from_index(show_id)
+        if indexed:
+            _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
+            return jsonify(indexed)
 
         url = _source_url(show_id)
         soup = _fetch_page(url)

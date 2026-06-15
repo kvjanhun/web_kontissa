@@ -115,6 +115,19 @@ const allDogsProgressText = computed(() => {
   return `${state}. Taustaprosessi hakee tiedot rauhallisesti.`
 })
 
+function normalizeGrade(grade) {
+  return (grade || '').toLowerCase().trim()
+}
+
+function gradeMatchesFilter(dogGrade, filter) {
+  const grade = normalizeGrade(dogGrade)
+  if (!filter) return true
+  if (filter === 'hyl') return grade === 'hyl' || grade === 'hylätty'
+  if (filter === 'eva') return grade === 'eva' || grade === 'ei voida arvostella'
+  if (filter === 'poissa') return grade === 'poissa'
+  return grade === filter
+}
+
 
 const filteredAllDogs = computed(() => {
   if (!allDogsLoaded.value) return []
@@ -134,11 +147,7 @@ const filteredAllDogs = computed(() => {
   // Apply grade filter
   const grade = dogGradeFilter.value.toLowerCase().trim()
   if (grade) {
-    if (grade === 'hyl') {
-      res = res.filter(d => ['hyl', 'poissa', 'ei voida arvostella', 'eva'].includes((d.grade || '').toLowerCase()))
-    } else {
-      res = res.filter(d => (d.grade || '').toLowerCase() === grade)
-    }
+    res = res.filter(d => gradeMatchesFilter(d.grade, grade))
   }
   
   // Apply class filter
@@ -609,14 +618,7 @@ const filteredDogResults = computed(() => {
     }
     
     if (grade) {
-      const dogGrade = dog.grade?.toLowerCase().trim()
-      if (grade === 'kp') {
-        if (dogGrade !== 'kp') return false
-      } else if (grade === 'hyl') {
-        if (dogGrade !== 'hyl' && dogGrade !== 'hylätty' && dogGrade !== 'poissa') return false
-      } else {
-        if (dogGrade !== grade) return false
-      }
+      if (!gradeMatchesFilter(dog.grade, grade)) return false
     }
     
     if (className) {
@@ -673,7 +675,7 @@ function gradeClasses(grade) {
   if (g === 'eh' || g === 'erittäin hyvä') return 'dog-badge-silver'
   if (g === 'h' || g === 'hyvä') return 'dog-badge-bronze'
   if (g === 'kp') return 'dog-badge-info'
-  if (g === 'poissa' || g === 'hyl' || g === 'hylätty') return 'dog-badge-muted'
+  if (g === 'poissa' || g === 'hyl' || g === 'hylätty' || g === 'eva' || g === 'ei voida arvostella') return 'dog-badge-muted'
   return 'dog-badge-default'
 }
 
@@ -684,7 +686,7 @@ function gradeBorderClass(grade) {
   if (g === 'eh' || g === 'erittäin hyvä') return 'dog-border-silver'
   if (g === 'h' || g === 'hyvä') return 'dog-border-bronze'
   if (g === 'kp') return 'dog-border-info'
-  if (g === 'poissa' || g === 'hyl' || g === 'hylätty') return 'dog-border-muted'
+  if (g === 'poissa' || g === 'hyl' || g === 'hylätty' || g === 'eva' || g === 'ei voida arvostella') return 'dog-border-muted'
   return 'dog-border-default'
 }
 
@@ -1159,7 +1161,9 @@ onUnmounted(() => {
                       <option value="h">H (Hyvä)</option>
                       <option value="t">T (Tyydyttävä)</option>
                       <option value="kp">KP (Kunniapalkinto)</option>
-                      <option value="hyl">Hylätty / Poissa / Ei voida arvostella</option>
+                      <option value="hyl">HYL (Hylätty)</option>
+                      <option value="eva">EVA (Ei voida arvostella)</option>
+                      <option value="poissa">POISSA</option>
                     </select>
                   </div>
                   <!-- Class selection -->
@@ -1344,7 +1348,9 @@ onUnmounted(() => {
                   <option value="h">H (Hyvä)</option>
                   <option value="t">T (Tyydyttävä)</option>
                   <option value="kp">KP (Kunniapalkinto)</option>
-                  <option value="hyl">Hylätty / Poissa / Ei voida arvostella</option>
+                  <option value="hyl">HYL (Hylätty)</option>
+                  <option value="eva">EVA (Ei voida arvostella)</option>
+                  <option value="poissa">POISSA</option>
                 </select>
               </div>
               <!-- Class selection -->
