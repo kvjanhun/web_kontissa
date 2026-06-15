@@ -38,6 +38,16 @@ SVG honeycomb, keyboard input (letters/Backspace/Enter), client-side word valida
 - **Timer**: `useGameTimer.js` tracks elapsed time with pause/resume on tab visibility.
 - **Achievement tracking**: Fire-and-forget `POST /api/kenno/achievement` on each rank transition.
 
+## Dog Show Frontend (pages/dog.vue)
+
+Standalone `/dog` browser for Showlink data. The frontend must not fan out across all breed result pages; whole-show filtering uses `/api/dog/shows/<id>/all-results`, which is backed by the persisted server cache documented in `../docs/dog-show-browser.md`.
+
+- **Route state**: `?show=<id>` opens a show; `?show=<id>&group=<group>&breed=<breed>` opens a breed result page.
+- **Show detail tabs**: `Rotuluettelo` lists breeds; `Koirat & Tulokset` loads the whole-show cache and filters all dogs.
+- **Whole-show loading**: A `202` warming response keeps the animated progress card visible and polls using the backend `retry_after` value.
+- **Filters**: Whole-show and breed result filters support text, grade, class, and awards. `HYL`, `EVA`, and `POISSA` are intentionally separate grade filters.
+- **Search**: Breed search uses the backend persisted index and polls index stats while indexing is incomplete.
+
 ## Composables
 
 All in `frontend/composables/` (auto-imported):

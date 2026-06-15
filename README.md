@@ -22,15 +22,17 @@ Personal portfolio website by Konsta Janhunen.
 - Admin panel for managing content sections (tab-based dashboard)
 - Shared recipe book with search, categories, cooking mode with wake lock (for logged in users only)
 - [Sanakenno](https://erez.ac/sanakenno) — Finnish word game with a full admin panel. Inspired by [NYT Spelling Bee](https://www.nytimes.com/puzzles/spelling-bee)
+- [Dog show browser](https://erez.ac/dog) — Showlink show and result browser with server-side crawling and persistent result caches
 - Real-time weather from the Finnish Meteorological Institute (FMI) API
 - Accessibility: skip links, ARIA attributes, focus indicators, reduced-motion support
 
 ## Documentation
 Here's some documentation on the parts of the stack that are not available for non-authenticated visitors or which are actually used server-side.
-### Features for logged in users
-The site has some features that are available only for logged in users. Some of the features are demonstrated below.
+### Feature and operations docs
+These docs cover stateful features, server-side integrations, and operational tooling that are not obvious from the public static pages.
 
 - [Sanakenno puzzle editor](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
+- [Dog show browser](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
 - [Observability stack](./server/observability) - Live logging with Grafana, Loki, Promtail, Prometheus.
 
 ### Server configuration
