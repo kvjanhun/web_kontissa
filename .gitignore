@@ -37,6 +37,8 @@ frontend/playwright/.cache/
 # E2E test database
 app/data/test-e2e.db
 app/data/dog_show_index.json
+app/data/dog_result_jobs.json
+app/data/dog_result_cache/
 
 # Learning journey docs
 RF_learning_journey.md
