@@ -24,12 +24,13 @@ def main():
     parser.add_argument("--loop", action="store_true", help="Run forever")
     parser.add_argument("--interval", type=int, default=3600, help="Seconds between loop runs")
     parser.add_argument("--maintenance-interval", type=int, default=None, help="Seconds between index and auto-result maintenance runs")
+    parser.add_argument("--auto-results-interval", type=int, default=None, help="Seconds between automatic recent-show result cache runs")
     parser.add_argument("--limit", type=int, default=None, help="Maximum shows to update per run")
     parser.add_argument("--delay", type=float, default=1.5, help="Seconds between Showlink show requests")
     parser.add_argument("--no-results", action="store_true", help="Skip whole-show result cache warming")
     parser.add_argument("--no-auto-results", action="store_true", help="Only process queued result cache jobs")
     parser.add_argument("--result-limit", type=int, default=1, help="Maximum whole-show result caches to update per run")
-    parser.add_argument("--result-delay", type=float, default=2.0, help="Seconds between result page requests")
+    parser.add_argument("--result-delay", type=float, default=1.0, help="Seconds between result page requests")
     args = parser.parse_args()
 
     print({
@@ -39,12 +40,16 @@ def main():
     }, flush=True)
 
     maintenance_interval = args.maintenance_interval if args.maintenance_interval is not None else args.interval
+    auto_results_interval = args.auto_results_interval if args.auto_results_interval is not None else maintenance_interval
     next_maintenance_at = 0
+    next_auto_results_at = 0
 
     while True:
         now = time.time()
         run_maintenance = now >= next_maintenance_at
+        run_auto_results = now >= next_auto_results_at
         summary = {}
+        queued_attempted = 0
 
         if not args.no_results:
             summary["queued_results"] = crawl_result_cache_once(
@@ -52,21 +57,28 @@ def main():
                 delay=args.result_delay,
                 auto_recent=False,
             )
+            queued_attempted = summary["queued_results"].get("attempted", 0)
 
         if run_maintenance:
             index_summary = crawl_index_once(limit=args.limit, delay=args.delay)
             summary["index"] = index_summary
+            next_maintenance_at = time.time() + maintenance_interval
 
-            if not args.no_results and not args.no_auto_results:
+        else:
+            summary["next_maintenance_in"] = max(0, round(next_maintenance_at - now))
+
+        if run_auto_results and not args.no_results and not args.no_auto_results:
+            if queued_attempted:
+                summary["auto_results"] = {"attempted": 0, "skipped": 1, "reason": "queued_job_active"}
+            else:
                 summary["auto_results"] = crawl_result_cache_once(
                     limit=args.result_limit,
                     delay=args.result_delay,
                     auto_recent=True,
                 )
-
-            next_maintenance_at = time.time() + maintenance_interval
+            next_auto_results_at = time.time() + auto_results_interval
         else:
-            summary["next_maintenance_in"] = max(0, round(next_maintenance_at - now))
+            summary["next_auto_results_in"] = max(0, round(next_auto_results_at - now))
 
         print(summary, flush=True)
 
