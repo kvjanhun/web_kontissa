@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser(description="Refresh dog show breed index")
     parser.add_argument("--loop", action="store_true", help="Run forever")
     parser.add_argument("--interval", type=int, default=3600, help="Seconds between loop runs")
+    parser.add_argument("--maintenance-interval", type=int, default=None, help="Seconds between index and auto-result maintenance runs")
     parser.add_argument("--limit", type=int, default=None, help="Maximum shows to update per run")
     parser.add_argument("--delay", type=float, default=1.5, help="Seconds between Showlink show requests")
     parser.add_argument("--no-results", action="store_true", help="Skip whole-show result cache warming")
@@ -37,16 +38,35 @@ def main():
         "result_cache_dir": RESULT_CACHE_DIR,
     }, flush=True)
 
+    maintenance_interval = args.maintenance_interval if args.maintenance_interval is not None else args.interval
+    next_maintenance_at = 0
+
     while True:
-        index_summary = crawl_index_once(limit=args.limit, delay=args.delay)
-        summary = {"index": index_summary}
+        now = time.time()
+        run_maintenance = now >= next_maintenance_at
+        summary = {}
 
         if not args.no_results:
-            summary["results"] = crawl_result_cache_once(
+            summary["queued_results"] = crawl_result_cache_once(
                 limit=args.result_limit,
                 delay=args.result_delay,
-                auto_recent=not args.no_auto_results,
+                auto_recent=False,
             )
+
+        if run_maintenance:
+            index_summary = crawl_index_once(limit=args.limit, delay=args.delay)
+            summary["index"] = index_summary
+
+            if not args.no_results and not args.no_auto_results:
+                summary["auto_results"] = crawl_result_cache_once(
+                    limit=args.result_limit,
+                    delay=args.result_delay,
+                    auto_recent=True,
+                )
+
+            next_maintenance_at = time.time() + maintenance_interval
+        else:
+            summary["next_maintenance_in"] = max(0, round(next_maintenance_at - now))
 
         print(summary, flush=True)
 

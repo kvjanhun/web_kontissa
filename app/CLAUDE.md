@@ -59,7 +59,7 @@
 
 ## Dog Shows Backend (api/dog.py)
 
-Public Showlink browser. `/api/dog/shows` fetches the current show list with a 30-minute cache. Show detail and breed result caches are short-lived for current/previous-month shows and effectively stable for old shows. `scripts/dog_crawl.py --loop` owns persisted crawler state: `dog_show_index.json` for breed search and `dog_result_cache/<show_id>.json` for whole-show result filters. Missing `/all-results` caches are queued in `dog_result_jobs.json` and built by the crawler, not Flask/Gunicorn workers. Docker sets `DOG_INDEX_DIR=/app/data` so web and crawler containers share the mounted data volume. The web process reloads the breed index when it changes and serves whole-show result caches directly from disk.
+Public Showlink browser. `/api/dog/shows` fetches the current show list with a 30-minute cache. Show detail and breed result caches are short-lived for current/previous-month shows and effectively stable for old shows. `scripts/dog_crawl.py --loop` owns persisted crawler state: `dog_show_index.json` for breed search and `dog_result_cache/<show_id>.json` for whole-show result filters. Missing `/all-results` caches are queued in `dog_result_jobs.json` and built by the crawler, not Flask/Gunicorn workers. In production the crawler checks queued result jobs every minute, while slower index/auto-warm maintenance runs every 15 minutes. Docker sets `DOG_INDEX_DIR=/app/data` so web and crawler containers share the mounted data volume. The web process reloads the breed index when it changes and serves whole-show result caches directly from disk.
 
 ## Sanakenno Backend (api/kenno.py)
 
