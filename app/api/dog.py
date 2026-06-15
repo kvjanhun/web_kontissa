@@ -200,6 +200,9 @@ def _show_stats_from_index(show_id):
         return None
 
     breeds = indexed_show.get("breeds") or []
+    if not breeds:
+        return None
+
     entry_count = 0
     entry_count_known = False
     result_breed_count = 0
@@ -711,15 +714,19 @@ def crawl_index_once(limit=None, delay=1.5):
         return {"total": 0, "updated": 0, "skipped": 0}
 
     missing = []
+    empty_indexed = []
     recent = []
     for show in shows_list:
         sid = str(show["id"])
-        if sid not in _show_index["shows"]:
+        indexed_show = _show_index["shows"].get(sid)
+        if not indexed_show:
             missing.append(show)
+        elif not indexed_show.get("breeds") and not indexed_show.get("empty_breed_list_confirmed"):
+            empty_indexed.append(show)
         elif _is_recent_show(show.get("month")):
             recent.append(show)
 
-    to_update = missing + recent
+    to_update = missing + empty_indexed + recent
 
     if limit is not None:
         to_update = to_update[:limit]
@@ -729,6 +736,7 @@ def crawl_index_once(limit=None, delay=1.5):
         "dog_crawler_updating_shows",
         count=len(to_update),
         missing=len(missing),
+        empty_indexed=len(empty_indexed),
         recent=len(recent),
         total=len(shows_list),
     )
@@ -740,7 +748,7 @@ def crawl_index_once(limit=None, delay=1.5):
             detail = _parse_show_detail(soup, sid)
             show_updated = time.time()
 
-            _show_index["shows"][str(sid)] = {
+            indexed_entry = {
                 "title": detail["title"],
                 "name": show.get("name", ""),
                 "date": show.get("date", ""),
@@ -750,6 +758,10 @@ def crawl_index_once(limit=None, delay=1.5):
                 "updated_at": show_updated,
                 "updated_at_iso": _utc_iso(show_updated),
             }
+            if not detail["breeds"]:
+                indexed_entry["empty_breed_list_confirmed"] = True
+
+            _show_index["shows"][str(sid)] = indexed_entry
             _show_index["last_updated"] = show_updated
             _save_index()
             _show_detail_cache.pop(sid, None)
@@ -1392,6 +1404,42 @@ def _parse_breeds_from_soup(soup, show_id=None):
     return breeds
 
 
+def _breed_list_targets_from_soup(soup, show_id):
+    content = soup.find(id="divContent") or soup.find(id="content") or soup
+    aggregate_targets = []
+    group_targets = []
+
+    for a in content.find_all("a"):
+        href = a.get("href", "")
+        r_match = re.search(r"(?:[?&]|&amp;)R=([^&#]+)", href)
+        if not r_match:
+            continue
+
+        id_match = re.search(r"(?:[?&]|&amp;)Id=(\d+)", href)
+        if id_match and str(id_match.group(1)) != str(show_id):
+            continue
+
+        group_value = r_match.group(1)
+        if group_value.upper() == "R":
+            aggregate_targets.append(group_value)
+            continue
+
+        if group_value.isdigit() and 1 <= int(group_value) <= 10:
+            group_targets.append(group_value)
+
+    # Some specialty shows expose every breed under R=R and keep BIS on the
+    # landing page. Prefer the aggregate page to avoid duplicate group fetches.
+    selected_targets = aggregate_targets or group_targets
+    unique_targets = []
+    seen = set()
+    for target in selected_targets:
+        if target in seen:
+            continue
+        seen.add(target)
+        unique_targets.append(target)
+    return unique_targets
+
+
 def _parse_show_detail(soup, show_id):
     """Parse the show detail page: title and breed list."""
     title_el = soup.select_one("#divOtsikko h1")
@@ -1400,31 +1448,14 @@ def _parse_show_detail(soup, show_id):
     # 1. Parse breeds on the landing page (for specialty shows)
     breeds = _parse_breeds_from_soup(soup, show_id)
 
-    # 2. If no breeds found, look for group links (FCI groups R=1..10)
+    # 2. If no breeds found, look for breed-list links (R=R or FCI groups R=1..10)
     if not breeds:
-        group_links = []
-        content = soup.find(id="divContent") or soup.find(id="content") or soup
-        for a in content.find_all("a"):
-            href = a.get("href", "")
-            match = re.search(r"R=(\d+)", href)
-            # Only match groups 1-10
-            if match:
-                group_num = match.group(1)
-                if group_num.isdigit() and 1 <= int(group_num) <= 10:
-                    group_links.append((group_num, href))
+        breed_list_targets = _breed_list_targets_from_soup(soup, show_id)
 
-        # Remove duplicate group numbers
-        seen_groups = set()
-        unique_groups = []
-        for g, href in group_links:
-            if g not in seen_groups:
-                seen_groups.add(g)
-                unique_groups.append((g, href))
-
-        if unique_groups:
-            logger.info("dog_show_groups_found", show_id=show_id, groups=[g[0] for g in unique_groups])
-            for g_num, href in unique_groups:
-                url = f"{BASE_URL}?Id={show_id}&R={g_num}"
+        if breed_list_targets:
+            logger.info("dog_show_groups_found", show_id=show_id, groups=breed_list_targets)
+            for target in breed_list_targets:
+                url = f"{BASE_URL}?Id={show_id}&R={target}"
                 try:
                     # Sleep 0.5s to be polite during nested crawls
                     time.sleep(0.5)
@@ -1432,7 +1463,7 @@ def _parse_show_detail(soup, show_id):
                     group_breeds = _parse_breeds_from_soup(group_soup, show_id)
                     breeds.extend(group_breeds)
                 except Exception as e:
-                    logger.warning("dog_show_group_fetch_failed", show_id=show_id, group=g_num, error=str(e))
+                    logger.warning("dog_show_group_fetch_failed", show_id=show_id, group=target, error=str(e))
 
     return {
         "id": show_id,

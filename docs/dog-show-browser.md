@@ -62,6 +62,17 @@ Do not delete `app/data` or the whole `dog_result_cache` directory casually. To 
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
 - Old shows are treated as stable once cached.
+- Empty indexed breed lists without an `empty_breed_list_confirmed` marker are refreshed by the crawler. This self-heals older cache entries created before parser fixes.
+
+## Showlink Page Shapes
+
+Supported show-detail shapes:
+
+- Specialty pages where the landing page already contains `table.rotulistatable`.
+- General all-breed pages where the landing page links to numeric FCI groups (`R=1` ... `R=10`).
+- Specialty pages where the landing page is BIS-focused and the real breed list is under `R=R` / `Rotujen tulokset`.
+
+If `R=R` is present, the parser fetches that aggregate breed-list page instead of fetching numeric group pages.
 
 Environment knobs:
 

@@ -149,6 +149,26 @@ def test_get_shows_enriches_cached_index_stats(mock_get, client):
 
 
 @patch("app.api.dog.requests.get")
+def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "month": "kesäkuu 2026",
+        "updated_at": 1781431200,
+        "breeds": [],
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert "stats" not in data["shows"][0]
+
+
+@patch("app.api.dog.requests.get")
 def test_get_show_detail(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
@@ -264,6 +284,44 @@ SAMPLE_GENERAL_SHOW_GROUP_5_HTML = """
 </table>
 """
 
+
+SAMPLE_AGGREGATE_SHOW_MAIN_HTML = """
+<div id="divOtsikko">
+    <h1>14.06.2026 Kanakoirakerho</h1>
+</div>
+<div id="divContent">
+    <div class="roturyhmatvalikko">
+        <a href="/nayttelyt/Tulokset?Id=13934&R=R">Rotujen tulokset</a>
+    </div>
+    <div class="roturyhmatvalikko">
+        <a href="/nayttelyt/Tulokset?Id=13934&R=BIS">BIS-tulokset</a>
+    </div>
+    <table class="tulostaulukko">
+        <tr class="otsikko"><td colspan="3">Best in show</td></tr>
+        <tr><td>1.</td><td>pointteri</td><td>Riekkokirhveen Hg Edda</td></tr>
+    </table>
+</div>
+"""
+
+SAMPLE_AGGREGATE_SHOW_BREEDS_HTML = """
+<div id="divOtsikko">
+    <h1>14.06.2026 Kanakoirakerho</h1>
+</div>
+<table class="rotulistatable">
+    <tr class="rotuluettelo">
+        <td><a href="/nayttelyt/Tulokset?Id=13934&R=7&RO=88">englanninsetteri</a></td>
+        <td class="right">48</td>
+        <td class="right"><i class="fa-solid fa-check"></i></td>
+    </tr>
+    <tr class="rotuluettelo">
+        <td><a href="/nayttelyt/Tulokset?Id=13934&R=7&RO=90">gordoninsetteri</a></td>
+        <td class="right">31</td>
+        <td class="right"><i class="fa-solid fa-check"></i></td>
+    </tr>
+</table>
+"""
+
+
 @patch("app.api.dog.requests.get")
 def test_get_show_detail_general(mock_get, client):
     mock_resp_main = MagicMock()
@@ -298,6 +356,72 @@ def test_get_show_detail_general(mock_get, client):
     assert data["breeds"][1]["group"] == "5"
     assert data["breeds"][1]["breed_id"] == "3"
     assert data["breeds"][1]["has_results"] is False
+
+
+@patch("app.api.dog.requests.get")
+def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
+    mock_resp_main = MagicMock()
+    mock_resp_main.text = SAMPLE_AGGREGATE_SHOW_MAIN_HTML
+    mock_resp_main.status_code = 200
+
+    mock_resp_breeds = MagicMock()
+    mock_resp_breeds.text = SAMPLE_AGGREGATE_SHOW_BREEDS_HTML
+    mock_resp_breeds.status_code = 200
+
+    mock_get.side_effect = [mock_resp_main, mock_resp_breeds]
+
+    resp = client.get("/api/dog/shows/13934")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["title"] == "14.06.2026 Kanakoirakerho"
+    assert len(data["breeds"]) == 2
+    assert data["breeds"][0]["name"] == "englanninsetteri"
+    assert data["breeds"][0]["count"] == 48
+    assert data["breeds"][0]["group"] == "7"
+    assert data["breeds"][0]["breed_id"] == "88"
+    assert data["breeds"][0]["has_results"] is True
+    assert data["breeds"][1]["name"] == "gordoninsetteri"
+    assert mock_get.call_args_list[1].args[0].endswith("Id=13934&R=R")
+
+
+@patch("app.api.dog.requests.get")
+def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeypatch):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "stale empty index",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "tammikuu 2000",
+        "breeds": [],
+    }
+    dog_module._show_index["shows"]["14043"] = {
+        "title": "already indexed",
+        "name": "Villakoira erikoisnäyttely",
+        "date": "15.06.",
+        "month": "tammikuu 2000",
+        "breeds": [
+            {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
+        ],
+    }
+    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: None)
+
+    mock_resp_list = MagicMock()
+    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
+    mock_resp_list.status_code = 200
+
+    mock_resp_detail = MagicMock()
+    mock_resp_detail.text = SAMPLE_SHOW_DETAIL_HTML
+    mock_resp_detail.status_code = 200
+
+    mock_get.side_effect = [mock_resp_list, mock_resp_detail]
+
+    summary = dog_module.crawl_index_once(limit=1, delay=0)
+
+    assert summary["updated"] == 1
+    assert len(dog_module._show_index["shows"]["14042"]["breeds"]) == 2
+    assert dog_module._show_index["shows"]["14042"]["breeds"][0]["name"] == "basenji"
+    assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
+
 
 @patch("app.api.dog.requests.get")
 def test_get_breed_results(mock_get, client):
