@@ -8,7 +8,8 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 ## Entry Points
 
-- Frontend page: `frontend/pages/dog.vue`
+- Frontend route entry: `frontend/pages/dog.vue`
+- Frontend feature module: `frontend/features/dog/`
 - Flask blueprint: `app/api/dog.py`
 - Crawler process: `scripts/dog_crawl.py`
 - Production service: `dog-crawler` in `docker-compose.yml`
@@ -117,7 +118,9 @@ If Showlink starts responding slowly or failing, reduce `--result-workers`, incr
 
 ## Frontend Behavior
 
-The `/dog` page is a standalone Nuxt page. URL state is kept in query params:
+The `/dog` page is a standalone Nuxt page. The route file is intentionally thin; UI components, route/API orchestration, pure result helpers, and dog-only CSS live in `frontend/features/dog/`.
+
+URL state is kept in query params:
 
 - `?show=<show_id>` opens a show.
 - `?show=<show_id>&group=<group>&breed=<breed>` opens a breed result page.
