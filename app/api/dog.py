@@ -715,14 +715,16 @@ def _queue_result_cache_job(show_id, reason="user"):
     sid = str(int(show_id))
     job = jobs.get(sid, {})
 
-    if job.get("state") != "running":
+    is_running = job.get("state") == "running"
+    if not is_running:
         job["state"] = "queued"
     job["show_id"] = int(show_id)
     job["reason"] = reason
     job.setdefault("created_at", now)
     job.setdefault("attempts", 0)
     job["requested_at"] = now
-    job["updated_at"] = now
+    if not is_running:
+        job["updated_at"] = now
     job.setdefault("next_attempt_at", now)
     jobs[sid] = job
     jobs_doc["updated_at"] = now
@@ -1879,7 +1881,9 @@ def show_detail(show_id):
         if cached:
             data = dict(cached)
             data["breeds"] = _clean_breed_list(data.get("breeds", []))
-            if _enrich_breeds_with_cached_result_judges(show_id, data["breeds"]):
+            updated_from_index = _enrich_breeds_with_index_judges(show_id, data["breeds"])
+            updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data["breeds"])
+            if updated_from_index or updated_from_results:
                 existing_cache = _show_detail_cache.get(show_id) or {}
                 _show_detail_cache[show_id] = {
                     "data": data,

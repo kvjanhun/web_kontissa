@@ -143,6 +143,19 @@ describe('createShowBreedGroups', () => {
     expect(groups).toHaveLength(1)
     expect(groups[0].breedName).toBe('Akita')
   })
+
+  it('filters indexed breed judges before whole-show dogs are loaded', () => {
+    const groups = createShowBreedGroups({
+      breeds,
+      dogs: [],
+      query: 'paula',
+      allDogsLoaded: false,
+    })
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].breedName).toBe('Basenji')
+    expect(groups[0].judge).toBe('Paula Steele')
+  })
 })
 
 describe('buildDogQuery', () => {

@@ -71,6 +71,7 @@ export function useDogBrowser() {
   let searchRequestId = 0
   let indexPollTimer = null
   let allDogsPollTimer = null
+  let allDogsSessionId = 0
   let routeSyncToken = 0
   let pendingLinkScrollToTop = false
 
@@ -84,9 +85,10 @@ export function useDogBrowser() {
   function scheduleAllDogsPoll(retryAfterSeconds) {
     clearAllDogsPoll()
     const delay = Math.max(5, Number(retryAfterSeconds) || 8)
+    const sessionId = allDogsSessionId
     allDogsPollTimer = setTimeout(() => {
       allDogsPollTimer = null
-      loadAllShowResults({ poll: true })
+      loadAllShowResults({ poll: true, sessionId })
     }, delay * 1000)
   }
 
@@ -123,6 +125,7 @@ export function useDogBrowser() {
 
   function resetDogSelection() {
     clearAllDogsPoll()
+    allDogsSessionId += 1
     currentView.value = 'list'
     selectedShow.value = null
     showDetail.value = null
@@ -190,9 +193,10 @@ export function useDogBrowser() {
   const availableShowAwards = computed(() => availableAwardsFromResults(allDogsResults.value || []))
 
   async function loadAllShowResults(options = {}) {
-    const { poll = false } = options
+    const { poll = false, sessionId = allDogsSessionId } = options
     const showId = selectedShow.value?.id
     if (!showId) return
+    if (sessionId !== allDogsSessionId) return
     if (allDogsLoaded.value || (allDogsLoading.value && !poll)) return
     clearAllDogsPoll()
     allDogsLoading.value = true
@@ -200,6 +204,7 @@ export function useDogBrowser() {
     let keepLoading = false
     try {
       const data = await $fetch(`/api/dog/shows/${showId}/all-results`)
+      if (sessionId !== allDogsSessionId) return
       if (!selectedShow.value?.id || !sameId(selectedShow.value.id, showId)) return
       if (data.status === 'warming') {
         allDogsProgress.value = data.progress || null
@@ -211,16 +216,22 @@ export function useDogBrowser() {
       allDogsProgress.value = data.cache || null
       allDogsLoaded.value = true
     } catch {
-      allDogsError.value = 'Tulosten hakeminen epäonnistui.'
+      if (sessionId === allDogsSessionId) {
+        allDogsError.value = 'Tulosten hakeminen epäonnistui.'
+      }
     } finally {
-      if (!keepLoading) {
+      if (sessionId === allDogsSessionId && !keepLoading) {
         allDogsLoading.value = false
       }
     }
   }
 
   function startShowWideSearch() {
-    loadAllShowResults()
+    clearAllDogsPoll()
+    allDogsSessionId += 1
+    allDogsLoading.value = false
+    allDogsError.value = ''
+    loadAllShowResults({ sessionId: allDogsSessionId })
   }
 
   async function refreshIndexStats() {
@@ -286,6 +297,7 @@ export function useDogBrowser() {
     breedResults.value = null
 
     clearAllDogsPoll()
+    allDogsSessionId += 1
     allDogsLoading.value = false
     allDogsLoaded.value = false
     allDogsError.value = ''
@@ -613,6 +625,7 @@ export function useDogBrowser() {
   onUnmounted(() => {
     clearTimeout(searchTimer)
     if (indexPollTimer) clearInterval(indexPollTimer)
+    allDogsSessionId += 1
     clearAllDogsPoll()
   })
 

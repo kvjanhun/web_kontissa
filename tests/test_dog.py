@@ -434,6 +434,48 @@ def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     mock_get.assert_not_called()
 
 
+@patch("app.api.dog.requests.get")
+def test_cached_show_detail_merges_index_judges(mock_get, client):
+    _show_detail_cache[14042] = {
+        "data": {
+            "id": 14042,
+            "title": "Basenji Show 2026",
+            "breeds": [
+                {
+                    "name": "basenji",
+                    "count": 3,
+                    "group": "5",
+                    "breed_id": "3",
+                    "has_results": True,
+                },
+            ],
+            "source_url": dog_module._source_url(14042),
+        },
+        "ts": dog_module.time.time(),
+    }
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "Basenji Show 2026",
+        "source_url": dog_module._source_url(14042),
+        "breeds": [
+            {
+                "name": "basenji",
+                "count": 3,
+                "group": "5",
+                "breed_id": "3",
+                "has_results": True,
+                "judge": "Paula Steele",
+            },
+        ],
+    }
+
+    resp = client.get("/api/dog/shows/14042")
+
+    assert resp.status_code == 200
+    assert resp.get_json()["breeds"][0]["judge"] == "Paula Steele"
+    assert _show_detail_cache[14042]["data"]["breeds"][0]["judge"] == "Paula Steele"
+    mock_get.assert_not_called()
+
+
 SAMPLE_GENERAL_SHOW_MAIN_HTML = """
 <div id="divOtsikko">
     <h1>10.05.2026 Kouvola</h1>
@@ -771,6 +813,46 @@ def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeyp
     assert resp.status_code == 202
     assert resp.get_json()["started"] is True
     assert started == [(14042, "user-immediate")]
+    mock_get.assert_not_called()
+
+
+@patch("app.api.dog.requests.get")
+def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monkeypatch, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    old_updated_at = 100
+    dog_module._save_result_jobs({
+        "jobs": {
+            "14042": {
+                "show_id": 14042,
+                "state": "running",
+                "created_at": old_updated_at,
+                "requested_at": old_updated_at,
+                "updated_at": old_updated_at,
+                "last_started_at": old_updated_at,
+                "attempts": 1,
+            },
+        },
+        "updated_at": old_updated_at,
+    })
+    monkeypatch.setattr(dog_module.time, "time", lambda: 1000)
+
+    resp = client.get("/api/dog/shows/14042/all-results")
+
+    assert resp.status_code == 202
+    data = resp.get_json()
+    assert data["status"] == "warming"
+    assert data["progress"]["state"] == "running"
+    with open(dog_module.RESULT_JOBS_PATH, encoding="utf-8") as f:
+        jobs = json.load(f)["jobs"]
+    assert jobs["14042"]["state"] == "running"
+    assert jobs["14042"]["requested_at"] == 1000
+    assert jobs["14042"]["updated_at"] == old_updated_at
     mock_get.assert_not_called()
 
 
