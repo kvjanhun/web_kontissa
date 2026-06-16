@@ -41,7 +41,6 @@ const filterText = ref('')
 const searchResults = ref([])
 const searchLoading = ref(false)
 const searchError = ref('')
-const showResultsOnly = ref(false)
 
 // Breed list search query (within show detail view)
 const breedSearchQuery = ref('')
@@ -53,15 +52,13 @@ const dogClassFilter = ref('')
 const dogAwardFilter = ref('')
 
 // ─── Show-wide all-dogs results state (Show detail view) ─────
-const showDetailTab = ref('breeds') // 'breeds' | 'dogs'
 const allDogsLoading = ref(false)
 const allDogsLoaded = ref(false)
 const allDogsError = ref('')
 const allDogsResults = ref([])
 const allDogsProgress = ref(null)
 
-function onSelectDogsTab() {
-  showDetailTab.value = 'dogs'
+function startShowWideSearch() {
   loadAllShowResults()
 }
 
@@ -127,56 +124,116 @@ function gradeMatchesFilter(dogGrade, filter) {
 }
 
 
-const filteredAllDogs = computed(() => {
-  if (!allDogsLoaded.value) return []
-  let res = allDogsResults.value
-  
-  // Apply search text (dog name, catalog number, breed name, class)
-  const q = dogSearchQuery.value.toLowerCase().trim()
-  if (q) {
-    res = res.filter(d => 
-      (d.name || '').toLowerCase().includes(q) ||
-      String(d.number || '').includes(q) ||
-      (d.breedName || '').toLowerCase().includes(q) ||
-      (d.class_name || '').toLowerCase().includes(q)
-    )
-  }
-  
-  // Apply grade filter
+const showSearchPlaceholder = computed(() => (
+  allDogsLoaded.value
+    ? 'Hae rotua, tuomaria tai koiraa...'
+    : 'Hae rotua tai tuomaria...'
+))
+
+function searchTextMatches(value, query) {
+  return String(value || '').toLowerCase().includes(query)
+}
+
+function breedMatchesSearch(breed, query) {
+  if (!query) return true
+  return searchTextMatches(breed?.name, query) || searchTextMatches(breed?.judge, query)
+}
+
+function dogMatchesShowSearch(dog, query) {
+  if (!query) return true
+  return (
+    searchTextMatches(dog?.name, query) ||
+    searchTextMatches(dog?.number, query) ||
+    searchTextMatches(dog?.breedName, query) ||
+    searchTextMatches(dog?.class_name, query) ||
+    searchTextMatches(dog?.awards, query) ||
+    searchTextMatches(dog?.breedObj?.judge, query)
+  )
+}
+
+function dogMatchesShowFilters(dog) {
   const grade = dogGradeFilter.value.toLowerCase().trim()
-  if (grade) {
-    res = res.filter(d => gradeMatchesFilter(d.grade, grade))
-  }
-  
-  // Apply class filter
+  if (grade && !gradeMatchesFilter(dog.grade, grade)) return false
+
   const cls = dogClassFilter.value.toLowerCase().trim()
-  if (cls) {
-    res = res.filter(d => (d.class_name || '').toLowerCase() === cls)
-  }
-  
-  // Apply award filter
+  if (cls && (dog.class_name || '').toLowerCase() !== cls) return false
+
   const award = dogAwardFilter.value.toLowerCase().trim()
-  if (award) {
-    res = res.filter(d => (d.awards || '').toLowerCase().includes(award))
-  }
-  
-  return res
+  if (award && !(dog.awards || '').toLowerCase().includes(award)) return false
+
+  return true
+}
+
+const allDogsAfterShowFilters = computed(() => {
+  if (!allDogsLoaded.value) return []
+  return allDogsResults.value.filter(dogMatchesShowFilters)
 })
 
-const allDogsGroupedByBreed = computed(() => {
-  const list = filteredAllDogs.value
+const showWideFiltersActive = computed(() => (
+  allDogsLoaded.value && Boolean(
+    breedSearchQuery.value.trim() ||
+    dogGradeFilter.value ||
+    dogClassFilter.value ||
+    dogAwardFilter.value
+  )
+))
+
+const showBreedGroups = computed(() => {
+  const breeds = showDetail.value?.breeds || []
+  const q = breedSearchQuery.value.toLowerCase().trim()
+  const dogsByBreed = {}
+  for (const dog of allDogsAfterShowFilters.value) {
+    const key = dogBreedGroupKey(dog)
+    if (!dogsByBreed[key]) dogsByBreed[key] = []
+    dogsByBreed[key].push(dog)
+  }
+
   const groups = {}
-  for (const d of list) {
-    const bName = d.breedName
-    if (!groups[bName]) {
-      groups[bName] = {
-        breedName: bName,
-        breedObj: d.breedObj,
-        dogs: []
+  for (const breed of breeds) {
+    const key = breedGroupKey(breed)
+    const dogs = dogsByBreed[key] || []
+    const breedMatch = breedMatchesSearch(breed, q)
+    const matchingDogs = q ? dogs.filter(dog => dogMatchesShowSearch(dog, q)) : dogs
+    const hasResultFilters = Boolean(dogGradeFilter.value || dogClassFilter.value || dogAwardFilter.value)
+
+    if (q || hasResultFilters) {
+      if (allDogsLoaded.value) {
+        if (!breedMatch && !matchingDogs.length) continue
+        if (hasResultFilters && !dogs.length) continue
+      } else if (!breedMatch) {
+        continue
       }
     }
-    groups[bName].dogs.push(d)
+
+    groups[key] = {
+      key,
+      breed,
+      breedName: breed.name,
+      count: breed.count,
+      judge: breed.judge,
+      has_results: breed.has_results,
+      dogs: breedMatch ? dogs : matchingDogs,
+    }
   }
+
+  for (const dog of allDogsAfterShowFilters.value) {
+    const key = dogBreedGroupKey(dog)
+    if (groups[key]) continue
+    const breed = dog.breedObj || {}
+    const dogs = dogsByBreed[key] || []
+    const matchingDogs = q ? dogs.filter(item => dogMatchesShowSearch(item, q)) : dogs
+    if (q && !matchingDogs.length) continue
+    groups[key] = {
+      key,
+      breed: { ...breed, has_results: true },
+      breedName: dog.breedName || breed.name,
+      count: breed.count,
+      judge: breed.judge,
+      has_results: true,
+      dogs: matchingDogs,
+    }
+  }
+
   return Object.values(groups)
 })
 
@@ -205,6 +262,7 @@ const collapsedMonths = ref(new Set())
 
 // ─── Expanded critiques ──────────────────────────────────────
 const expandedCritiques = ref(new Set())
+const expandedBreedGroups = ref(new Set())
 
 // ─── Debounce timer ──────────────────────────────────────────
 let searchTimer = null
@@ -269,6 +327,24 @@ function sameId(left, right) {
   return String(left) === String(right)
 }
 
+function breedGroupKeyFromParts(group, breedId, fallback = '') {
+  if (group && breedId) return `${group}:${breedId}`
+  return fallback
+}
+
+function breedGroupKey(breed) {
+  return breedGroupKeyFromParts(breed?.group, breed?.breed_id, breed?.name || '')
+}
+
+function dogBreedGroupKey(dog) {
+  const breedObj = dog?.breedObj || {}
+  return breedGroupKeyFromParts(
+    dog?.breedGroup || breedObj.group,
+    dog?.breedId || breedObj.breed_id,
+    dog?.breedName || breedObj.name || '',
+  )
+}
+
 function isNumericString(value) {
   return /^\d+$/.test(String(value))
 }
@@ -289,6 +365,12 @@ function parseShowDate(dateStr) {
   const month = parseInt(parts[1], 10) - 1
   const year = parseInt(parts[2], 10)
   return new Date(year, month, day)
+}
+
+function formatShowDay(dateStr) {
+  const match = String(dateStr || '').match(/\d{1,2}/)
+  if (!match) return dateStr || ''
+  return String(parseInt(match[0], 10))
 }
 
 function isThisWeekLeft(showDate) {
@@ -335,13 +417,13 @@ function resetDogSelection() {
   resultsLoading.value = false
   resultsError.value = ''
   expandedCritiques.value = new Set()
+  expandedBreedGroups.value = new Set()
   breedSearchQuery.value = ''
   dogSearchQuery.value = ''
   dogGradeFilter.value = ''
   dogClassFilter.value = ''
   dogAwardFilter.value = ''
   
-  showDetailTab.value = 'breeds'
   allDogsLoading.value = false
   allDogsLoaded.value = false
   allDogsError.value = ''
@@ -490,13 +572,13 @@ async function fetchShowDetail(show, options = {}) {
   selectedBreed.value = null
   breedResults.value = null
   
-  showDetailTab.value = 'breeds'
   clearAllDogsPoll()
   allDogsLoading.value = false
   allDogsLoaded.value = false
   allDogsError.value = ''
   allDogsResults.value = []
   allDogsProgress.value = null
+  expandedBreedGroups.value = new Set()
   
   try {
     const data = await $fetch(`/api/dog/shows/${show.id}`)
@@ -617,6 +699,21 @@ function openBreed(breed) {
   }, { scrollToTop: true })
 }
 
+function onBreedGroupClick(group) {
+  if (allDogsLoaded.value && group.dogs.length) {
+    toggleBreedGroup(group.key)
+    return
+  }
+  openBreed(group.breed)
+}
+
+function isBreedGroupExpanded(group) {
+  return (
+    Boolean(allDogsLoaded.value && group.dogs.length) &&
+    (expandedBreedGroups.value.has(group.key) || showWideFiltersActive.value)
+  )
+}
+
 // ─── Toggle helpers ──────────────────────────────────────────
 function toggleMonth(month) {
   const s = new Set(collapsedMonths.value)
@@ -630,6 +727,13 @@ function toggleCritique(idx) {
   if (s.has(idx)) s.delete(idx)
   else s.add(idx)
   expandedCritiques.value = s
+}
+
+function toggleBreedGroup(key) {
+  const s = new Set(expandedBreedGroups.value)
+  if (s.has(key)) s.delete(key)
+  else s.add(key)
+  expandedBreedGroups.value = s
 }
 
 // ─── Computed: grouped shows ─────────────────────────────────
@@ -660,18 +764,11 @@ const thisWeekShows = computed(() => {
   })
 })
 
-const filteredBreeds = computed(() => {
-  let breeds = showDetail.value?.breeds || []
-  if (showResultsOnly.value) {
-    breeds = breeds.filter(b => b.has_results)
-  }
-  const q = breedSearchQuery.value.toLowerCase().trim()
-  if (!q) return breeds
-  return breeds.filter(b =>
-    b.name.toLowerCase().includes(q) ||
-    (b.judge && b.judge.toLowerCase().includes(q))
-  )
-})
+const breedEmptyText = computed(() => (
+  breedSearchQuery.value.trim() || dogGradeFilter.value || dogClassFilter.value || dogAwardFilter.value
+    ? 'Ei rotuja tai tuloksia valituilla rajauksilla.'
+    : 'Ei rotuja.'
+))
 
 const selectedShowSourceUrl = computed(() => (
   showDetail.value?.source_url || sourceForShow(selectedShow.value)
@@ -894,23 +991,16 @@ onUnmounted(() => {
     <!-- Top Navigation Bar -->
     <header class="dog-top-bar">
       <div class="dog-top-left">
-        <!-- List view: link to main site home -->
-        <NuxtLink v-if="currentView === 'list'" to="/" class="dog-back-link">
-          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="160 208 80 128 160 48" />
-          </svg>
-          <span>erez.ac</span>
-        </NuxtLink>
         <!-- Detail view: back to list -->
-        <button v-else-if="currentView === 'detail'" class="dog-back-link" @click="goToList">
-          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <button v-if="currentView === 'detail'" class="dog-back-link" aria-label="Näyttelyt" @click="goToList">
+          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="160 208 80 128 160 48" />
           </svg>
           <span>Näyttelyt</span>
         </button>
         <!-- Results view: back to detail -->
-        <button v-else-if="currentView === 'results'" class="dog-back-link" @click="goToDetail">
-          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <button v-else-if="currentView === 'results'" class="dog-back-link" aria-label="Näyttely" @click="goToDetail">
+          <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="160 208 80 128 160 48" />
           </svg>
           <span>Näyttely</span>
@@ -986,7 +1076,7 @@ onUnmounted(() => {
             >
               <div class="dog-search-result-info">
                 <span class="dog-search-show-line">
-                  <span class="dog-show-date">{{ res.show.date }}</span>
+                  <span class="dog-show-date">{{ formatShowDay(res.show.date) }}</span>
                   <span class="dog-show-name">{{ res.show.name }}</span>
                 </span>
                 <span v-if="hasShowStats(res.show)" class="dog-show-stats" :aria-label="showStatsLabel(res.show)">
@@ -1038,7 +1128,7 @@ onUnmounted(() => {
                 class="dog-show-row dog-show-row-featured"
                 @click="openShow(show)"
               >
-                <span class="dog-show-date">{{ show.date }}</span>
+                <span class="dog-show-date">{{ formatShowDay(show.date) }}</span>
                 <span class="dog-show-body">
                   <span class="dog-show-name">{{ show.name }}</span>
                   <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
@@ -1091,7 +1181,7 @@ onUnmounted(() => {
                     class="dog-show-row"
                     @click="openShow(show)"
                   >
-                    <span class="dog-show-date">{{ show.date }}</span>
+                    <span class="dog-show-date">{{ formatShowDay(show.date) }}</span>
                     <span class="dog-show-body">
                       <span class="dog-show-name">{{ show.name }}</span>
                       <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
@@ -1132,7 +1222,7 @@ onUnmounted(() => {
             rel="noopener noreferrer"
             class="dog-source-link-pill"
           >
-            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M128,48H48V208H208V128" />
               <polyline points="160 48 208 48 208 96" />
               <line x1="128" y1="128" x2="208" y2="48" />
@@ -1157,169 +1247,227 @@ onUnmounted(() => {
 
         <!-- Breeds list -->
         <div v-else-if="showDetail">
-          <!-- Sub-tabs for Show Detail view -->
-          <div class="dog-tabs dog-detail-tabs">
-            <button
-              :class="['dog-tab', showDetailTab === 'breeds' && 'dog-tab-active']"
-              @click="showDetailTab = 'breeds'"
+          <div class="dog-results-filter-panel dog-show-tools-panel">
+            <div
+              :class="[
+                'dog-results-filter-grid',
+                'dog-show-tools-grid',
+                allDogsLoaded && 'dog-show-tools-grid-loaded',
+                allDogsLoading && 'dog-show-tools-grid-loading',
+              ]"
             >
-              Rotuluettelo ({{ showDetail.breeds?.length || 0 }})
-            </button>
-            <button
-              :class="['dog-tab', showDetailTab === 'dogs' && 'dog-tab-active']"
-              @click="onSelectDogsTab"
-            >
-              Koirat & Tulokset
-            </button>
-          </div>
-
-          <!-- TAB 1: BREEDS LIST -->
-          <div v-if="showDetailTab === 'breeds'">
-            <div class="dog-detail-filter-bar">
-              <div class="dog-search-wrap dog-breed-search">
-                <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                  <circle cx="116" cy="116" r="84" />
-                  <line x1="175.4" y1="175.4" x2="224" y2="224" />
-                </svg>
-                <input
-                  v-model="breedSearchQuery"
-                  type="text"
-                  class="dog-search-input"
-                  placeholder="Hae rotua tai tuomaria..."
-                />
-              </div>
-              <label class="dog-toggle">
-                <input v-model="showResultsOnly" type="checkbox" />
-                <span>Vain tuloksia</span>
-              </label>
-            </div>
-            <div v-if="filteredBreeds.length" class="dog-breed-list">
-              <button
-                v-for="breed in filteredBreeds"
-                :key="breed.breed_id || breed.name"
-                :class="['dog-breed-row', !breed.has_results && 'dog-breed-row-disabled']"
-                :disabled="!breed.has_results"
-                @click="openBreed(breed)"
-              >
-                <div class="dog-breed-info">
-                  <span class="dog-breed-name">{{ breed.name }}</span>
-                  <span class="dog-breed-count">
-                    {{ breed.count }} koiraa
-                    <span v-if="breed.judge" class="dog-breed-judge">
-                      • Tuomari: {{ breed.judge }}
-                    </span>
-                  </span>
-                </div>
-                <div class="dog-breed-status">
-                  <span v-if="breed.has_results" class="dog-check" title="Tulokset saatavilla">✓</span>
-                  <span v-else class="dog-no-results" title="Ei tuloksia">—</span>
-                </div>
-              </button>
-            </div>
-            <div v-else class="dog-empty">
-              <p>Ei rotuja valitulla rajauksella.</p>
-            </div>
-          </div>
-
-          <!-- TAB 2: DOG RESULTS & SEARCH -->
-          <div v-else-if="showDetailTab === 'dogs'">
-            <div v-if="allDogsLoading" class="dog-progress-card" role="status" aria-live="polite">
-              <div class="dog-progress-orbit" aria-hidden="true">
-                <span />
-                <span />
-                <span />
-              </div>
-              <div class="dog-progress-content">
-                <h2 class="dog-progress-title">Koko näyttelyn tuloksia valmistellaan</h2>
-                <p class="dog-progress-copy">{{ allDogsProgressText }}</p>
-                <div
-                  :class="['dog-progress-track', allDogsProgressPercent === null && 'dog-progress-track-indeterminate']"
-                >
-                  <span
-                    class="dog-progress-fill"
-                    :style="allDogsProgressPercent !== null ? { width: `${allDogsProgressPercent}%` } : undefined"
+              <div class="dog-filter-col dog-show-tools-search">
+                <label class="dog-filter-label">
+                  {{ allDogsLoaded ? 'Rotu, tuomari tai koira' : 'Rotu tai tuomari' }}
+                </label>
+                <div class="dog-search-wrap dog-breed-search">
+                  <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="116" cy="116" r="84" />
+                    <line x1="175.4" y1="175.4" x2="224" y2="224" />
+                  </svg>
+                  <input
+                    v-model="breedSearchQuery"
+                    type="text"
+                    class="dog-search-input"
+                    :placeholder="showSearchPlaceholder"
                   />
                 </div>
-                <p class="dog-progress-note">
-                  Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla tarkoituksella hitaasti.
-                </p>
               </div>
-            </div>
 
-            <div v-else-if="allDogsError" class="dog-error">
-              <p>{{ allDogsError }}</p>
-              <button class="dog-btn" @click="loadAllShowResults">Yritä uudelleen</button>
-            </div>
+              <div
+                v-if="allDogsLoaded"
+                class="dog-filter-col"
+              >
+                <label class="dog-filter-label">Laatuarvostelu</label>
+                <select v-model="dogGradeFilter" class="dog-filter-select">
+                  <option value="">Kaikki arvostelut</option>
+                  <option value="eri">ERI (Erinomainen)</option>
+                  <option value="eh">EH (Erittäin hyvä)</option>
+                  <option value="h">H (Hyvä)</option>
+                  <option value="t">T (Tyydyttävä)</option>
+                  <option value="kp">KP (Kunniapalkinto)</option>
+                  <option value="hyl">HYL (Hylätty)</option>
+                  <option value="eva">EVA (Ei voida arvostella)</option>
+                  <option value="poissa">POISSA</option>
+                </select>
+              </div>
 
-            <div v-else>
-              <!-- Show-wide Filter Panel -->
-              <div class="dog-results-filter-panel">
-                <div class="dog-results-filter-grid">
-                  <!-- Search text -->
-                  <div class="dog-filter-col">
-                    <label class="dog-filter-label">Hae koiraa</label>
-                    <div class="dog-search-wrap dog-filter-search">
-                      <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="116" cy="116" r="84" />
-                        <line x1="175.4" y1="175.4" x2="224" y2="224" />
-                      </svg>
-                      <input
-                        v-model="dogSearchQuery"
-                        type="text"
-                        class="dog-search-input"
-                        placeholder="Nimi, numero tai rotu..."
+              <div
+                v-if="allDogsLoaded && availableShowClasses.length"
+                class="dog-filter-col"
+              >
+                <label class="dog-filter-label">Luokka</label>
+                <select v-model="dogClassFilter" class="dog-filter-select">
+                  <option value="">Kaikki luokat</option>
+                  <option v-for="c in availableShowClasses" :key="c" :value="c">{{ c }}</option>
+                </select>
+              </div>
+
+              <div
+                v-if="allDogsLoaded && availableShowAwards.length"
+                class="dog-filter-col"
+              >
+                <label class="dog-filter-label">Palkinto</label>
+                <select v-model="dogAwardFilter" class="dog-filter-select">
+                  <option value="">Kaikki palkinnot</option>
+                  <option v-for="a in availableShowAwards" :key="a" :value="a">{{ a }}</option>
+                </select>
+              </div>
+
+              <div
+                v-if="!allDogsLoading && !allDogsLoaded && !allDogsError"
+                class="dog-filter-col dog-show-tools-action"
+              >
+                <label class="dog-filter-label">Koko näyttely</label>
+                <button
+                  class="dog-show-wide-toggle"
+                  @click="startShowWideSearch"
+                >
+                  <svg class="dog-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="56" y1="72" x2="200" y2="72" />
+                    <circle cx="96" cy="72" r="20" />
+                    <line x1="56" y1="128" x2="200" y2="128" />
+                    <circle cx="152" cy="128" r="20" />
+                    <line x1="56" y1="184" x2="200" y2="184" />
+                    <circle cx="112" cy="184" r="20" />
+                  </svg>
+                  <span>Suodata koko näyttelyä</span>
+                  <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="96 48 176 128 96 208" />
+                  </svg>
+                </button>
+              </div>
+
+              <div
+                v-if="allDogsLoading"
+                class="dog-filter-col dog-show-progress-inline"
+                role="status"
+                aria-live="polite"
+              >
+                <label class="dog-filter-label">Koko näyttely</label>
+                <div class="dog-progress-inline-body">
+                  <div class="dog-progress-orbit dog-progress-orbit-compact" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </div>
+                  <div class="dog-progress-content">
+                    <h2 class="dog-progress-title">Tuloksia valmistellaan</h2>
+                    <p class="dog-progress-copy">{{ allDogsProgressText }}</p>
+                    <div
+                      :class="['dog-progress-track', allDogsProgressPercent === null && 'dog-progress-track-indeterminate']"
+                    >
+                      <span
+                        class="dog-progress-fill"
+                        :style="allDogsProgressPercent !== null ? { width: `${allDogsProgressPercent}%` } : undefined"
                       />
                     </div>
-                  </div>
-                  <!-- Grade selection -->
-                  <div class="dog-filter-col">
-                    <label class="dog-filter-label">Laatuarvostelu</label>
-                    <select v-model="dogGradeFilter" class="dog-filter-select">
-                      <option value="">Kaikki arvostelut</option>
-                      <option value="eri">ERI (Erinomainen)</option>
-                      <option value="eh">EH (Erittäin hyvä)</option>
-                      <option value="h">H (Hyvä)</option>
-                      <option value="t">T (Tyydyttävä)</option>
-                      <option value="kp">KP (Kunniapalkinto)</option>
-                      <option value="hyl">HYL (Hylätty)</option>
-                      <option value="eva">EVA (Ei voida arvostella)</option>
-                      <option value="poissa">POISSA</option>
-                    </select>
-                  </div>
-                  <!-- Class selection -->
-                  <div v-if="availableShowClasses.length" class="dog-filter-col">
-                    <label class="dog-filter-label">Luokka</label>
-                    <select v-model="dogClassFilter" class="dog-filter-select">
-                      <option value="">Kaikki luokat</option>
-                      <option v-for="c in availableShowClasses" :key="c" :value="c">{{ c }}</option>
-                    </select>
-                  </div>
-                  <!-- Award selection -->
-                  <div v-if="availableShowAwards.length" class="dog-filter-col">
-                    <label class="dog-filter-label">Palkinto</label>
-                    <select v-model="dogAwardFilter" class="dog-filter-select">
-                      <option value="">Kaikki palkinnot</option>
-                      <option v-for="a in availableShowAwards" :key="a" :value="a">{{ a }}</option>
-                    </select>
+                    <p class="dog-progress-note">
+                      Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.
+                    </p>
                   </div>
                 </div>
               </div>
 
-              <!-- Grouped Dog Results -->
-              <div v-if="allDogsGroupedByBreed.length" class="dog-all-dogs-list">
-                <div v-for="group in allDogsGroupedByBreed" :key="group.breedName" class="dog-breed-group-section">
-                  <button class="dog-breed-group-header-btn" @click="openBreed(group.breedObj)">
-                    <span class="dog-breed-group-title">{{ group.breedName }}</span>
-                    <span class="dog-breed-group-badge">{{ group.dogs.length }} tulosta</span>
-                    <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                      <polyline points="96 48 176 128 96 208" />
+              <div
+                v-else-if="allDogsError"
+                class="dog-filter-col dog-show-progress-inline dog-show-progress-error"
+              >
+                <label class="dog-filter-label">Koko näyttely</label>
+                <div class="dog-progress-inline-body">
+                  <p class="dog-progress-copy">{{ allDogsError }}</p>
+                  <button class="dog-show-retry-btn" @click="loadAllShowResults">Yritä uudelleen</button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div v-if="showBreedGroups.length" class="dog-breed-list dog-breed-group-list">
+            <div
+              v-for="group in showBreedGroups"
+              :key="group.key"
+              class="dog-breed-group-section"
+            >
+              <button
+                :class="['dog-breed-group-header-btn', !group.has_results && !group.dogs.length && 'dog-breed-row-disabled']"
+                :disabled="!group.has_results && !group.dogs.length"
+                @click="onBreedGroupClick(group)"
+              >
+                <span class="dog-breed-group-main">
+                  <span class="dog-breed-group-title">{{ group.breedName }}</span>
+                  <span class="dog-breed-group-meta">
+                    <span v-if="typeof group.count === 'number'">{{ group.count }} koiraa</span>
+                    <span v-if="group.judge">Tuomari: {{ group.judge }}</span>
+                  </span>
+                </span>
+
+                <span class="dog-breed-group-side">
+                  <span
+                    v-if="allDogsLoaded && group.dogs.length"
+                    class="dog-breed-group-badge"
+                  >
+                    {{ group.dogs.length }} tulosta
+                  </span>
+                  <span
+                    v-if="group.has_results"
+                    class="dog-breed-result-icon"
+                    title="Tulokset saatavilla"
+                    aria-label="Tulokset saatavilla"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="128" cy="128" r="84" />
+                      <polyline points="88 132 116 160 172 96" />
                     </svg>
-                  </button>
+                  </span>
+                  <span
+                    v-else
+                    class="dog-breed-result-icon dog-breed-result-icon-muted"
+                    title="Ei tuloksia"
+                    aria-label="Ei tuloksia"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <circle cx="128" cy="128" r="84" />
+                      <line x1="88" y1="128" x2="168" y2="128" />
+                    </svg>
+                  </span>
+                  <svg
+                    v-if="allDogsLoaded && group.dogs.length"
+                    :class="['dog-chevron-sm', isBreedGroupExpanded(group) && 'dog-chevron-open']"
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
+                  >
+                    <polyline points="208 96 128 176 48 96" />
+                  </svg>
+                  <svg
+                    v-else-if="group.has_results"
+                    class="dog-arrow-sm"
+                    xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
+                  >
+                    <polyline points="96 48 176 128 96 208" />
+                  </svg>
+                </span>
+              </button>
+
+              <Transition name="dog-collapse">
+                <div
+                  v-if="isBreedGroupExpanded(group)"
+                  class="dog-breed-group-dogs"
+                >
+                  <div class="dog-breed-group-actions">
+                    <button
+                      class="dog-breed-open-link"
+                      @click="openBreed(group.breed)"
+                    >
+                      <span>Rotutulokset</span>
+                      <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="96 48 176 128 96 208" />
+                      </svg>
+                    </button>
+                  </div>
 
                   <div class="dog-results-grid">
                     <div
                       v-for="dog in group.dogs"
-                      :key="dog.number || dog.name"
+                      :key="`${group.key}-${dog.number || dog.name}`"
                       class="dog-result-card"
                       :class="gradeBorderClass(dog.grade)"
                     >
@@ -1360,11 +1508,10 @@ onUnmounted(() => {
                         </div>
                       </div>
 
-                      <!-- Critique toggle -->
                       <button
                         v-if="dog.critique"
                         class="dog-critique-toggle"
-                        @click="toggleCritique(`all-${group.breedName}-${dog.number || dog.name}`)"
+                        @click="toggleCritique(`all-${group.key}-${dog.number || dog.name}`)"
                       >
                         <svg class="dog-critique-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
                           <rect x="40" y="32" width="176" height="192" rx="16" />
@@ -1372,27 +1519,27 @@ onUnmounted(() => {
                           <line x1="80" y1="128" x2="176" y2="128" />
                           <line x1="80" y1="176" x2="136" y2="176" />
                         </svg>
-                        <span>{{ expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`) ? 'Piilota arvostelu' : 'Näytä arvostelu' }}</span>
+                        <span>{{ expandedCritiques.has(`all-${group.key}-${dog.number || dog.name}`) ? 'Piilota arvostelu' : 'Näytä arvostelu' }}</span>
                         <svg
-                          :class="['dog-chevron-sm', expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`) && 'dog-chevron-open']"
+                          :class="['dog-chevron-sm', expandedCritiques.has(`all-${group.key}-${dog.number || dog.name}`) && 'dog-chevron-open']"
                           xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"
                         >
                           <polyline points="208 96 128 176 48 96" />
                         </svg>
                       </button>
                       <Transition name="dog-collapse">
-                        <div v-if="expandedCritiques.has(`all-${group.breedName}-${dog.number || dog.name}`)" class="dog-critique-text">
+                        <div v-if="expandedCritiques.has(`all-${group.key}-${dog.number || dog.name}`)" class="dog-critique-text">
                           {{ dog.critique }}
                         </div>
                       </Transition>
                     </div>
                   </div>
                 </div>
-              </div>
-              <div v-else class="dog-empty">
-                <p>Ei tuloksia valituilla suodattimilla.</p>
-              </div>
+              </Transition>
             </div>
+          </div>
+          <div v-else class="dog-empty">
+            <p>{{ breedEmptyText }}</p>
           </div>
         </div>
       </div>
@@ -1415,7 +1562,7 @@ onUnmounted(() => {
             rel="noopener noreferrer"
             class="dog-source-link-pill"
           >
-            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <svg class="dog-pill-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
               <path d="M128,48H48V208H208V128" />
               <polyline points="160 48 208 48 208 96" />
               <line x1="128" y1="128" x2="208" y2="48" />
@@ -1601,40 +1748,47 @@ onUnmounted(() => {
 <style scoped>
 /* ═══ Scoped design tokens ═══ */
 .dog-page {
-  /* Warm/neutral stone light theme colors - aligned with erez.ac style */
-  --dog-bg: #fafaf9;          /* var(--color-bg-secondary) */
-  --dog-surface: #ffffff;     /* var(--color-bg-primary) */
-  --dog-surface-el: #f5f5f4;  /* var(--color-bg-tertiary) */
-  --dog-accent: #ff643e;      /* var(--color-accent) */
-  --dog-accent-2: #e04f2c;    /* Deeper contrast version for text */
-  --dog-text: #292524;        /* var(--color-text-primary) */
-  --dog-text-muted: #78716c;  /* var(--color-text-secondary) */
-  --dog-border: #e7e5e4;      /* var(--color-border) */
-  --dog-border-strong: #d6d3d1;
-  --dog-gold: #d97706;        /* Gold color for ERI */
-  --dog-silver: #64748b;      /* Silver for EH */
-  --dog-bronze: #b45309;      /* Bronze for H */
-  --dog-info: #0284c7;        /* Blue for KP */
+  --dog-bg: #edf5ef;
+  --dog-surface: #fffdfb;
+  --dog-surface-el: #dfece5;
+  --dog-accent: #11624f;
+  --dog-accent-2: #9b365d;
+  --dog-accent-3: #b47a12;
+  --dog-text: #16231f;
+  --dog-text-muted: #5d6a64;
+  --dog-border: #c9d8d0;
+  --dog-border-strong: #9fb7ac;
+  --dog-icon: #0f4f41;
+  --dog-icon-muted: #49675d;
+  --dog-day-bg: #123d36;
+  --dog-day-text: #f8fff9;
+  --dog-gold: #b47a12;
+  --dog-silver: #566979;
+  --dog-bronze: #9a5e2c;
+  --dog-info: #2563eb;
   --dog-radius-sm: 0.375rem;
   --dog-radius-md: 0.5rem;
   --dog-radius-lg: 0.75rem;
+  --color-accent: var(--dog-accent-2);
 
   --dog-page-bg: var(--dog-bg);
   --dog-panel-bg: var(--dog-surface);
   --dog-panel-bg-soft: var(--dog-surface-el);
   --dog-row-bg: var(--dog-surface);
-  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 4%, var(--dog-surface));
+  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 7%, var(--dog-surface));
   --dog-control-bg: var(--dog-surface);
-  --dog-pill-bg: color-mix(in srgb, var(--dog-text-muted) 10%, transparent);
-  --dog-control-highlight: rgba(0, 0, 0, 0.02);
+  --dog-pill-bg: color-mix(in srgb, var(--dog-accent) 10%, var(--dog-surface));
+  --dog-control-highlight: rgba(17, 98, 79, 0.08);
 
-  --dog-shadow-soft: 0 4px 20px -2px rgba(28, 25, 23, 0.06), 0 2px 6px -1px rgba(28, 25, 23, 0.04);
-  --dog-shadow-row: 0 10px 15px -3px rgba(28, 25, 23, 0.08), 0 4px 6px -4px rgba(28, 25, 23, 0.08);
+  --dog-shadow-soft: 0 10px 28px -20px rgba(19, 55, 47, 0.34), 0 1px 0 rgba(255, 255, 255, 0.64);
+  --dog-shadow-row: 0 16px 30px -22px rgba(19, 55, 47, 0.48), 0 2px 8px -6px rgba(19, 55, 47, 0.28);
 
   font-family: 'DM Sans', sans-serif;
   font-weight: 400;
   color: var(--dog-text);
-  background: var(--dog-page-bg);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--dog-bg) 82%, var(--dog-accent) 18%) 0, var(--dog-bg) 18rem),
+    var(--dog-page-bg);
   min-height: 100dvh;
   max-width: 960px;
   margin: 0 auto;
@@ -1644,27 +1798,36 @@ onUnmounted(() => {
 }
 
 :where(.dark) .dog-page {
-  /* Dark mode override - aligned with erez.ac style */
-  --dog-bg: #1c1917;          /* var(--color-bg-primary) */
-  --dog-surface: #292524;     /* var(--color-bg-secondary) */
-  --dog-surface-el: #3a3632;  /* var(--color-bg-tertiary) */
-  --dog-accent: #ff643e;      /* var(--color-accent) */
-  --dog-accent-2: #ff7e5f;
-  --dog-text: #e7e5e4;        /* var(--color-text-primary) */
-  --dog-text-muted: #a8a29e;  /* var(--color-text-secondary) */
-  --dog-border: #44403c;      /* var(--color-border) */
-  --dog-border-strong: #57534e;
-  --dog-gold: #fbbf24;
-  --dog-silver: #94a3b8;
-  --dog-bronze: #cd7f32;
-  --dog-info: #38bdf8;
+  --dog-bg: #0f1714;
+  --dog-surface: #16211d;
+  --dog-surface-el: #22342d;
+  --dog-accent: #73e0c0;
+  --dog-accent-2: #ff9abd;
+  --dog-accent-3: #f1c56a;
+  --dog-text: #eff7f3;
+  --dog-text-muted: #a7b9b0;
+  --dog-border: #314b42;
+  --dog-border-strong: #4e6d61;
+  --dog-icon: #a6f4da;
+  --dog-icon-muted: #c4d7ce;
+  --dog-day-bg: #c7f7e6;
+  --dog-day-text: #0c241e;
+  --dog-gold: #f1c56a;
+  --dog-silver: #bdd1dc;
+  --dog-bronze: #d59a61;
+  --dog-info: #8ec5ff;
 
-  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 6%, var(--dog-surface));
-  --dog-pill-bg: color-mix(in srgb, var(--dog-text-muted) 12%, transparent);
-  --dog-control-highlight: rgba(255, 255, 255, 0.02);
+  --dog-row-hover-bg: color-mix(in srgb, var(--dog-accent) 10%, var(--dog-surface));
+  --dog-pill-bg: color-mix(in srgb, var(--dog-accent) 12%, var(--dog-surface));
+  --dog-control-highlight: rgba(255, 255, 255, 0.05);
 
-  --dog-shadow-soft: 0 4px 20px -2px rgba(0, 0, 0, 0.25), 0 2px 6px -1px rgba(0, 0, 0, 0.15);
-  --dog-shadow-row: 0 10px 15px -3px rgba(0, 0, 0, 0.3), 0 4px 6px -4px rgba(0, 0, 0, 0.2);
+  --dog-shadow-soft: 0 18px 34px -26px rgba(0, 0, 0, 0.82), 0 1px 0 rgba(255, 255, 255, 0.05);
+  --dog-shadow-row: 0 18px 34px -24px rgba(0, 0, 0, 0.9), 0 4px 12px -10px rgba(0, 0, 0, 0.9);
+}
+
+.dog-page svg :is(path, polyline, line, rect, circle) {
+  stroke-width: inherit;
+  vector-effect: non-scaling-stroke;
 }
 
 /* ═══ Top bar / Header ═══ */
@@ -1674,7 +1837,7 @@ onUnmounted(() => {
   align-items: center;
   padding: 0.75rem 1rem;
   margin-bottom: 1.5rem;
-  background: var(--dog-panel-bg-soft);
+  background: color-mix(in srgb, var(--dog-surface) 84%, var(--dog-accent) 16%);
   border: 1px solid var(--dog-border);
   border-radius: var(--dog-radius-lg);
   box-shadow: var(--dog-shadow-soft);
@@ -1696,8 +1859,8 @@ onUnmounted(() => {
 }
 .dog-top-title {
   font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--dog-text);
+  font-weight: 700;
+  color: var(--dog-accent);
   margin: 0;
   text-align: center;
   white-space: nowrap;
@@ -1715,18 +1878,40 @@ onUnmounted(() => {
   align-items: center;
   justify-content: flex-end;
 }
+.dog-top-right :deep(button) {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.375rem;
+  height: 2.375rem;
+  padding: 0;
+  background: var(--dog-surface);
+  border: 1px solid var(--dog-border-strong);
+  border-radius: 999px;
+  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
+}
+.dog-top-right :deep(button:hover) {
+  opacity: 1;
+  background: var(--dog-row-hover-bg);
+  border-color: var(--dog-accent-2);
+}
+.dog-top-right :deep(svg) {
+  width: 1.15rem;
+  height: 1.15rem;
+  stroke-width: 2.05px;
+}
 .dog-back-link {
   display: inline-flex;
   align-items: center;
   gap: 0.35rem;
   font-size: 0.9rem;
-  color: var(--dog-text);
+  color: var(--dog-accent);
   text-decoration: none;
   background: var(--dog-surface);
-  border: 1px solid var(--dog-border);
+  border: 1px solid var(--dog-border-strong);
   border-radius: 999px;
   font-family: inherit;
-  font-weight: 500;
+  font-weight: 700;
   cursor: pointer;
   padding: 0 0.85rem;
   min-height: 38px;
@@ -1740,18 +1925,29 @@ onUnmounted(() => {
   text-overflow: ellipsis;
 }
 .dog-back-link:hover {
-  background: var(--dog-surface-el);
-  border-color: var(--dog-border-strong);
-  color: var(--dog-accent);
+  background: var(--dog-row-hover-bg);
+  border-color: var(--dog-accent);
+  color: var(--dog-accent-2);
 }
 .dog-back-icon {
   width: 1rem;
   height: 1rem;
-  stroke-width: 2.5;
+  color: var(--dog-accent-2);
+  stroke-width: 2px;
   transition: transform 0.15s;
 }
 .dog-back-link:hover .dog-back-icon {
   transform: translateX(-3px);
+}
+@media (max-width: 520px) {
+  .dog-back-link {
+    width: 2.375rem;
+    padding: 0;
+    justify-content: center;
+  }
+  .dog-back-link span {
+    display: none;
+  }
 }
 
 /* ═══ Page layout & metadata ═══ */
@@ -1776,12 +1972,12 @@ onUnmounted(() => {
   border-radius: 999px;
   background: var(--dog-pill-bg);
   border: 1px solid var(--dog-border);
-  color: var(--dog-text-muted);
+  color: var(--dog-text);
 }
 .dog-source-link-pill {
   color: var(--dog-accent);
   text-decoration: none;
-  font-weight: 500;
+  font-weight: 700;
   transition: background-color 0.15s, border-color 0.15s;
 }
 .dog-source-link-pill:hover {
@@ -1795,42 +1991,9 @@ onUnmounted(() => {
 .dog-pill-icon {
   width: 0.875rem;
   height: 0.875rem;
+  color: var(--dog-icon);
+  stroke-width: 1.9px;
   flex-shrink: 0;
-}
-
-/* ═══ Tabs ═══ */
-.dog-tabs {
-  display: flex;
-  gap: 0.25rem;
-  padding: 0.25rem;
-  background: var(--dog-panel-bg-soft);
-  border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-md);
-  margin-bottom: 1.5rem;
-  box-shadow: var(--dog-shadow-soft);
-}
-.dog-tab {
-  flex: 1;
-  padding: 0.75rem 1rem;
-  background: transparent;
-  border: none;
-  border-radius: 0.6rem;
-  color: var(--dog-text-muted);
-  font-family: inherit;
-  font-size: 0.95rem;
-  font-weight: 500;
-  cursor: pointer;
-  transition: background-color 0.15s, color 0.15s, box-shadow 0.15s;
-  min-height: 44px;
-}
-.dog-tab:hover {
-  background: color-mix(in srgb, var(--dog-surface) 62%, transparent);
-  color: var(--dog-text);
-}
-.dog-tab-active {
-  background: var(--dog-pill-bg);
-  color: var(--dog-accent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--dog-accent) 22%, transparent);
 }
 
 /* ═══ Search ═══ */
@@ -1845,14 +2008,18 @@ onUnmounted(() => {
   transform: translateY(-50%);
   width: 1.125rem;
   height: 1.125rem;
-  color: var(--dog-text-muted);
+  color: var(--dog-icon-muted);
+  stroke-width: 1.85px;
   pointer-events: none;
+}
+.dog-search-wrap:focus-within .dog-search-icon {
+  color: var(--dog-icon);
 }
 .dog-search-input {
   width: 100%;
   padding: 0.75rem 2.65rem 0.75rem 2.5rem;
   background: var(--dog-control-bg);
-  border: 1px solid var(--dog-border);
+  border: 1px solid var(--dog-border-strong);
   border-radius: var(--dog-radius-md);
   color: var(--dog-text);
   font-family: inherit;
@@ -1924,8 +2091,9 @@ onUnmounted(() => {
 
 /* ═══ Featured: Tällä viikolla ═══ */
 .dog-this-week-section {
-  background: var(--dog-panel-bg);
-  border: 1px solid var(--dog-border);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--dog-panel-bg) 86%, var(--dog-accent) 14%), color-mix(in srgb, var(--dog-panel-bg) 90%, var(--dog-accent-2) 10%));
+  border: 1px solid var(--dog-border-strong);
   border-radius: var(--dog-radius-lg);
   padding: 1.25rem;
   margin-bottom: 1.5rem;
@@ -1937,13 +2105,14 @@ onUnmounted(() => {
   gap: 0.5rem;
   font-size: 1.1rem;
   font-weight: 600;
-  color: var(--dog-accent-2);
+  color: var(--dog-accent);
   margin: 0 0 1rem 0;
 }
 .dog-heading-icon {
   width: 1.25rem;
   height: 1.25rem;
-  color: var(--dog-accent);
+  color: var(--dog-accent-2);
+  stroke-width: 1.9px;
 }
 .dog-this-week-list {
   display: flex;
@@ -1953,7 +2122,7 @@ onUnmounted(() => {
 .dog-show-row-featured {
   background: var(--dog-row-bg);
   border-radius: var(--dog-radius-sm);
-  border-color: color-mix(in srgb, var(--dog-accent) 18%, var(--dog-border));
+  border-color: color-mix(in srgb, var(--dog-accent) 34%, var(--dog-border));
 }
 .dog-show-row-featured:hover {
   background: var(--dog-row-hover-bg);
@@ -1990,22 +2159,23 @@ onUnmounted(() => {
 }
 
 /* ═══ Whole-show result cache progress ═══ */
-.dog-progress-card {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1.25rem;
-  margin-bottom: 1.5rem;
-  background: var(--dog-panel-bg);
-  border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-lg);
-  box-shadow: var(--dog-shadow-soft);
-  overflow: hidden;
+.dog-show-progress-inline {
+  min-width: 0;
 }
-@media (max-width: 520px) {
-  .dog-progress-card {
-    align-items: flex-start;
-  }
+.dog-progress-inline-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.8rem;
+  min-height: 44px;
+  padding: 0.7rem 0.75rem;
+  background: var(--dog-control-bg);
+  border: 1px solid var(--dog-border-strong);
+  border-radius: var(--dog-radius-md);
+  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
+}
+.dog-show-progress-error .dog-progress-inline-body {
+  align-items: center;
+  justify-content: space-between;
 }
 .dog-progress-orbit {
   position: relative;
@@ -2016,6 +2186,11 @@ onUnmounted(() => {
   border-radius: 999px;
   animation: dog-orbit-spin 2.8s linear infinite;
 }
+.dog-progress-orbit-compact {
+  width: 2rem;
+  height: 2rem;
+  margin-top: 0.15rem;
+}
 .dog-progress-orbit span {
   position: absolute;
   width: 0.55rem;
@@ -2023,41 +2198,56 @@ onUnmounted(() => {
   background: var(--dog-accent);
   border-radius: 999px;
 }
+.dog-progress-orbit-compact span {
+  width: 0.42rem;
+  height: 0.42rem;
+}
 .dog-progress-orbit span:nth-child(1) {
   top: -0.3rem;
   left: 50%;
   transform: translateX(-50%);
+}
+.dog-progress-orbit-compact span:nth-child(1) {
+  top: -0.22rem;
 }
 .dog-progress-orbit span:nth-child(2) {
   right: 0.2rem;
   bottom: 0.35rem;
   opacity: 0.75;
 }
+.dog-progress-orbit-compact span:nth-child(2) {
+  right: 0.1rem;
+  bottom: 0.22rem;
+}
 .dog-progress-orbit span:nth-child(3) {
   left: 0.2rem;
   bottom: 0.35rem;
   opacity: 0.45;
+}
+.dog-progress-orbit-compact span:nth-child(3) {
+  left: 0.1rem;
+  bottom: 0.22rem;
 }
 .dog-progress-content {
   min-width: 0;
   flex: 1;
 }
 .dog-progress-title {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.25rem;
   color: var(--dog-text);
-  font-size: 1rem;
-  font-weight: 600;
+  font-size: 0.9rem;
+  font-weight: 700;
 }
 .dog-progress-copy,
 .dog-progress-note {
   margin: 0;
   color: var(--dog-text-muted);
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
 .dog-progress-track {
   position: relative;
-  height: 0.45rem;
-  margin: 0.85rem 0 0.55rem;
+  height: 0.4rem;
+  margin: 0.55rem 0 0.4rem;
   background: color-mix(in srgb, var(--dog-surface-el) 80%, var(--dog-text-muted));
   border-radius: 999px;
   overflow: hidden;
@@ -2073,6 +2263,22 @@ onUnmounted(() => {
 .dog-progress-track-indeterminate .dog-progress-fill {
   width: 38%;
   animation: dog-progress-slide 1.6s ease-in-out infinite;
+}
+.dog-show-retry-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 34px;
+  padding: 0 0.75rem;
+  background: var(--dog-accent);
+  border: 1px solid var(--dog-accent);
+  border-radius: 999px;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
 }
 @keyframes dog-orbit-spin {
   to { transform: rotate(360deg); }
@@ -2139,8 +2345,9 @@ onUnmounted(() => {
   align-items: center;
   width: 100%;
   padding: 0.75rem 1rem;
-  background: var(--dog-panel-bg-soft);
-  border: 1px solid var(--dog-border);
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--dog-panel-bg-soft) 88%, var(--dog-accent) 12%), color-mix(in srgb, var(--dog-panel-bg-soft) 92%, var(--dog-accent-2) 8%));
+  border: 1px solid var(--dog-border-strong);
   border-radius: var(--dog-radius-md);
   color: var(--dog-text);
   font-family: inherit;
@@ -2158,13 +2365,15 @@ onUnmounted(() => {
 .dog-month-label {
   flex: 1;
   text-align: left;
+  color: var(--dog-accent);
+  font-weight: 800;
 }
 .dog-month-count {
   font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--dog-text);
-  background: var(--dog-surface-el);
-  border: 1px solid var(--dog-border-strong);
+  font-weight: 700;
+  color: var(--dog-accent-2);
+  background: color-mix(in srgb, var(--dog-accent-2) 10%, var(--dog-surface));
+  border: 1px solid color-mix(in srgb, var(--dog-accent-2) 32%, var(--dog-border));
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
 }
@@ -2173,16 +2382,16 @@ onUnmounted(() => {
   height: 1.25rem;
   transition: transform 0.2s, color 0.15s, opacity 0.15s;
   transform: rotate(-90deg);
-  color: var(--dog-text);
-  stroke-width: 2.2px;
-  opacity: 0.8;
+  color: var(--dog-accent-2);
+  stroke-width: 2.15px;
+  opacity: 1;
   flex-shrink: 0;
 }
 .dog-chevron-open {
   transform: rotate(0deg);
 }
 .dog-month-header:hover .dog-chevron {
-  color: var(--dog-accent);
+  color: var(--dog-accent-2);
   opacity: 1;
 }
 
@@ -2218,9 +2427,21 @@ onUnmounted(() => {
   transform: translateY(-1px);
 }
 .dog-show-date {
-  font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
-  font-size: 0.8rem;
-  color: var(--dog-text-muted);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 0.65rem;
+  font-family: inherit;
+  font-size: 1.05rem;
+  line-height: 1;
+  color: var(--dog-day-text);
+  background:
+    linear-gradient(145deg, color-mix(in srgb, var(--dog-day-bg) 88%, var(--dog-accent-3) 12%), var(--dog-day-bg));
+  border: 1px solid color-mix(in srgb, var(--dog-day-bg) 52%, var(--dog-border));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, #ffffff 20%, transparent), 0 8px 16px -14px var(--dog-day-bg);
+  font-weight: 800;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -2257,7 +2478,7 @@ onUnmounted(() => {
   background: var(--dog-surface-el);
   color: var(--dog-text);
   font-size: 0.72rem;
-  font-weight: 500;
+  font-weight: 700;
   line-height: 1.2;
 }
 .dog-show-stat-soft {
@@ -2268,7 +2489,7 @@ onUnmounted(() => {
 .dog-show-stat-live {
   color: #ffffff;
   border-color: var(--dog-accent-2);
-  background: var(--dog-accent);
+  background: var(--dog-accent-2);
   font-weight: 600;
 }
 .dog-search-result-info {
@@ -2286,7 +2507,7 @@ onUnmounted(() => {
 }
 .dog-search-breed-tag {
   font-size: 0.8rem;
-  font-weight: 500;
+  font-weight: 700;
   color: var(--dog-accent-2);
   margin-top: 0.15rem;
 }
@@ -2300,15 +2521,14 @@ onUnmounted(() => {
 .dog-arrow {
   width: 1rem;
   height: 1rem;
-  color: var(--dog-text);
-  stroke-width: 2.5px;
-  opacity: 0.8;
+  color: var(--dog-accent-2);
+  stroke-width: 2.15px;
+  opacity: 1;
   flex-shrink: 0;
   transition: color 0.15s, transform 0.15s, opacity 0.15s;
 }
-.dog-show-row:hover .dog-arrow,
-.dog-breed-row:hover .dog-arrow {
-  color: var(--dog-accent);
+.dog-show-row:hover .dog-arrow {
+  color: var(--dog-accent-2);
   opacity: 1;
   transform: translateX(3px);
 }
@@ -2340,107 +2560,71 @@ onUnmounted(() => {
 
 
 /* ═══ Breed list (detail view) ═══ */
-.dog-detail-filter-bar {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  background: var(--dog-panel-bg-soft);
-  border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-md);
-  box-shadow: var(--dog-shadow-soft);
+.dog-show-tools-panel {
+  background: color-mix(in srgb, var(--dog-panel-bg) 90%, var(--dog-accent) 10%);
+}
+.dog-results-filter-grid.dog-show-tools-grid {
+  align-items: end;
+  grid-template-columns: 1fr;
 }
 @media (min-width: 640px) {
-  .dog-detail-filter-bar {
-    flex-direction: row;
-    align-items: center;
-    justify-content: space-between;
+  .dog-results-filter-grid.dog-show-tools-grid {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-loading {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-loaded {
+    grid-template-columns:
+      minmax(0, 2.2fr)
+      minmax(0, 0.8fr)
+      minmax(0, 0.8fr)
+      minmax(0, 0.85fr);
   }
 }
 .dog-breed-search {
-  flex: 1;
-  max-width: 400px;
   margin-bottom: 0;
 }
-.dog-toggle {
+.dog-show-wide-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0 0.75rem;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0 1rem;
   min-height: 44px;
   background: var(--dog-control-bg);
-  border: 1px solid var(--dog-border);
-  border-radius: 999px;
-  color: var(--dog-text-muted);
-  font-size: 0.85rem;
+  border: 1px solid var(--dog-border-strong);
+  border-radius: var(--dog-radius-md);
+  color: var(--dog-accent-2);
+  font-family: inherit;
+  font-size: 0.88rem;
+  font-weight: 800;
   cursor: pointer;
+  width: 100%;
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
+  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
 }
-.dog-toggle input {
+.dog-show-wide-toggle:hover {
+  background: color-mix(in srgb, var(--dog-accent-2) 10%, var(--dog-surface));
+  border-color: var(--dog-accent-2);
+  transform: translateY(-1px);
+}
+.dog-toggle-icon {
   width: 1rem;
   height: 1rem;
-  accent-color: var(--dog-accent);
+  color: var(--dog-accent-2);
+  stroke-width: 2px;
+  flex-shrink: 0;
 }
 .dog-breed-list {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
-}
-.dog-breed-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 0.75rem 1rem;
-  background: var(--dog-row-bg);
-  border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-sm);
-  color: var(--dog-text);
-  font-family: inherit;
-  font-size: 0.9rem;
-  font-weight: 400;
-  cursor: pointer;
-  text-align: left;
-  min-height: 44px;
-  transition: background 0.12s, border-color 0.12s, box-shadow 0.12s, transform 0.12s;
-}
-.dog-breed-row:hover:not(:disabled) {
-  background: var(--dog-row-hover-bg);
-  border-color: var(--dog-accent);
-  box-shadow: var(--dog-shadow-row);
-  transform: translateY(-1px);
+  gap: 0.55rem;
 }
 .dog-breed-row-disabled {
   cursor: default;
   opacity: 0.5;
-}
-.dog-breed-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.dog-breed-name {
-  font-weight: 500;
-}
-.dog-breed-count {
-  font-size: 0.8rem;
-  color: var(--dog-text-muted);
-}
-.dog-breed-judge {
-  color: var(--dog-text-muted);
-  font-style: italic;
-  font-size: 0.75rem;
-}
-.dog-breed-status {
-  flex-shrink: 0;
-}
-.dog-check {
-  color: #10b981;
-  font-size: 1.1rem;
-  font-weight: 700;
-}
-.dog-no-results {
-  color: var(--dog-text-muted);
 }
 
 /* ═══ Filter Panel (results view) ═══ */
@@ -2466,16 +2650,18 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  min-width: 0;
 }
 .dog-filter-label {
   font-size: 0.75rem;
-  font-weight: 500;
+  font-weight: 700;
   color: var(--dog-text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 .dog-filter-select {
   width: 100%;
+  min-width: 0;
   padding: 0.5rem 0.75rem;
   background: var(--dog-control-bg);
   border: 1px solid var(--dog-border);
@@ -2529,9 +2715,9 @@ onUnmounted(() => {
 .dog-award-type {
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--dog-accent);
+  color: var(--dog-accent-2);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 .dog-award-text {
   font-size: 0.85rem;
@@ -2556,7 +2742,7 @@ onUnmounted(() => {
 }
 .dog-gender-symbol {
   font-size: 1.15rem;
-  color: var(--dog-accent);
+  color: var(--dog-accent-2);
 }
 
 /* ═══ Class section ═══ */
@@ -2580,7 +2766,7 @@ onUnmounted(() => {
   border: 1px solid var(--dog-border);
   border-radius: 999px;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0;
 }
 .dog-class-title-text {
   font-size: 0.95rem;
@@ -2643,7 +2829,7 @@ onUnmounted(() => {
 }
 .dog-dog-name {
   color: var(--dog-accent) !important;
-  font-weight: 500;
+  font-weight: 700;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -2659,7 +2845,9 @@ onUnmounted(() => {
 .dog-external {
   width: 0.75rem;
   height: 0.75rem;
-  opacity: 0.6;
+  color: var(--dog-icon);
+  opacity: 1;
+  stroke-width: 1.85px;
   flex-shrink: 0;
 }
 
@@ -2686,7 +2874,7 @@ onUnmounted(() => {
   font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.03em;
+  letter-spacing: 0;
 }
 .dog-badge-gold {
   background: color-mix(in srgb, var(--dog-gold) 12%, var(--dog-surface));
@@ -2725,9 +2913,9 @@ onUnmounted(() => {
   border-radius: 0.25rem;
   font-size: 0.7rem;
   font-weight: 600;
-  background: color-mix(in srgb, var(--dog-accent) 12%, var(--dog-surface));
-  color: var(--dog-accent);
-  border: 1px solid color-mix(in srgb, var(--dog-accent) 30%, var(--dog-border));
+  background: color-mix(in srgb, var(--dog-accent-2) 12%, var(--dog-surface));
+  color: var(--dog-accent-2);
+  border: 1px solid color-mix(in srgb, var(--dog-accent-2) 30%, var(--dog-border));
 }
 
 /* ═══ Critique ═══ */
@@ -2749,21 +2937,27 @@ onUnmounted(() => {
   transition: background-color 0.12s, color 0.12s;
 }
 .dog-critique-toggle:hover {
-  background: color-mix(in srgb, var(--dog-accent) 6%, var(--dog-surface-el));
+  background: color-mix(in srgb, var(--dog-accent) 8%, var(--dog-surface-el));
   color: var(--dog-text);
 }
 .dog-critique-icon {
   width: 0.9rem;
   height: 0.9rem;
-  color: var(--dog-text-muted);
+  color: var(--dog-icon);
+  stroke-width: 1.9px;
 }
 .dog-chevron-sm {
   width: 1rem;
   height: 1rem;
-  transition: transform 0.2s;
+  color: var(--dog-accent-2);
+  stroke-width: 2.15px;
+  transition: transform 0.2s, color 0.15s;
   transform: rotate(-90deg);
   flex-shrink: 0;
   margin-left: auto;
+}
+.dog-critique-toggle:hover .dog-chevron-sm {
+  color: var(--dog-accent-2);
 }
 .dog-critique-text {
   padding: 0.85rem 1.25rem;
@@ -2801,60 +2995,151 @@ onUnmounted(() => {
   max-height: 2000px;
 }
 
-/* ═══ Show-wide results (Dogs tab) ═══ */
-.dog-detail-tabs {
-  margin-top: 0.5rem;
+/* ═══ Show-wide results ═══ */
+.dog-breed-group-list {
+  gap: 0.55rem;
 }
 .dog-breed-group-section {
   background: var(--dog-panel-bg);
   border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-lg);
-  padding: 1rem;
-  margin-bottom: 1.5rem;
+  border-radius: var(--dog-radius-md);
+  padding: 0;
+  margin-bottom: 0;
   box-shadow: var(--dog-shadow-soft);
+  overflow: hidden;
 }
 .dog-breed-group-header-btn {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.75rem;
   width: 100%;
-  background: none;
+  background: var(--dog-row-bg);
   border: none;
   font-family: inherit;
-  font-size: 1.1rem;
-  font-weight: 600;
+  font-size: 0.95rem;
+  font-weight: 500;
   color: var(--dog-text);
   cursor: pointer;
-  padding: 0.25rem 0 0.75rem 0;
+  padding: 0.85rem 1rem;
   text-align: left;
+  min-height: 64px;
+  transition: background 0.12s, color 0.12s;
 }
-.dog-breed-group-header-btn:hover .dog-breed-group-title {
+.dog-breed-group-header-btn:hover:not(:disabled) {
+  background: var(--dog-row-hover-bg);
+}
+.dog-breed-group-header-btn:hover:not(:disabled) .dog-breed-group-title {
   color: var(--dog-accent);
 }
-.dog-breed-group-title {
+.dog-breed-group-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
   flex: 1;
+}
+.dog-breed-group-title {
+  font-weight: 700;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   transition: color 0.15s;
+}
+.dog-breed-group-meta {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.7rem;
+  color: var(--dog-text-muted);
+  font-size: 0.78rem;
+}
+.dog-breed-group-side {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-shrink: 0;
 }
 .dog-breed-group-badge {
   font-size: 0.8rem;
-  font-weight: 400;
-  color: var(--dog-text-muted);
+  font-weight: 700;
+  color: var(--dog-accent-2);
   background: var(--dog-pill-bg);
   padding: 0.15rem 0.5rem;
   border-radius: 999px;
   border: 1px solid var(--dog-border);
 }
+.dog-breed-result-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--dog-accent);
+  flex-shrink: 0;
+}
+.dog-breed-result-icon svg {
+  width: 100%;
+  height: 100%;
+}
+.dog-breed-result-icon-muted {
+  color: var(--dog-text-muted);
+  opacity: 0.58;
+}
+.dog-breed-group-dogs {
+  border-top: 1px solid var(--dog-border);
+  padding: 0.75rem 1rem 1rem;
+  background: color-mix(in srgb, var(--dog-panel-bg) 94%, var(--dog-accent) 6%);
+}
+.dog-breed-group-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 0.75rem;
+}
+.dog-breed-open-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  min-height: 34px;
+  padding: 0 0.75rem;
+  background: var(--dog-control-bg);
+  border: 1px solid var(--dog-border);
+  border-radius: 999px;
+  color: var(--dog-accent);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.dog-breed-open-link:hover {
+  background: var(--dog-row-hover-bg);
+  border-color: var(--dog-accent);
+}
 .dog-arrow-sm {
   width: 1rem;
   height: 1rem;
-  color: var(--dog-text);
-  opacity: 0.6;
+  color: var(--dog-accent-2);
+  opacity: 1;
+  stroke-width: 2.15px;
   transition: transform 0.15s, color 0.15s, opacity 0.15s;
 }
 .dog-breed-group-header-btn:hover .dog-arrow-sm {
   transform: translateX(3px);
-  color: var(--dog-accent);
+  color: var(--dog-accent-2);
   opacity: 1;
+}
+@media (max-width: 560px) {
+  .dog-breed-group-header-btn {
+    align-items: flex-start;
+  }
+  .dog-breed-group-side {
+    gap: 0.35rem;
+  }
+  .dog-breed-group-badge {
+    display: none;
+  }
 }
 .dog-class-badge-inline,
 .dog-gender-badge-inline {

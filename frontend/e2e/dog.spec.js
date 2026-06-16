@@ -180,7 +180,8 @@ test.describe('Dog Show Browser', () => {
 
     await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
-    await expect(page.getByRole('checkbox', { name: 'Vain tuloksia' })).toBeVisible()
+    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toBeVisible()
 
     await page.getByRole('button', { name: /Basenji 3 koiraa/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042&group=6&breed=123$/)
@@ -188,7 +189,7 @@ test.describe('Dog Show Browser', () => {
 
     await page.goBack()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
-    await expect(page.getByRole('checkbox', { name: 'Vain tuloksia' })).toBeVisible()
+    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
     await expect(page.getByText('Testituomari')).toHaveCount(0)
 
     await page.goBack()
@@ -251,7 +252,7 @@ test.describe('Dog Show Browser', () => {
     await targetShow.click()
 
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
-    await expect(page.getByRole('checkbox', { name: 'Vain tuloksia' })).toBeVisible()
+    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThan(5)
   })
 
@@ -359,12 +360,16 @@ test.describe('Dog Show Browser', () => {
 
     await page.goto('/dog')
     await page.getByRole('button', { name: /Basenji Show/ }).click()
-    await expect(page.getByRole('button', { name: 'Rotuluettelo (1)' })).toBeVisible()
+    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
     
-    // Switch to results & dogs tab
-    await page.getByRole('button', { name: 'Koirat & Tulokset' }).click()
+    // Open whole-show filter panel
+    await page.getByRole('button', { name: 'Suodata koko näyttelyä' }).click()
     
-    // Check that both dogs are visible
+    // Check that one combined search/filter panel remains and breed groups expand on demand
+    await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
+    await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti')).toHaveCount(0)
+    await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     await expect(page.getByText('Iltatähti')).toBeVisible()
     
@@ -376,11 +381,11 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByText('Iltatähti')).not.toBeVisible()
     
     // Search text for 'Aamun'
-    await page.getByPlaceholder('Nimi, numero tai rotu...').fill('Aamun')
+    await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Aamun')
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     
     // Non-matching search
-    await page.getByPlaceholder('Nimi, numero tai rotu...').fill('Mustikki')
+    await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Mustikki')
     await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
   })
 })

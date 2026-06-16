@@ -476,6 +476,66 @@ def _update_index_breed_judges(show_id, breed_map):
     return updated
 
 
+def _merge_breed_map_judges_into_breeds(breeds, breed_map):
+    if not breed_map:
+        return False
+
+    updated = False
+    for breed in breeds or []:
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if not group or not breed_id:
+            continue
+
+        cached_breed = breed_map.get((str(group), str(breed_id)))
+        judge = _clean_judge_name(cached_breed.get("judge") if cached_breed else "")
+        if not judge or _clean_judge_name(breed.get("judge")) == judge:
+            continue
+
+        breed["judge"] = judge
+        updated = True
+
+    return updated
+
+
+def _index_judge_breed_map(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return {}
+
+    breed_map = {}
+    for breed in indexed_show.get("breeds", []) or []:
+        judge = _clean_judge_name(breed.get("judge"))
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if judge and group and breed_id:
+            breed_map[(str(group), str(breed_id))] = {"judge": judge}
+    return breed_map
+
+
+def _enrich_breeds_with_index_judges(show_id, breeds):
+    try:
+        return _merge_breed_map_judges_into_breeds(
+            breeds,
+            _index_judge_breed_map(show_id),
+        )
+    except Exception as e:
+        logger.warning("dog_detail_index_judge_enrich_failed", show_id=show_id, error=str(e))
+        return False
+
+
+def _enrich_breeds_with_cached_result_judges(show_id, breeds):
+    try:
+        breed_map = _cached_result_breed_map(show_id)
+        updated = _merge_breed_map_judges_into_breeds(breeds, breed_map)
+        if updated:
+            _update_index_breed_judges(show_id, breed_map)
+        return updated
+    except Exception as e:
+        logger.warning("dog_detail_cached_judge_enrich_failed", show_id=show_id, error=str(e))
+        return False
+
+
 def _normalize_show_index_judges():
     changed = False
     for show in _show_index.get("shows", {}).values():
@@ -1143,10 +1203,12 @@ def _show_detail_from_index(show_id):
         return None
 
     updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()
+    breeds = _clean_breed_list(indexed_show.get("breeds", []))
+    _enrich_breeds_with_cached_result_judges(show_id, breeds)
     return {
         "id": int(show_id),
         "title": indexed_show.get("title") or indexed_show.get("name", ""),
-        "breeds": _clean_breed_list(indexed_show.get("breeds", [])),
+        "breeds": breeds,
         "source_url": indexed_show.get("source_url") or _source_url(show_id),
         "fetched_at": updated_at,
         "fetched_at_iso": _utc_iso(updated_at),
@@ -1815,7 +1877,15 @@ def show_detail(show_id):
     try:
         cached = _cached_show_detail(show_id)
         if cached:
-            return jsonify(cached)
+            data = dict(cached)
+            data["breeds"] = _clean_breed_list(data.get("breeds", []))
+            if _enrich_breeds_with_cached_result_judges(show_id, data["breeds"]):
+                existing_cache = _show_detail_cache.get(show_id) or {}
+                _show_detail_cache[show_id] = {
+                    "data": data,
+                    "ts": existing_cache.get("ts", time.time()),
+                }
+            return jsonify(data)
 
         indexed = _show_detail_from_index(show_id)
         if indexed:
@@ -1829,23 +1899,8 @@ def show_detail(show_id):
         data["fetched_at"] = fetched_at
         data["fetched_at_iso"] = _utc_iso(fetched_at)
 
-        # Enrich breeds with judge info from the index if available
-        try:
-            _load_index()
-            sid_str = str(show_id)
-            if sid_str in _show_index["shows"]:
-                idx_show = _show_index["shows"][sid_str]
-                idx_breeds = {
-                    (str(b.get("group")), str(b.get("breed_id"))): _clean_judge_name(b.get("judge"))
-                    for b in idx_show.get("breeds", [])
-                    if b.get("judge")
-                }
-                for breed_data in data.get("breeds", []):
-                    key = (str(breed_data.get("group")), str(breed_data.get("breed_id")))
-                    if key in idx_breeds:
-                        breed_data["judge"] = idx_breeds[key]
-        except Exception as e:
-            logger.warning("dog_detail_judge_enrich_failed", show_id=show_id, error=str(e))
+        _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
+        _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))
 
         try:
             _persist_show_detail_to_index(show_id, data, fetched_at)
