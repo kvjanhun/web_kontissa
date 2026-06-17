@@ -17,9 +17,12 @@ test.describe('Homepage', () => {
     await expect(page.getByText('// gallery', { exact: true })).toBeVisible()
   })
 
-  test('gallery shows the highlighted project', async ({ page }) => {
+  test('gallery switches highlighted project when a thumbnail is clicked', async ({ page }) => {
     await page.goto('/')
     const gallery = page.getByRole('region', { name: 'Project gallery' })
+    await expect(gallery.getByRole('heading', { name: 'Sanakenno' })).toBeVisible()
+    await expect(gallery.getByRole('link', { name: /live/i })).toHaveAttribute('href', 'https://sanakenno.fi')
+    await gallery.getByRole('tab', { name: 'erez.ac admin' }).click()
     await expect(gallery.getByRole('heading', { name: 'erez.ac admin' })).toBeVisible()
   })
 
