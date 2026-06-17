@@ -109,7 +109,7 @@ describe('award filters', () => {
       'VET-SERT',
       'JUN-SERT',
       'VARA-SERT',
-      'NORD-SERT',
+      'NORD SERT',
       'NORD VET-SERT',
       'NORD JUN-SERT',
       'NORD VARA-SERT',
