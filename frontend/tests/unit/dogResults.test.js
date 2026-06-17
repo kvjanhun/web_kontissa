@@ -77,6 +77,46 @@ describe('award filters', () => {
     ]))
   })
 
+  it('orders CACIB variants after SERT variants in an international show', () => {
+    const internationalResults = [
+      { name: 'A', awards: 'BIS-1, ROP, SERT, JUN-SERT, VET-SERT, VARA-SERT, CACIB, CACIB-J, CACIB-V, VARA-CACIB, SA' },
+    ]
+    const awards = availableAwardsFromResults(internationalResults)
+    expect(awards).toEqual([
+      'BIS',
+      'ROP/VSP',
+      'SERT',
+      'VET-SERT',
+      'JUN-SERT',
+      'VARA-SERT',
+      'CACIB',
+      'CACIB-J',
+      'CACIB-V',
+      'VARA-CACIB',
+      'SA',
+    ])
+  })
+
+  it('orders NORD cert variants after SERT variants in a Nordic show', () => {
+    const nordicResults = [
+      { name: 'A', awards: 'BIS-1, ROP, SERT, JUN-SERT, VET-SERT, VARA-SERT, NORD-SERT, NORD VET-SERT, NORD JUN-SERT, NORD VARA-SERT, SA' },
+    ]
+    const awards = availableAwardsFromResults(nordicResults)
+    expect(awards).toEqual([
+      'BIS',
+      'ROP/VSP',
+      'SERT',
+      'VET-SERT',
+      'JUN-SERT',
+      'VARA-SERT',
+      'NORD-SERT',
+      'NORD VET-SERT',
+      'NORD JUN-SERT',
+      'NORD VARA-SERT',
+      'SA',
+    ])
+  })
+
   it('matches grouped awards while keeping MVA and SERT variants exact', () => {
     expect(awardMatchesFilter('SA, BIS JUN-2', 'BIS')).toBe(true)
     expect(awardMatchesFilter('SA, BIS VET-4', 'BIS')).toBe(true)
