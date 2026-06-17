@@ -122,14 +122,6 @@ class Step(db.Model):
         }
 
 
-class BlockedWord(db.Model):
-    """Admin-curated list of words excluded from all Sanakenno puzzles."""
-    __tablename__ = 'blocked_words'
-    id = db.Column(db.Integer, primary_key=True)
-    word = db.Column(db.String(100), unique=True, nullable=False)
-    blocked_at = db.Column(db.DateTime, nullable=True, default=lambda: datetime.now(timezone.utc))
-
-
 class PageView(db.Model):
     """Per-path page view counter. Single row per path, upserted on each hit."""
     __tablename__ = 'page_views'
@@ -146,61 +138,3 @@ class PageViewEvent(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     path = db.Column(db.String(200), nullable=False, index=True)
     timestamp = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-
-class KennoConfig(db.Model):
-    """Key-value store for Sanakenno puzzle scheduling state."""
-    __tablename__ = 'bee_config'
-    key = db.Column(db.String(50), primary_key=True)
-    value = db.Column(db.Text, nullable=False)
-
-
-class KennoPuzzle(db.Model):
-    """Sanakenno puzzle slots with 7 letters each."""
-    __tablename__ = 'bee_puzzles'
-    slot = db.Column(db.Integer, primary_key=True)
-    letters = db.Column(db.String(50), nullable=False)  # comma-separated: "a,e,k,l,n,s,ö"
-    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-    updated_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
-
-
-class KennoCombination(db.Model):
-    """Pre-computed 7-letter combinations that have at least one pangram."""
-    __tablename__ = 'bee_combinations'
-    # Sorted 7-char string, e.g. "aeklnös"
-    letters = db.Column(db.String(7), primary_key=True)
-    total_pangrams = db.Column(db.Integer, nullable=False, index=True)
-    min_word_count = db.Column(db.Integer, nullable=False, index=True)
-    max_word_count = db.Column(db.Integer, nullable=False, index=True)
-    min_max_score = db.Column(db.Integer, nullable=False)
-    max_max_score = db.Column(db.Integer, nullable=False)
-    # Per-center variations stored as JSON array of 7 objects
-    variations = db.Column(db.Text, nullable=False)
-    # Whether this combination is already used in a KennoPuzzle slot
-    in_rotation = db.Column(db.Boolean, nullable=False, default=False, index=True)
-
-    def to_dict(self):
-        import json
-        return {
-            "letters": self.letters,
-            "total_pangrams": self.total_pangrams,
-            "min_word_count": self.min_word_count,
-            "max_word_count": self.max_word_count,
-            "min_max_score": self.min_max_score,
-            "max_max_score": self.max_max_score,
-            "variations": json.loads(self.variations),
-            "in_rotation": self.in_rotation,
-        }
-
-
-class KennoAchievement(db.Model):
-    """Records when anonymous players reach rank milestones in Sanakenno."""
-    __tablename__ = 'bee_achievements'
-    id = db.Column(db.Integer, primary_key=True)
-    puzzle_number = db.Column(db.Integer, nullable=False)
-    rank = db.Column(db.String(50), nullable=False, index=True)
-    score = db.Column(db.Integer, nullable=False)
-    max_score = db.Column(db.Integer, nullable=False)
-    words_found = db.Column(db.Integer, nullable=False)
-    elapsed_ms = db.Column(db.Integer, nullable=True)
-    achieved_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))

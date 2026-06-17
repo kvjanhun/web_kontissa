@@ -5,33 +5,33 @@ class TestTrackPageview:
     """POST /api/pageview"""
 
     def test_increments_new_path(self, client):
-        res = client.post("/api/pageview", json={"path": "/sanakenno"})
+        res = client.post("/api/pageview", json={"path": "/dog"})
         assert res.status_code == 200
         data = res.get_json()
-        assert data["path"] == "/sanakenno"
+        assert data["path"] == "/dog"
         assert data["count"] == 1
 
     def test_dedup_same_session(self, client):
         """Same client session should only count once per path."""
-        client.post("/api/pageview", json={"path": "/sanakenno"})
-        res = client.post("/api/pageview", json={"path": "/sanakenno"})
+        client.post("/api/pageview", json={"path": "/dog"})
+        res = client.post("/api/pageview", json={"path": "/dog"})
         assert res.get_json()["count"] == 1
 
     def test_different_paths_counted_separately(self, client):
         """Different paths are deduped independently within the same session."""
-        client.post("/api/pageview", json={"path": "/sanakenno"})
+        client.post("/api/pageview", json={"path": "/dog"})
         res = client.post("/api/pageview", json={"path": "/about"})
         assert res.get_json()["count"] == 1
-        # Second hit on /sanakenno still deduped
-        res2 = client.post("/api/pageview", json={"path": "/sanakenno"})
+        # Second hit on /dog still deduped
+        res2 = client.post("/api/pageview", json={"path": "/dog"})
         assert res2.get_json()["count"] == 1
 
     def test_different_sessions_counted(self, app):
         """Different browser sessions should each count."""
         c1 = app.test_client()
         c2 = app.test_client()
-        c1.post("/api/pageview", json={"path": "/sanakenno"})
-        res = c2.post("/api/pageview", json={"path": "/sanakenno"})
+        c1.post("/api/pageview", json={"path": "/dog"})
+        res = c2.post("/api/pageview", json={"path": "/dog"})
         assert res.get_json()["count"] == 2
 
     def test_rejects_missing_path(self, client):
@@ -43,7 +43,7 @@ class TestTrackPageview:
         assert res.status_code == 400
 
     def test_rejects_path_without_leading_slash(self, client):
-        res = client.post("/api/pageview", json={"path": "sanakenno"})
+        res = client.post("/api/pageview", json={"path": "dog"})
         assert res.status_code == 400
 
     def test_rejects_path_over_200_chars(self, client):
@@ -58,7 +58,7 @@ class TestTrackPageview:
 
     def test_no_auth_required(self, client):
         """Page view tracking is public — no login needed."""
-        res = client.post("/api/pageview", json={"path": "/sanakenno"})
+        res = client.post("/api/pageview", json={"path": "/dog"})
         assert res.status_code == 200
 
 
@@ -78,16 +78,16 @@ class TestListPageviews:
         c1 = app.test_client()
         c2 = app.test_client()
         c3 = app.test_client()
-        c1.post("/api/pageview", json={"path": "/sanakenno"})
-        c2.post("/api/pageview", json={"path": "/sanakenno"})
+        c1.post("/api/pageview", json={"path": "/dog"})
+        c2.post("/api/pageview", json={"path": "/dog"})
         c3.post("/api/pageview", json={"path": "/about"})
 
         res = logged_in_admin.get("/api/pageviews")
         assert res.status_code == 200
         data = res.get_json()
         assert len(data) == 2
-        # Sorted by count desc — /sanakenno (2) first
-        assert data[0]["path"] == "/sanakenno"
+        # Sorted by count desc — /dog (2) first
+        assert data[0]["path"] == "/dog"
         assert data[0]["count"] == 2
         assert data[1]["path"] == "/about"
         assert data[1]["count"] == 1
@@ -151,25 +151,25 @@ class TestPageviewEvents:
         """Page view events are recorded alongside summary counts."""
         c1 = app.test_client()
         c2 = app.test_client()
-        c1.post("/api/pageview", json={"path": "/sanakenno"})
-        c2.post("/api/pageview", json={"path": "/sanakenno"})
+        c1.post("/api/pageview", json={"path": "/dog"})
+        c2.post("/api/pageview", json={"path": "/dog"})
 
         res = logged_in_admin.get("/api/pageviews/events?days=1")
         data = res.get_json()
-        assert "/sanakenno" in data["paths"]
+        assert "/dog" in data["paths"]
         # Find today's entry
         today_entry = data["series"][-1]
-        assert today_entry["counts"].get("/sanakenno") == 2
+        assert today_entry["counts"].get("/dog") == 2
 
     def test_multiple_paths(self, app, logged_in_admin):
         c1 = app.test_client()
         c2 = app.test_client()
-        c1.post("/api/pageview", json={"path": "/sanakenno"})
+        c1.post("/api/pageview", json={"path": "/dog"})
         c2.post("/api/pageview", json={"path": "/about"})
 
         res = logged_in_admin.get("/api/pageviews/events?days=1")
         data = res.get_json()
-        assert sorted(data["paths"]) == ["/about", "/sanakenno"]
+        assert sorted(data["paths"]) == ["/about", "/dog"]
 
     def test_days_param_clamped(self, logged_in_admin):
         """Days param is clamped to 1-90."""

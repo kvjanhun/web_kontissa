@@ -22,7 +22,6 @@ test.describe('Admin Dashboard', () => {
     await expect(adminPage.locator('button').filter({ hasText: /Analytics|Analytiikka/ })).toBeVisible()
     await expect(adminPage.locator('button').filter({ hasText: /Recipes|Reseptit/ })).toBeVisible()
     await expect(adminPage.locator('button').filter({ hasText: /Health|Terveys/ })).toBeVisible()
-    await expect(adminPage.locator('button').filter({ hasText: 'Sanakenno' })).toBeVisible()
   })
 
   test('sections tab shows seeded sections', async ({ adminPage }) => {

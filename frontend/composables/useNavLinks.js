@@ -6,9 +6,7 @@ export function useNavLinks(handleLogout) {
   const { isAuthenticated, isAdmin } = storeToRefs(useAuthStore())
 
   const navLinks = computed(() => {
-    const links = [
-      { to: 'https://sanakenno.fi', labelKey: 'nav.sanakenno', external: true },
-    ]
+    const links = []
     if (isAuthenticated.value) {
       links.push({ to: '/recipes', labelKey: 'nav.recipes' })
     }

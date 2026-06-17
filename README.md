@@ -21,7 +21,6 @@ Personal portfolio website by Konsta Janhunen.
 - Interactive terminal animation on the home page (cowsay, weather, etc.)
 - Admin panel for managing content sections (tab-based dashboard)
 - Shared recipe book with search, categories, cooking mode with wake lock (for logged in users only)
-- [Sanakenno](https://erez.ac/sanakenno) — Finnish word game with a full admin panel. Inspired by [NYT Spelling Bee](https://www.nytimes.com/puzzles/spelling-bee)
 - [Dog show browser](https://erez.ac/dog) — Showlink show and result browser with server-side crawling and persistent result caches
 - Real-time weather from the Finnish Meteorological Institute (FMI) API
 - Accessibility: skip links, ARIA attributes, focus indicators, reduced-motion support
@@ -31,7 +30,6 @@ Here's some documentation on the parts of the stack that are not available for n
 ### Feature and operations docs
 These docs cover stateful features, server-side integrations, and operational tooling that are not obvious from the public static pages.
 
-- [Sanakenno puzzle editor](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
 - [Dog show browser](./frontend/features/dog/README.md) — Human overview of the `/dog` frontend.
 - [Dog show browser operations](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
 - [Observability stack](./server/observability) - Live logging with Grafana, Loki, Promtail, Prometheus.
@@ -75,7 +73,7 @@ pytest tests/                         # Backend (in-memory SQLite)
 cd frontend && npm run test           # Vitest unit tests
 
 # E2E uses its own DB at app/data/test-e2e.db — independent of dev site.db.
-python3 scripts/seed_e2e.py           # Seed users, sections, recipes, puzzles
+python3 scripts/seed_e2e.py           # Seed users, sections, and recipes
 cd frontend && npm run test:e2e       # Playwright starts Flask (:5001, test-e2e.db) + Nuxt preview (:3000)
 ```
 
@@ -100,7 +98,7 @@ docker compose exec web python3 -c "from app.create_user import create; create('
 - Multi-stage Docker build: Node builds the frontend (`nuxt generate`), final image is Python-only
 - Gunicorn as WSGI server, Nginx + Let's Encrypt for TLS termination (external)
 - Auto-deploy via GitHub Actions + webhook — pushes to main go live if test suite passes.
-- Litestream sidecar container continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup`, `eu-central-003`). Config: `server/observability/litestream.yml`. Credentials (`B2_KEY_ID`, `B2_APP_KEY`) in `.env` on the NUC.
+- Litestream sidecar container continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup`, `eu-central-003`). It also backs up the separate Sanakenno database from `~/Projects/sanakenno/server/data`. Config: `server/observability/litestream.yml`. Credentials (`B2_KEY_ID`, `B2_APP_KEY`) in `.env` on the NUC.
 
 ## Author
 

@@ -3,10 +3,9 @@
 Usage:
     DATABASE_URI="sqlite:///$(pwd)/app/data/test-e2e.db" python3 scripts/seed_e2e.py
 
-Creates known users, sections, a recipe, and puzzles from initial_puzzles.json.
+Creates known users, sections, and a recipe.
 """
 
-import json
 import os
 import sys
 
@@ -17,13 +16,9 @@ DB_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 os.makedirs(os.path.dirname(DB_PATH), exist_ok=True)
 os.environ["DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 
-from datetime import datetime, timezone
 from werkzeug.security import generate_password_hash
 from app import app
-from app.models import (db, User, Section, Recipe, Ingredient, Step,
-                        KennoPuzzle, KennoConfig)
-
-SEED_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "initial_puzzles.json")
+from app.models import db, User, Section, Recipe, Ingredient, Step
 
 # Known test credentials (used by e2e/fixtures/auth.js)
 ADMIN_EMAIL = "admin@test.com"
@@ -46,7 +41,6 @@ def seed():
     with app.app_context():
         db.engine.dispose()
         db.create_all()
-        now = datetime.now(timezone.utc)
 
         # --- Users ---
         admin = User(username="admin", email=ADMIN_EMAIL, role="admin")
@@ -91,24 +85,12 @@ def seed():
         ]
         db.session.add(recipe)
 
-        # --- Puzzles ---
-        with open(SEED_PATH, encoding="utf-8") as f:
-            seed_data = json.load(f)
-
-        for idx, puzzle in enumerate(seed_data):
-            db.session.add(KennoPuzzle(
-                slot=idx, letters=",".join(puzzle["letters"]),
-                created_at=now, updated_at=now))
-            db.session.add(KennoConfig(
-                key=f"center_{idx}", value=puzzle["center"]))
-
         db.session.commit()
         print(f"Seeded E2E database at {DB_PATH}")
         print(f"  Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
         print(f"  User:  {USER_EMAIL} / {USER_PASSWORD}")
         print(f"  Sections: {len(sections)}")
         print(f"  Recipes: 1")
-        print(f"  Puzzles: {len(seed_data)}")
 
 
 if __name__ == "__main__":

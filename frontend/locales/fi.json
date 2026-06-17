@@ -1,6 +1,5 @@
 {
   "nav.home": "Etusivu",
-  "nav.sanakenno": "Sanakenno",
   "nav.recipes": "Reseptit",
   "nav.admin": "Hallinta",
   "nav.login": "Kirjaudu",
@@ -69,8 +68,6 @@
   "admin.tab.analytics": "Analytiikka",
   "admin.tab.recipes": "Reseptit",
   "admin.tab.health": "Terveys",
-  "admin.tab.sanakenno": "Sanakenno",
-  "admin.tab.kennotyokalu": "Kennotyökalu",
   "admin.addSection": "Lis\u00e4\u00e4 osio",
   "admin.title": "Otsikko",
   "admin.slug": "polku",
@@ -133,12 +130,6 @@
   "gallery.screenshotAlt": "Kuvakaappaus: {name}",
   "gallery.live": "live",
   "gallery.github": "github",
-  "gallery.sanakenno.name": "Sanakenno",
-  "gallery.sanakenno.tagline": "Suomenkielinen sanapeli \u2014 Web- ja iOS-appit",
-  "gallery.sanakenno.description": "Päivittäin uusi kuratoitu sanapulma, web- ja iOS-sovellukset synkronoitavissa keskenään, käyttäjätilastot ja jakaminen. Rakennettu Reactilla ja React Nativella.",
-  "gallery.sanakennoAdmin.name": "Sanakenno-työkalu",
-  "gallery.sanakennoAdmin.tagline": "Pulmien laatiminen, tilastot ja sanalistojen hallinta",
-  "gallery.sanakennoAdmin.description": "Itse rakennettu hallintapaneeli päivittäisten pulmien luomiseen, sanalistojen hallintaan sekä pelaajatilastojen tarkasteluun.",
   "gallery.siteAdmin.name": "erez.ac-hallintapaneeli",
   "gallery.siteAdmin.tagline": "Portfolion sisällönhallinta ja analytiikka",
   "gallery.siteAdmin.description": "Tämän sivuston hallintapaneeli: sisällön lisääminen ja muokkaus. Rakennettu Nuxtilla ja Node.js:llä. Lisäksi myös reaaliaikainen seurantapaneeli sisältäen lokitiedot, Grafana ja Loki.",
@@ -152,6 +143,5 @@
   "title.newRecipe": "Uusi resepti - erez.ac",
   "title.recipe": "Resepti - erez.ac",
   "title.editRecipe": "Muokkaa resepti\u00e4 - erez.ac",
-  "title.sanakenno": "Sanakenno - erez.ac",
   "title.notFound": "404 - erez.ac"
 }

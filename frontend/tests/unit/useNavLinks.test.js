@@ -20,12 +20,6 @@ describe('useNavLinks', () => {
   // ---------------------------------------------------------------------------
 
   describe('anonymous (not logged in)', () => {
-    it('includes the public sanakenno link', () => {
-      const links = setup(null)
-      const routes = links.map((l) => l.to)
-      expect(routes).toContain('https://sanakenno.fi')
-    })
-
     it('includes a login link', () => {
       const links = setup(null)
       const login = links.find((l) => l.labelKey === 'nav.login')
@@ -85,11 +79,6 @@ describe('useNavLinks', () => {
       expect(logout.action).toBe(handleLogout)
     })
 
-    it('still includes the public sanakenno link', () => {
-      const links = setup('user')
-      const routes = links.map((l) => l.to)
-      expect(routes).toContain('https://sanakenno.fi')
-    })
   })
 
   // ---------------------------------------------------------------------------

@@ -17,7 +17,7 @@ export default defineNuxtConfig({
   ssr: true,
   nitro: {
     prerender: {
-      routes: ['/', '/login', '/sanakenno', '/dog', '/200.html'],
+      routes: ['/', '/login', '/dog', '/200.html'],
     },
   },
 

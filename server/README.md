@@ -34,6 +34,13 @@ X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is in report-only mod
 
 **Deployed to:** `/etc/nginx/conf.d/erez.ac.conf`
 
+### `sanakenno.fi.conf`
+Nginx virtual host configuration for the separate Sanakenno deployment. The app
+code lives in `~/Projects/sanakenno`, but the live host config is maintained
+here with the other NUC nginx config.
+
+**Deployed to:** `/etc/nginx/conf.d/sanakenno.fi.conf`
+
 ### `backup-configs.sh`
 Backs up server configuration files (nginx, crontab, systemd services, iptables
 rules) to the same Backblaze B2 bucket used for database backups. Uses `rclone`
@@ -65,7 +72,7 @@ TELEGRAM_CHAT_ID="..."
 
 ## Database Backup & Restore
 
-Litestream continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup` bucket, `eu-central-003` region). Config: `server/observability/litestream.yml`. Credentials in `.env` on the NUC (`B2_KEY_ID`, `B2_APP_KEY`).
+Litestream continuously replicates `site.db` to Backblaze B2 (`erezac-db-backup` bucket, `eu-central-003` region). The same sidecar also replicates Sanakenno's separate `~/Projects/sanakenno/server/data/sanakenno.db`; no backup container lives in the Sanakenno repo. Config: `server/observability/litestream.yml`. Credentials in `.env` on the NUC (`B2_KEY_ID`, `B2_APP_KEY`).
 
 ### Restore from backup
 
@@ -119,4 +126,5 @@ scp server/deploy-site.sh kvjanhun@erez.ac:/home/kvjanhun/Projects/web_kontissa/
 scp server/health-alert.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/health-alert.sh
 scp server/backup-configs.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/backup-configs.sh
 sudo scp server/erez.ac.conf kvjanhun@erez.ac:/etc/nginx/conf.d/erez.ac.conf && sudo nginx -t && sudo systemctl reload nginx
+sudo scp server/sanakenno.fi.conf kvjanhun@erez.ac:/etc/nginx/conf.d/sanakenno.fi.conf && sudo nginx -t && sudo systemctl reload nginx
 ```

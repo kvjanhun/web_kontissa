@@ -1,6 +1,5 @@
 {
   "nav.home": "Home",
-  "nav.sanakenno": "Sanakenno",
   "nav.recipes": "Recipes",
   "nav.admin": "Admin",
   "nav.login": "Login",
@@ -69,8 +68,6 @@
   "admin.tab.analytics": "Analytics",
   "admin.tab.recipes": "Recipes",
   "admin.tab.health": "Health",
-  "admin.tab.sanakenno": "Sanakenno",
-  "admin.tab.kennotyokalu": "Kenno Tool",
   "admin.addSection": "Add Section",
   "admin.title": "Title",
   "admin.slug": "slug",
@@ -133,12 +130,6 @@
   "gallery.screenshotAlt": "{name} screenshot",
   "gallery.live": "live",
   "gallery.github": "github",
-  "gallery.sanakenno.name": "Sanakenno",
-  "gallery.sanakenno.tagline": "Finnish word game \u2014 Web and iOS apps",
-  "gallery.sanakenno.description": "Daily curated Finnish word puzzles, web and iOS apps synchronizable, user statistics and sharing. Built with React and React Native.",
-  "gallery.sanakennoAdmin.name": "Sanakenno Tool",
-  "gallery.sanakennoAdmin.tagline": "Puzzle creation, statistics, and word list management",
-  "gallery.sanakennoAdmin.description": "Custom-built admin panel for creating daily puzzles, managing word lists, and viewing player statistics.",
   "gallery.siteAdmin.name": "erez.ac Admin Panel",
   "gallery.siteAdmin.tagline": "Portfolio CMS and analytics",
   "gallery.siteAdmin.description": "Admin panel for this site: adding and editing content. Built with Nuxt and Node.js. In addition to a real-time monitoring dashboard with logs, Grafana and Loki.",
@@ -152,6 +143,5 @@
   "title.newRecipe": "New Recipe - erez.ac",
   "title.recipe": "Recipe - erez.ac",
   "title.editRecipe": "Edit Recipe - erez.ac",
-  "title.sanakenno": "Sanakenno - erez.ac",
   "title.notFound": "404 - erez.ac"
 }

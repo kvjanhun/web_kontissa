@@ -36,7 +36,7 @@ const PLACEHOLDERS = {
   quote: 'A short tagline or quote',
   currently: 'One item per line, e.g.\nPlaying: Elden Ring\nReading: SICP',
   intro: 'Plain text intro paragraph',
-  project: 'One project per line: Name|URL|Description\ne.g. Sanakenno|/sanakenno|Finnish word puzzle game',
+  project: 'One project per line: Name|URL|Description\ne.g. Dog Shows|/dog|Showlink dog show browser',
   git_stats: 'Optional description shown below the title (leave empty to show only the live stats grid)',
   timeline: 'One entry per line: YYYY-MM-DD|Title|Description\ne.g.\n2025-04-06|Born on a NUC|Flask + Docker from day one',
 }

@@ -63,22 +63,6 @@ def unauthorized():
     return jsonify({"error": "Authentication required"}), 401
 
 
-# def _run_migrations():
-#     """Add columns to existing tables that db.create_all() won't add to SQLite."""
-#     migrations = [
-#         "ALTER TABLE blocked_words ADD COLUMN blocked_at DATETIME",
-#         "ALTER TABLE page_views ADD COLUMN created_at DATETIME",
-#         "ALTER TABLE page_views ADD COLUMN updated_at DATETIME",
-#         "ALTER TABLE section ADD COLUMN position INTEGER DEFAULT 0",
-#     ]
-#     for sql in migrations:
-#         try:
-#             db.session.execute(db.text(sql))
-#             db.session.commit()
-#         except Exception:
-#             db.session.rollback()
-
-
 def _run_migrations():
     """Add columns to existing tables that db.create_all() won't add to SQLite."""
     migrations = [
@@ -156,7 +140,6 @@ from .auth import auth_bp
 from .recipes import recipes_bp
 from .api.cowsay import cowsay_bp
 from .api.weather import weather_bp
-from .api.kenno import kenno_bp
 from .api.pageviews import pageviews_bp
 from .api.health import health_bp
 from .api.dog import dog_bp
@@ -165,7 +148,6 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(recipes_bp)
 app.register_blueprint(cowsay_bp)
 app.register_blueprint(weather_bp)
-app.register_blueprint(kenno_bp)
 app.register_blueprint(pageviews_bp)
 app.register_blueprint(health_bp)
 app.register_blueprint(dog_bp)

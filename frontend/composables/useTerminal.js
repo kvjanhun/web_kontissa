@@ -246,8 +246,6 @@ function handleAbout() {
     '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">My GitHub</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
     '<a href="https://linkedin.com/in/kvjanhun" class="text-term-dir hover:underline" target="_blank" rel="noopener">My LinkedIn</a>' +
-    '<span class="text-gray-500 mx-2">|</span>' +
-    '<a href="https://sanakenno.fi" class="text-term-sage hover:underline" target="_blank" rel="noopener">Sanakenno.fi</a>' +
     '</div>' +
     '</div>'
   )

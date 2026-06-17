@@ -59,7 +59,7 @@ All observability services are defined in the project root `docker-compose.yml`.
 
 ## Dashboard
 
-The **System Overview** dashboard is auto-provisioned from `dashboards/overview.json`.
+The **System Overview** dashboard is auto-provisioned from `dashboards/overview.json`. `dashboards/sanakenno.json` is also provisioned here because Sanakenno runs in separate containers on the same NUC and writes to this shared Loki instance.
 
 | Section | Source | Data |
 |---------|--------|------|
@@ -82,6 +82,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | `grafana-datasources.yaml` | Loki + Prometheus datasource provisioning |
 | `grafana-dashboards.yaml` | Dashboard auto-provisioning from JSON files |
 | `dashboards/overview.json` | System Overview dashboard definition |
+| `dashboards/sanakenno.json` | Shared Sanakenno traffic and application log dashboard |
 
 ## Resource Budget
 

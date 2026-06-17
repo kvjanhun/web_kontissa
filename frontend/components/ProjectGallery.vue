@@ -5,22 +5,6 @@ const { t } = useI18nStore()
 
 const projects = computed(() => [
   {
-    slug: 'sanakenno',
-    name: t('gallery.sanakenno.name'),
-    tagline: t('gallery.sanakenno.tagline'),
-    description: t('gallery.sanakenno.description'),
-    image: '/projects/sanakenno/hero.png',
-    live: 'https://sanakenno.fi',
-    github: 'https://github.com/kvjanhun/sanakenno',
-  },
-  {
-    slug: 'sanakenno-admin',
-    name: t('gallery.sanakennoAdmin.name'),
-    tagline: t('gallery.sanakennoAdmin.tagline'),
-    description: t('gallery.sanakennoAdmin.description'),
-    image: '/projects/sanakenno-admin/hero.png',
-  },
-  {
     slug: 'site-admin',
     name: t('gallery.siteAdmin.name'),
     tagline: t('gallery.siteAdmin.tagline'),

@@ -42,7 +42,7 @@ Refresh interval: 60s. Default time range: 6h.
 - `structlog` with `JSONRenderer` outputs to stdout, captured by Docker's Loki logging driver
 - `before_request` binds context: `path`, `method`, `ip` (from X-Forwarded-For)
 - `after_request` logs every request with `status` and `duration_ms`
-- Silent exception handlers in `kenno.py`, `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's existing App errors/warnings panels
+- Silent exception handlers in `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's existing App errors/warnings panels
 
 ## Networking
 
