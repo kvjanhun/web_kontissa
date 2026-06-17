@@ -1,5 +1,30 @@
 # Dog Show Browser
 
+## Agent Fast Path
+
+Read this section first when changing `/dog`.
+
+| Task | First file to open |
+|------|--------------------|
+| Frontend route metadata or layout | `frontend/pages/dog.vue` |
+| Frontend state, route query sync, API calls, polling | `frontend/features/dog/useDogBrowser.js` |
+| Frontend view wiring | `frontend/features/dog/DogBrowser.vue` |
+| Frontend list, search, detail, filters, result cards | `frontend/features/dog/components/` |
+| Pure frontend result helpers | `frontend/features/dog/dogResults.js` |
+| Dog frontend agent guide | `frontend/features/dog/AGENTS.md` |
+| Backend endpoints, parsing, cache/job formats | `app/api/dog.py` |
+| Crawler process and CLI flags | `scripts/dog_crawl.py` |
+| Backend tests | `tests/test_dog.py` |
+| Frontend helper tests | `frontend/tests/unit/dogResults.test.js` |
+| Browser-flow tests | `frontend/e2e/dog.spec.js` |
+
+Important guardrails:
+
+- The frontend must never fan out across all breed result pages; use `/api/dog/shows/<id>/all-results` for whole-show filtering.
+- Persistent dog state is JSON under `DOG_INDEX_DIR`, not SQLite. Do not delete `app/data`, `dog_show_index.json`, `dog_result_jobs.json`, or `dog_result_cache/` casually.
+- `pages/dog.vue` is intentionally thin after the frontend refactor; dog UI belongs in `frontend/features/dog/`.
+- Keep Showlink request volume bounded. Prefer crawler/job/cache changes over more client polling.
+
 ## Purpose
 
 The dog show browser powers `/dog` and the `/api/dog/*` endpoints. It reads public Showlink result pages server-side, normalizes them, and caches the expensive whole-show result data so UI filtering does not create hundreds of browser or API requests.

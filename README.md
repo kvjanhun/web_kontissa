@@ -32,7 +32,8 @@ Here's some documentation on the parts of the stack that are not available for n
 These docs cover stateful features, server-side integrations, and operational tooling that are not obvious from the public static pages.
 
 - [Sanakenno puzzle editor](./ADMIN_TOOLS.md) — Tool to create, modify and schedule Sanakenno puzzles.
-- [Dog show browser](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
+- [Dog show browser](./frontend/features/dog/README.md) — Human overview of the `/dog` frontend.
+- [Dog show browser operations](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
 - [Observability stack](./server/observability) - Live logging with Grafana, Loki, Promtail, Prometheus.
 
 ### Server configuration
