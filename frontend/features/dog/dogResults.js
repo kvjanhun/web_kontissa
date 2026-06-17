@@ -89,8 +89,8 @@ export function dogMatchesShowFilters(dog, filters = {}) {
   const className = String(filters.className || '').toLowerCase().trim()
   if (className && (dog.class_name || '').toLowerCase() !== className) return false
 
-  const award = String(filters.award || '').toLowerCase().trim()
-  if (award && !(dog.awards || '').toLowerCase().includes(award)) return false
+  const award = String(filters.award || '').trim()
+  if (award && !awardMatchesFilter(dog.awards, award)) return false
 
   return true
 }
@@ -164,17 +164,344 @@ export function splitAwards(value) {
   return (value || '').split(',').map(item => item.trim()).filter(Boolean)
 }
 
+const AWARD_GROUPS = [
+  {
+    value: 'BIS',
+    matches: award => Boolean(parseBisAward(award)),
+  },
+  {
+    value: 'RYP',
+    matches: award => Boolean(parseRypAward(award)),
+  },
+  {
+    value: 'ROP/VSP',
+    matches: award => Boolean(parseRopVspAward(award)),
+  },
+]
+
+const AWARD_FILTER_ORDER = [
+  'BIS',
+  'RYP',
+  'ROP/VSP',
+  'MVA',
+  'VMVA',
+  'JMVA',
+  'SERT',
+  'VET-SERT',
+  'JUN-SERT',
+  'VARA-SERT',
+  'SA',
+  'KP',
+]
+
+const AWARD_QUALIFIER_ORDER = new Map([
+  ['', 0],
+  ['VET', 1],
+  ['JUN', 2],
+  ['PEN', 3],
+])
+
+function normalizeAward(award) {
+  return String(award || '').replace(/\s+/g, ' ').trim().toUpperCase()
+}
+
+function qualifierOrder(qualifier) {
+  return AWARD_QUALIFIER_ORDER.get(qualifier || '') ?? 99
+}
+
+function numericOrder(value) {
+  const number = Number(value)
+  return Number.isFinite(number) ? number : 999
+}
+
+function categoryLabel(base, qualifier) {
+  return qualifier ? `${base} ${qualifier}` : base
+}
+
+function parseRankedAward(award, base) {
+  const match = normalizeAward(award).match(new RegExp(`^${base}(?:\\s+(JUN|VET|PEN))?-(\\d+)$`))
+  if (!match) return null
+  const rank = Number(match[2])
+  if (!Number.isInteger(rank) || rank < 1 || rank > 4) return null
+  const qualifier = match[1] || ''
+  return {
+    qualifier,
+    rank,
+    categoryOrder: qualifierOrder(qualifier),
+    categoryLabel: categoryLabel(base, qualifier),
+  }
+}
+
+function parseBisAward(award) {
+  return parseRankedAward(award, 'BIS')
+}
+
+function parseRypAward(award) {
+  return parseRankedAward(award, 'RYP')
+}
+
+function parseRopVspAward(award) {
+  const normalized = normalizeAward(award)
+  const prefixed = normalized.match(/^(JUN|VET|PEN)\s+(ROP|VSP)$/)
+  if (prefixed) {
+    const qualifier = prefixed[1]
+    const result = prefixed[2]
+    return {
+      qualifier,
+      result,
+      categoryOrder: qualifierOrder(qualifier),
+      categoryLabel: `${qualifier} ROP/VSP`,
+      qualifierOrder: qualifierOrder(qualifier),
+      resultOrder: result === 'ROP' ? 1 : 2,
+    }
+  }
+
+  const plain = normalized.match(/^(ROP|VSP)(-PENTU)?$/)
+  if (!plain) return null
+  const qualifier = plain[2] ? 'PEN' : ''
+  const result = plain[1]
+  return {
+    qualifier,
+    result,
+    categoryOrder: qualifierOrder(qualifier),
+    categoryLabel: qualifier ? `${qualifier} ROP/VSP` : 'ROP/VSP',
+    qualifierOrder: qualifierOrder(qualifier),
+    resultOrder: result === 'ROP' ? 1 : 2,
+  }
+}
+
+function awardGroupFor(award) {
+  const normalized = normalizeAward(award)
+  return AWARD_GROUPS.find(group => group.matches(normalized))?.value || ''
+}
+
+function awardDetailsForFilter(award, filter) {
+  const normalizedFilter = normalizeAward(filter)
+  const normalizedAward = normalizeAward(award)
+
+  if (normalizedFilter === 'BIS') {
+    const parsed = parseBisAward(normalizedAward)
+    if (!parsed) return null
+    return {
+      categoryKey: `BIS:${parsed.qualifier || 'ALL'}`,
+      categoryLabel: parsed.categoryLabel,
+      categoryOrder: parsed.categoryOrder,
+      categorySort: parsed.categoryLabel,
+      sortRank: parsed.rank,
+      subOrder: 0,
+      displayRank: parsed.rank,
+      resultOrder: 0,
+      award: normalizedAward,
+    }
+  }
+
+  if (normalizedFilter === 'ROP/VSP') {
+    const parsed = parseRopVspAward(normalizedAward)
+    if (!parsed) return null
+    return {
+      categoryKey: `ROP/VSP:${parsed.qualifier || 'ALL'}`,
+      categoryLabel: parsed.categoryLabel,
+      categoryOrder: parsed.categoryOrder,
+      categorySort: parsed.categoryLabel,
+      sortRank: parsed.qualifierOrder,
+      subOrder: parsed.resultOrder,
+      displayRank: null,
+      resultOrder: parsed.resultOrder,
+      award: normalizedAward,
+    }
+  }
+
+  if (normalizedFilter === 'RYP') {
+    const parsed = parseRypAward(normalizedAward)
+    if (!parsed) return null
+    return {
+      categoryKey: `RYP:${parsed.qualifier || 'ALL'}`,
+      categoryLabel: parsed.categoryLabel,
+      categoryOrder: parsed.categoryOrder,
+      categorySort: parsed.categoryLabel,
+      sortRank: parsed.rank,
+      subOrder: 0,
+      displayRank: parsed.rank,
+      resultOrder: 0,
+      award: normalizedAward,
+    }
+  }
+
+  if (normalizedAward !== normalizedFilter) return null
+  return {
+    categoryKey: normalizedFilter,
+    categoryLabel: filter,
+    categoryOrder: 0,
+    categorySort: normalizedFilter,
+    sortRank: null,
+    subOrder: 0,
+    displayRank: null,
+    resultOrder: 0,
+    award: normalizedAward,
+  }
+}
+
+function awardDetailsForDog(details, dog, filter) {
+  const normalizedFilter = normalizeAward(filter)
+  if (normalizedFilter === 'RYP') {
+    const group = String(dog?.breedGroup || dog?.breedObj?.group || '').trim()
+    return {
+      ...details,
+      categoryKey: `RYP:${group || 'UNKNOWN'}`,
+      categoryLabel: group ? `Ryhmä ${group}` : 'Ryhmä',
+      categoryOrder: numericOrder(group),
+      categorySort: group.padStart(3, '0'),
+    }
+  }
+
+  if (normalizedFilter === 'ROP/VSP') {
+    const breedName = dog?.breedName || dog?.breedObj?.name || 'Rotu'
+    const group = String(dog?.breedGroup || dog?.breedObj?.group || '').trim()
+    const key = dogBreedGroupKey(dog) || breedName
+    return {
+      ...details,
+      categoryKey: `ROP/VSP:${key}`,
+      categoryLabel: breedName,
+      categoryOrder: numericOrder(group),
+      categorySort: `${group.padStart(3, '0')}:${breedName.toLocaleLowerCase('fi')}`,
+    }
+  }
+
+  return details
+}
+
+function compareAwardDetails(left, right) {
+  if (!left && !right) return 0
+  if (!left) return 1
+  if (!right) return -1
+  return (
+    left.categoryOrder - right.categoryOrder
+    || String(left.categorySort || '').localeCompare(String(right.categorySort || ''), 'fi')
+    || (left.sortRank ?? 999) - (right.sortRank ?? 999)
+    || (left.subOrder ?? 0) - (right.subOrder ?? 0)
+    || left.resultOrder - right.resultOrder
+    || left.award.localeCompare(right.award, 'fi')
+  )
+}
+
+export function awardSortDetailsList(awards, filter) {
+  if (!filter) return []
+  return splitAwards(awards)
+    .map(award => awardDetailsForFilter(award, filter))
+    .filter(Boolean)
+    .sort(compareAwardDetails)
+}
+
+export function awardSortDetails(awards, filter) {
+  return awardSortDetailsList(awards, filter)?.[0] || null
+}
+
+export function awardMatchesFilter(awards, filter) {
+  return Boolean(awardSortDetails(awards, filter))
+}
+
+function compareDogsByFallback(left, right) {
+  const leftNumber = Number(left?.number)
+  const rightNumber = Number(right?.number)
+  return (
+    String(left?.breedName || '').localeCompare(String(right?.breedName || ''), 'fi')
+    || String(left?.class_name || '').localeCompare(String(right?.class_name || ''), 'fi')
+    || String(left?.gender || '').localeCompare(String(right?.gender || ''), 'fi')
+    || (Number.isFinite(leftNumber) ? leftNumber : 99999) - (Number.isFinite(rightNumber) ? rightNumber : 99999)
+    || String(left?.name || '').localeCompare(String(right?.name || ''), 'fi')
+  )
+}
+
+export function sortDogsByAwardFilter(results = [], filter = '') {
+  if (!filter) return [...results]
+  return [...results].sort((left, right) => (
+    compareAwardDetails(awardSortDetails(left.awards, filter), awardSortDetails(right.awards, filter))
+    || compareDogsByFallback(left, right)
+  ))
+}
+
+export function groupResultsByAwardFilter(results = [], filter = '') {
+  if (!filter) return []
+  const groups = new Map()
+  const entries = []
+  results.forEach((dog) => {
+    const seenCategories = new Set()
+    awardSortDetailsList(dog.awards, filter).forEach((details) => {
+      const dogDetails = awardDetailsForDog(details, dog, filter)
+      if (seenCategories.has(dogDetails.categoryKey)) return
+      seenCategories.add(dogDetails.categoryKey)
+      entries.push({ dog, details: dogDetails })
+    })
+  })
+
+  entries.sort((left, right) => (
+    compareAwardDetails(left.details, right.details)
+    || compareDogsByFallback(left.dog, right.dog)
+  ))
+
+  entries.forEach(({ dog, details }) => {
+    if (!groups.has(details.categoryKey)) {
+      groups.set(details.categoryKey, {
+        key: details.categoryKey,
+        label: details.categoryLabel,
+        order: details.categoryOrder,
+        dogs: [],
+      })
+    }
+    groups.get(details.categoryKey).dogs.push({
+      ...dog,
+      awardRank: details.displayRank,
+      awardSortAward: details.award,
+    })
+  })
+  return [...groups.values()]
+}
+
+const CLASS_ORDER = [
+  'Pentuluokka',
+  'Junioriluokka',
+  'Nuorten luokka',
+  'Avoin luokka',
+  'Käyttöluokka',
+  'Valioluokka',
+  'Veteraaniluokka',
+  'Kasvattajaluokka',
+]
+
+function classOrderIndex(className) {
+  const idx = CLASS_ORDER.findIndex(prefix => className.startsWith(prefix))
+  return idx === -1 ? CLASS_ORDER.length : idx
+}
+
 export function availableClassesFromResults(results = []) {
   const classes = results.map(result => result.class_name).filter(Boolean)
-  return [...new Set(classes)].sort()
+  return [...new Set(classes)].sort((a, b) => {
+    const aOrder = classOrderIndex(a)
+    const bOrder = classOrderIndex(b)
+    return aOrder !== bOrder
+      ? aOrder - bOrder
+      : a.localeCompare(b, 'fi')
+  })
 }
 
 export function availableAwardsFromResults(results = []) {
   const awardsSet = new Set()
   results.forEach(result => {
-    splitAwards(result.awards).forEach(award => awardsSet.add(award))
+    splitAwards(result.awards).forEach((award) => {
+      awardsSet.add(awardGroupFor(award) || award)
+    })
   })
-  return [...awardsSet].sort()
+  const awardOrder = new Map(AWARD_FILTER_ORDER.map((award, index) => [award, index]))
+  return [...awardsSet].sort((left, right) => {
+    const leftOrder = awardOrder.get(left)
+    const rightOrder = awardOrder.get(right)
+    if (leftOrder !== undefined || rightOrder !== undefined) {
+      if (leftOrder === undefined) return 1
+      if (rightOrder === undefined) return -1
+      return leftOrder - rightOrder
+    }
+    return left.localeCompare(right, 'fi')
+  })
 }
 
 export function filterDogResults(results = [], filters = {}) {
@@ -183,7 +510,7 @@ export function filterDogResults(results = [], filters = {}) {
   const className = String(filters.className || '').trim()
   const award = String(filters.award || '').trim()
 
-  return results.filter(dog => {
+  const filtered = results.filter(dog => {
     if (search) {
       const nameMatch = dog.name?.toLowerCase().includes(search)
       const numMatch = String(dog.number).includes(search)
@@ -192,10 +519,11 @@ export function filterDogResults(results = [], filters = {}) {
 
     if (grade && !gradeMatchesFilter(dog.grade, grade)) return false
     if (className && dog.class_name !== className) return false
-    if (award && !splitAwards(dog.awards).map(item => item.toLowerCase()).includes(award.toLowerCase())) return false
+    if (award && !awardMatchesFilter(dog.awards, award)) return false
 
     return true
   })
+  return sortDogsByAwardFilter(filtered, award)
 }
 
 export function groupResultsByGenderAndClass(results = []) {

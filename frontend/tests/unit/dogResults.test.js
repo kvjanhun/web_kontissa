@@ -1,9 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  availableAwardsFromResults,
+  awardMatchesFilter,
   buildDogQuery,
   createShowBreedGroups,
+  dogMatchesShowFilters,
+  filterDogResults,
   getShowResultAvailability,
   gradeMatchesFilter,
+  groupResultsByAwardFilter,
   parseShowDateRange,
   showStatItems,
   showStatsLabel,
@@ -22,6 +27,154 @@ describe('gradeMatchesFilter', () => {
 
     expect(gradeMatchesFilter('POISSA', 'poissa')).toBe(true)
     expect(gradeMatchesFilter('EVA', 'poissa')).toBe(false)
+  })
+})
+
+describe('award filters', () => {
+  const results = [
+    {
+      name: 'A',
+      awards: 'SA, ROP, JUN ROP, VET VSP, BIS-3, BIS JUN-2, BIS VET-4, RYP-1, RYP-4',
+    },
+    {
+      name: 'B',
+      awards: 'SERT, JUN-SERT, VET-SERT, VARA-SERT, MVA, JMVA, VMVA',
+    },
+  ]
+
+  it('groups award filters and orders the menu options by show priority', () => {
+    const awards = availableAwardsFromResults(results)
+
+    expect(awards).toEqual([
+      'BIS',
+      'RYP',
+      'ROP/VSP',
+      'MVA',
+      'VMVA',
+      'JMVA',
+      'SERT',
+      'VET-SERT',
+      'JUN-SERT',
+      'VARA-SERT',
+      'SA',
+    ])
+    expect(awards).toEqual(expect.arrayContaining([
+      'JMVA',
+      'JUN-SERT',
+      'MVA',
+      'SERT',
+      'VARA-SERT',
+      'VET-SERT',
+      'VMVA',
+    ]))
+    expect(awards).not.toEqual(expect.arrayContaining([
+      'BIS JUN-2',
+      'BIS VET-4',
+      'JUN ROP',
+      'ROP',
+      'RYP-1',
+      'VET VSP',
+    ]))
+  })
+
+  it('matches grouped awards while keeping MVA and SERT variants exact', () => {
+    expect(awardMatchesFilter('SA, BIS JUN-2', 'BIS')).toBe(true)
+    expect(awardMatchesFilter('SA, BIS VET-4', 'BIS')).toBe(true)
+    expect(awardMatchesFilter('SA, ROP-pentu', 'ROP/VSP')).toBe(true)
+    expect(awardMatchesFilter('SA, VET VSP', 'ROP/VSP')).toBe(true)
+    expect(awardMatchesFilter('SA, RYP-4', 'RYP')).toBe(true)
+
+    expect(awardMatchesFilter('SA, JMVA', 'MVA')).toBe(false)
+    expect(awardMatchesFilter('SA, SMVA', 'MVA')).toBe(false)
+    expect(awardMatchesFilter('SA, MVA', 'MVA')).toBe(true)
+
+    expect(awardMatchesFilter('SA, JUN-SERT', 'SERT')).toBe(false)
+    expect(awardMatchesFilter('SA, VET-SERT', 'SERT')).toBe(false)
+    expect(awardMatchesFilter('SA, VARA-SERT', 'SERT')).toBe(false)
+    expect(awardMatchesFilter('SA, SERT', 'SERT')).toBe(true)
+  })
+
+  it('uses the same award matching for breed and whole-show filters', () => {
+    const dogs = [
+      { name: 'BIS dog', awards: 'BIS JUN-1' },
+      { name: 'Champion dog', awards: 'JMVA' },
+      { name: 'Certificate dog', awards: 'JUN-SERT' },
+      { name: 'Plain certificate dog', awards: 'SERT' },
+    ]
+
+    expect(filterDogResults(dogs, { award: 'BIS' }).map(dog => dog.name)).toEqual(['BIS dog'])
+    expect(filterDogResults(dogs, { award: 'SERT' }).map(dog => dog.name)).toEqual(['Plain certificate dog'])
+    expect(dogMatchesShowFilters(dogs[1], { award: 'MVA' })).toBe(false)
+    expect(dogMatchesShowFilters(dogs[2], { award: 'SERT' })).toBe(false)
+  })
+
+  it('groups award-filtered results by category and orders ranked awards by placement', () => {
+    const dogs = [
+      { name: 'Vet three', awards: 'BIS VET-3', number: 5 },
+      { name: 'Open four', awards: 'BIS-4', number: 4 },
+      { name: 'Junior two', awards: 'BIS JUN-2', number: 3 },
+      { name: 'Open one', awards: 'BIS-1', number: 2 },
+      { name: 'Vet one', awards: 'BIS VET-1', number: 1 },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'BIS')
+
+    expect(groups.map(group => group.label)).toEqual(['BIS', 'BIS VET', 'BIS JUN'])
+    expect(groups[0].dogs.map(dog => dog.name)).toEqual(['Open one', 'Open four'])
+    expect(groups[0].dogs.map(dog => dog.awardRank)).toEqual([1, 4])
+    expect(groups[1].dogs.map(dog => dog.name)).toEqual(['Vet one', 'Vet three'])
+    expect(groups[1].dogs.map(dog => dog.awardRank)).toEqual([1, 3])
+    expect(groups[2].dogs.map(dog => dog.name)).toEqual(['Junior two'])
+    expect(filterDogResults(dogs, { award: 'BIS' }).map(dog => dog.name)).toEqual([
+      'Open one',
+      'Open four',
+      'Vet one',
+      'Vet three',
+      'Junior two',
+    ])
+  })
+
+  it('groups ROP and VSP results by category with winners first', () => {
+    const dogs = [
+      { name: 'Veteran opposite', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'VET VSP' },
+      { name: 'Main opposite', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'VSP' },
+      { name: 'Junior winner', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'JUN ROP' },
+      { name: 'Main winner', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'ROP' },
+      { name: 'Puppy winner', breedName: 'Akita', breedGroup: '5', breedId: '2', awards: 'ROP-pentu' },
+      { name: 'Double winner', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'ROP, JUN ROP' },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'ROP/VSP')
+
+    expect(groups.map(group => group.label)).toEqual(['Akita', 'Basenji'])
+    expect(groups[1].dogs.map(dog => dog.name)).toEqual([
+      'Double winner',
+      'Main winner',
+      'Junior winner',
+      'Main opposite',
+      'Veteran opposite',
+    ])
+  })
+
+  it('groups RYP results by breed group and orders each group by RYP rank', () => {
+    const dogs = [
+      { name: 'Group five second', breedGroup: '5', awards: 'RYP-2' },
+      { name: 'Group one third', breedGroup: '1', awards: 'RYP-3' },
+      { name: 'Group five first', breedGroup: '5', awards: 'RYP-1' },
+      { name: 'Group one first', breedGroup: '1', awards: 'RYP-1' },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'RYP')
+
+    expect(groups.map(group => group.label)).toEqual(['Ryhmä 1', 'Ryhmä 5'])
+    expect(groups[0].dogs.map(dog => `${dog.awardRank} ${dog.name}`)).toEqual([
+      '1 Group one first',
+      '3 Group one third',
+    ])
+    expect(groups[1].dogs.map(dog => `${dog.awardRank} ${dog.name}`)).toEqual([
+      '1 Group five first',
+      '2 Group five second',
+    ])
   })
 })
 
