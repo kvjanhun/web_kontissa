@@ -7,6 +7,7 @@ export default defineNuxtConfig({
 
   // Use a separate build directory during testing to prevent E2E runs from corrupting/clashing with local dev server (.nuxt)
   buildDir: process.env.TESTING ? '.nuxt-e2e' : '.nuxt',
+  ...(process.env.TESTING ? { sourcemap: false } : {}),
 
   experimental: {
     payloadExtraction: false,
