@@ -10,7 +10,8 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _show_age_days, _show_date_state, _utc_iso,
+    _parse_show_date, _show_age_days, _show_date_state, _show_result_availability,
+    _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -34,6 +35,12 @@ def _indexed_show_as_list_item(show_id):
 
 def _show_date_for_id(show_id):
     return _parse_show_date(_show_list_item_for_id(show_id) or _indexed_show_as_list_item(show_id))
+
+def _show_result_availability_for_id(show_id, now=None):
+    return _show_result_availability(
+        _show_list_item_for_id(show_id) or _indexed_show_as_list_item(show_id),
+        now=now,
+    )
 
 def _result_count_from_cache_doc(show_id, entry_count=None):
     doc = _load_result_cache_doc(show_id)
@@ -355,6 +362,8 @@ def _show_detail_from_index(show_id):
     return {
         "id": int(show_id),
         "title": indexed_show.get("title") or indexed_show.get("name", ""),
+        "date": indexed_show.get("date", ""),
+        "month": indexed_show.get("month", ""),
         "breeds": breeds,
         "source_url": indexed_show.get("source_url") or _source_url(show_id),
         "fetched_at": updated_at,

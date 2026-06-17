@@ -290,16 +290,6 @@ export function showStatsLabel(show) {
   return parts.join(', ')
 }
 
-export function parseShowDate(dateStr) {
-  if (!dateStr) return null
-  const parts = dateStr.split('.')
-  if (parts.length !== 3) return null
-  const day = parseInt(parts[0], 10)
-  const month = parseInt(parts[1], 10) - 1
-  const year = parseInt(parts[2], 10)
-  return new Date(year, month, day)
-}
-
 export function formatShowDay(dateStr) {
   const match = String(dateStr || '').match(/\d{1,2}/)
   if (!match) return dateStr || ''
@@ -318,12 +308,123 @@ export function isThisWeekLeft(showDate, now = new Date()) {
   return showDate >= today && showDate <= sunday
 }
 
+const FINNISH_MONTHS = [
+  'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
+  'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu',
+]
+
+function yearFromMonthLabel(monthLabel) {
+  const match = String(monthLabel || '').match(/\b(\d{4})\b/)
+  return match ? parseInt(match[1], 10) : null
+}
+
+function dateFromParts(year, month, day) {
+  if (!year || !month || !day) return null
+  const date = new Date(year, month - 1, day)
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null
+  }
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+export function parseShowDateRange(dateStr, monthLabel = '', fallbackYear = new Date().getFullYear()) {
+  const value = String(dateStr || '').trim()
+  if (!value) return null
+
+  let match = value.match(/(\d{1,2})\.(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?/)
+  if (match) {
+    const [, startDay, startMonth, endDay, endMonth, explicitYear] = match
+    const year = parseInt(explicitYear, 10) || yearFromMonthLabel(monthLabel) || fallbackYear
+    const startYear = parseInt(startMonth, 10) > parseInt(endMonth, 10) ? year - 1 : year
+    return {
+      start: dateFromParts(startYear, parseInt(startMonth, 10), parseInt(startDay, 10)),
+      end: dateFromParts(year, parseInt(endMonth, 10), parseInt(endDay, 10)),
+    }
+  }
+
+  match = value.match(/(\d{1,2})\.\s*-\s*(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?/)
+  if (match) {
+    const [, startDay, endDay, month, explicitYear] = match
+    const year = parseInt(explicitYear, 10) || yearFromMonthLabel(monthLabel) || fallbackYear
+    return {
+      start: dateFromParts(year, parseInt(month, 10), parseInt(startDay, 10)),
+      end: dateFromParts(year, parseInt(month, 10), parseInt(endDay, 10)),
+    }
+  }
+
+  match = value.match(/(\d{1,2})\.(\d{1,2})\.?(?:(\d{4}))?/)
+  if (!match) return null
+
+  const [, day, month, explicitYear] = match
+  const year = parseInt(explicitYear, 10) || yearFromMonthLabel(monthLabel) || fallbackYear
+  const date = dateFromParts(year, parseInt(month, 10), parseInt(day, 10))
+  return date ? { start: date, end: date } : null
+}
+
+export function parseShowDate(dateStr, monthLabel = '') {
+  return parseShowDateRange(dateStr, monthLabel)?.end || null
+}
+
+function endOfDay(date) {
+  if (!date) return null
+  const copy = new Date(date)
+  copy.setHours(23, 59, 59, 999)
+  return copy
+}
+
+export function getShowResultAvailability(show, now = new Date(), morningHour = 6) {
+  const range = parseShowDateRange(show?.date, show?.month, now.getFullYear())
+  if (!range?.start || !range?.end) {
+    return {
+      canLoad: true,
+      phase: 'unknown',
+      actionLabel: 'Suodata koko näyttelyä',
+      loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
+    }
+  }
+
+  const availableFrom = new Date(range.start)
+  availableFrom.setHours(morningHour, 0, 0, 0)
+  const end = endOfDay(range.end)
+
+  if (now < availableFrom) {
+    const sameDate = now.toDateString() === range.start.toDateString()
+    return {
+      canLoad: false,
+      phase: sameDate ? 'show_morning' : 'upcoming',
+      title: sameDate ? 'Tuloksia odotetaan' : 'Tuloksia ei haeta vielä',
+      message: sameDate
+        ? `Koko näyttelyn tuloksia tarkistetaan klo ${morningHour} jälkeen. Rotuluettelo on jo selattavissa.`
+        : `Koko näyttelyn tuloksia tarkistetaan aikaisintaan näyttelypäivänä klo ${morningHour}. Rotuluettelo on jo selattavissa.`,
+      availableFrom,
+    }
+  }
+
+  if (now <= end) {
+    return {
+      canLoad: true,
+      phase: 'show_day',
+      actionLabel: 'Tarkista koirat ja tulokset',
+      note: 'Näyttelypäivänä luokat ja tulokset voivat täydentyä vaiheittain päivän edetessä.',
+      loadingNote: 'Näyttelypäivänä välimuisti voi täydentyä vaiheittain sitä mukaa kun Showlink julkaisee tietoja.',
+    }
+  }
+
+  return {
+    canLoad: true,
+    phase: 'past',
+    actionLabel: 'Suodata koko näyttelyä',
+    loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
+  }
+}
+
 export function getCurrentMonthLabel(now = new Date()) {
-  const months = [
-    'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
-    'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu',
-  ]
-  return `${months[now.getMonth()]} ${now.getFullYear()}`
+  return `${FINNISH_MONTHS[now.getMonth()]} ${now.getFullYear()}`
 }
 
 export function shouldCollapseMonth(monthLabel, now = new Date()) {

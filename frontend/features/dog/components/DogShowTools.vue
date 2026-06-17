@@ -39,6 +39,10 @@ defineProps({
     type: String,
     default: '',
   },
+  allDogsAvailability: {
+    type: Object,
+    default: null,
+  },
   showSearchPlaceholder: {
     type: String,
     default: '',
@@ -144,7 +148,25 @@ defineEmits([
       </div>
 
       <div
-        v-if="!allDogsLoading && !allDogsLoaded && !allDogsError"
+        v-if="!allDogsLoading && !allDogsLoaded && !allDogsError && allDogsAvailability && !allDogsAvailability.canLoad"
+        class="dog-filter-col dog-show-progress-inline dog-show-availability"
+        role="status"
+      >
+        <label class="dog-filter-label">Koko näyttely</label>
+        <div class="dog-progress-inline-body">
+          <svg class="dog-availability-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <circle cx="128" cy="128" r="84" />
+            <path d="M128 76v56l36 20" />
+          </svg>
+          <div class="dog-progress-content">
+            <h2 class="dog-progress-title">{{ allDogsAvailability.title }}</h2>
+            <p class="dog-progress-copy">{{ allDogsAvailability.message }}</p>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else-if="!allDogsLoading && !allDogsLoaded && !allDogsError"
         class="dog-filter-col dog-show-tools-action"
       >
         <label class="dog-filter-label">Koko näyttely</label>
@@ -160,11 +182,14 @@ defineEmits([
             <line x1="56" y1="184" x2="200" y2="184" />
             <circle cx="112" cy="184" r="20" />
           </svg>
-          <span>Suodata koko näyttelyä</span>
+          <span>{{ allDogsAvailability?.actionLabel || 'Suodata koko näyttelyä' }}</span>
           <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="96 48 176 128 96 208" />
           </svg>
         </button>
+        <p v-if="allDogsAvailability?.note" class="dog-show-wide-note">
+          {{ allDogsAvailability.note }}
+        </p>
       </div>
 
       <div
@@ -192,7 +217,7 @@ defineEmits([
               />
             </div>
             <p class="dog-progress-note">
-              Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.
+              {{ allDogsAvailability?.loadingNote || 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.' }}
             </p>
           </div>
         </div>

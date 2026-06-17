@@ -47,8 +47,8 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 - `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed. Active shows also include current result progress from the whole-show result cache.
 - `GET /api/dog/shows/<show_id>`: breed list for one show.
-- `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page.
-- `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters.
+- `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page. Missing result pages are not fetched before the show date at 06:00 local time.
+- `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters. Missing whole-show caches return `425`/`not_ready` instead of queueing work before the show date at 06:00 local time.
 - `GET /api/dog/search?q=<query>`: search shows and indexed breeds.
 
 Rate limits are intentionally lower than internal crawler throughput:
@@ -64,10 +64,11 @@ Rate limits are intentionally lower than internal crawler throughput:
 4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
 5. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
 6. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
-7. Opening the `Koirat & Tulokset` tab calls `/api/dog/shows/<show_id>/all-results`.
-8. If the whole-show cache is missing or stale, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
-9. The crawler service also processes queued jobs and proactively warms recent shows.
-10. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
+7. Opening the whole-show filter calls `/api/dog/shows/<show_id>/all-results`.
+8. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
+9. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
+10. The crawler service also processes queued jobs and proactively warms recent shows.
+11. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
 ## Persistent Files
 
@@ -113,6 +114,7 @@ Environment knobs:
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
 - `DOG_RESULT_AUTO_WINDOW_DAYS`: how many past days automatic warming covers.
+- `DOG_RESULT_SHOW_MORNING_HOUR`: local hour when missing result pages may first be checked on the first show date; defaults to `6`.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
 
@@ -159,7 +161,8 @@ Important UI behavior:
 - The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache. If a judge is only present in a warmed whole-show result cache, search uses that cache and writes the judge back to the compact index.
 - Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; past and upcoming show rows show only the full signup count.
 - The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
-- Whole-show filters run only against the persisted `/all-results` cache.
+- Whole-show filters run only against the persisted `/all-results` cache. Before show-day 06:00, the UI keeps the breed list searchable and explains that whole-show results are not checked yet.
+- On the show date after 06:00, the UI allows checking whole-show data but warns that classes and results can fill in gradually as the day progresses.
 - While `/all-results` is warming, the page shows an animated progress card and polls the API.
 - Grade filtering keeps `HYL`, `EVA`, and `POISSA` separate.
 

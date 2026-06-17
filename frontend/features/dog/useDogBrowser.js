@@ -11,6 +11,7 @@ import {
   formatShowDay,
   getAllDogsProgressPercent,
   getAllDogsProgressText,
+  getShowResultAvailability,
   gradeBorderClass,
   gradeClasses,
   groupResultsByGenderAndClass,
@@ -152,6 +153,9 @@ export function useDogBrowser() {
 
   const allDogsProgressPercent = computed(() => getAllDogsProgressPercent(allDogsProgress.value))
   const allDogsProgressText = computed(() => getAllDogsProgressText(allDogsProgress.value))
+  const allDogsAvailability = computed(() => (
+    getShowResultAvailability(selectedShow.value || showDetail.value)
+  ))
 
   const showSearchPlaceholder = computed(() => (
     allDogsLoaded.value
@@ -198,6 +202,7 @@ export function useDogBrowser() {
     if (!showId) return
     if (sessionId !== allDogsSessionId) return
     if (allDogsLoaded.value || (allDogsLoading.value && !poll)) return
+    if (!allDogsAvailability.value.canLoad) return
     clearAllDogsPoll()
     allDogsLoading.value = true
     allDogsError.value = ''
@@ -215,9 +220,9 @@ export function useDogBrowser() {
       allDogsResults.value = data.results || []
       allDogsProgress.value = data.cache || null
       allDogsLoaded.value = true
-    } catch {
+    } catch (error) {
       if (sessionId === allDogsSessionId) {
-        allDogsError.value = 'Tulosten hakeminen epäonnistui.'
+        allDogsError.value = error?.data?.message || 'Tulosten hakeminen epäonnistui.'
       }
     } finally {
       if (sessionId === allDogsSessionId && !keepLoading) {
@@ -227,6 +232,7 @@ export function useDogBrowser() {
   }
 
   function startShowWideSearch() {
+    if (!allDogsAvailability.value.canLoad) return
     clearAllDogsPoll()
     allDogsSessionId += 1
     allDogsLoading.value = false
@@ -483,7 +489,7 @@ export function useDogBrowser() {
   })
 
   const thisWeekShows = computed(() => (
-    shows.value.filter(show => isThisWeekLeft(parseShowDate(show.date)))
+    shows.value.filter(show => isThisWeekLeft(parseShowDate(show.date, show.month)))
   ))
 
   const breedEmptyText = computed(() => (
@@ -656,6 +662,7 @@ export function useDogBrowser() {
     allDogsError,
     allDogsProgressPercent,
     allDogsProgressText,
+    allDogsAvailability,
     collapsedMonths,
     expandedCritiques,
     showSearchPlaceholder,

@@ -7,6 +7,7 @@ from app.api import dog as dog_module
 from app.dog_show import crawler as dog_crawler
 from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import store as dog_store
+from app.dog_show.utils import _show_result_availability
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -232,6 +233,31 @@ def test_show_stats_include_live_result_progress(client):
     )
     assert uncached_live_stats["is_live"] is True
     assert "result_count" not in uncached_live_stats
+
+
+def test_show_result_availability_waits_until_show_morning():
+    show = {"date": "20.06.", "month": "kesäkuu 2026"}
+
+    future = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 17, 12, 0),
+    )
+    early_morning = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 20, 5, 59),
+    )
+    show_day = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 20, 6, 0),
+    )
+
+    assert future["can_fetch"] is False
+    assert future["reason"] == "future_show"
+    assert future["available_from_iso"] == "2026-06-20T06:00:00"
+    assert early_morning["can_fetch"] is False
+    assert early_morning["reason"] == "show_morning"
+    assert show_day["can_fetch"] is True
+    assert show_day["reason"] == "show_day"
 
 
 @patch("app.dog_show.showlink.requests.get")
@@ -764,6 +790,49 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     assert data["breed"] == "sileäkarvainen noutaja"
     assert data["judge"] == "Tarja Kolkka"
     assert dog_module._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_future_breed_results_return_not_ready_without_fetching(mock_get, client):
+    dog_module._show_index["shows"]["15001"] = {
+        "title": "20.06.2999 Future Show",
+        "date": "20.06.",
+        "month": "kesäkuu 2999",
+        "breeds": [
+            { "name": "basenji", "count": 4, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+
+    resp = client.get("/api/dog/shows/15001/results?group=5&breed=3")
+
+    assert resp.status_code == 425
+    data = resp.get_json()
+    assert data["status"] == "not_ready"
+    assert data["reason"] == "future_show"
+    assert data["availability"]["can_fetch"] is False
+    mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_future_show_all_results_return_not_ready_without_queueing(mock_get, client):
+    dog_module._show_index["shows"]["15001"] = {
+        "title": "20.06.2999 Future Show",
+        "date": "20.06.",
+        "month": "kesäkuu 2999",
+        "breeds": [
+            { "name": "basenji", "count": 4, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+
+    resp = client.get("/api/dog/shows/15001/all-results")
+
+    assert resp.status_code == 425
+    data = resp.get_json()
+    assert data["status"] == "not_ready"
+    assert data["reason"] == "future_show"
+    assert data["availability"]["can_fetch"] is False
+    assert dog_module._load_result_jobs()["jobs"] == {}
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink.requests.get")

@@ -9,7 +9,7 @@ from . import config
 from .indexing import (
     _cached_show_detail, _is_show_recent_by_id,
     _result_breeds_from_index, _result_breeds_with_results, _show_date_for_id,
-    _update_index_breed_judge,
+    _show_result_availability_for_id, _update_index_breed_judge,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
@@ -423,6 +423,19 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     """Build or resume the persisted whole-show results cache for one show."""
     show_id = int(show_id)
     now = time.time()
+    availability = _show_result_availability_for_id(
+        show_id,
+        now=datetime.datetime.fromtimestamp(now),
+    )
+    if not force and not availability.get("can_fetch", True):
+        return {
+            "show_id": show_id,
+            "status": "skipped",
+            "reason": availability.get("reason"),
+            "availability": availability,
+            "progress": _result_cache_progress(show_id),
+        }
+
     existing = _load_result_cache_doc(show_id)
     if not force and _result_cache_doc_is_fresh(show_id, existing, now=now):
         return {

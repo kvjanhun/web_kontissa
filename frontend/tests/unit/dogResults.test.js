@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   buildDogQuery,
   createShowBreedGroups,
+  getShowResultAvailability,
   gradeMatchesFilter,
+  parseShowDateRange,
   showStatItems,
   showStatsLabel,
 } from '~/features/dog/dogResults.js'
@@ -64,6 +66,39 @@ describe('showStatItems and showStatsLabel', () => {
       },
     ])
     expect(showStatsLabel(show)).toBe(`3 rotua, ${entryCount} ilmoittautunutta`)
+  })
+})
+
+describe('show date result availability', () => {
+  it('parses Showlink date labels with the year from the month heading', () => {
+    const range = parseShowDateRange('20.06.', 'kesäkuu 2026')
+
+    expect(range.start).toEqual(new Date(2026, 5, 20))
+    expect(range.end).toEqual(new Date(2026, 5, 20))
+  })
+
+  it('blocks whole-show result loading until show morning', () => {
+    const show = { date: '20.06.', month: 'kesäkuu 2026' }
+
+    const future = getShowResultAvailability(show, new Date(2026, 5, 17, 12, 0))
+    const earlyMorning = getShowResultAvailability(show, new Date(2026, 5, 20, 5, 59))
+    const showDay = getShowResultAvailability(show, new Date(2026, 5, 20, 6, 0))
+
+    expect(future).toMatchObject({
+      canLoad: false,
+      phase: 'upcoming',
+      title: 'Tuloksia ei haeta vielä',
+    })
+    expect(earlyMorning).toMatchObject({
+      canLoad: false,
+      phase: 'show_morning',
+      title: 'Tuloksia odotetaan',
+    })
+    expect(showDay).toMatchObject({
+      canLoad: true,
+      phase: 'show_day',
+      actionLabel: 'Tarkista koirat ja tulokset',
+    })
   })
 })
 

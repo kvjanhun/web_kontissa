@@ -21,6 +21,7 @@ RESULT_CRAWL_DEFAULT_DELAY = 0.4
 RESULT_CRAWL_DEFAULT_WORKERS = 3
 RESULT_IMMEDIATE_MAX_ACTIVE = int(os.environ.get("DOG_RESULT_IMMEDIATE_MAX_ACTIVE", "1"))
 RESULT_IMMEDIATE_WARMUP_DEFAULT = os.environ.get("DOG_RESULT_IMMEDIATE_WARMUP", "true").lower() != "false"
+RESULT_SHOW_MORNING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_MORNING_HOUR", "6"))
 
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")

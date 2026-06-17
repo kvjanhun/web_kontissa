@@ -488,6 +488,15 @@
   align-items: center;
   justify-content: space-between;
 }
+.dog-show-availability .dog-progress-inline-body {
+  align-items: center;
+}
+.dog-availability-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--dog-accent-2);
+  flex-shrink: 0;
+}
 .dog-progress-orbit {
   position: relative;
   width: 3rem;
@@ -920,6 +929,12 @@
   background: color-mix(in srgb, var(--dog-accent-2) 10%, var(--dog-surface));
   border-color: var(--dog-accent-2);
   transform: translateY(-1px);
+}
+.dog-show-wide-note {
+  margin: 0.35rem 0 0;
+  color: var(--dog-text-muted);
+  font-size: 0.76rem;
+  line-height: 1.35;
 }
 .dog-toggle-icon {
   width: 1rem;

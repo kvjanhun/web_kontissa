@@ -15,8 +15,8 @@ from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once
 from app.dog_show.indexing import (
     _cached_show_detail, _enrich_breeds_with_cached_result_judges,
     _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
-    _show_detail_from_index, _show_stats_from_index, _shows_with_cached_stats,
-    _update_index_breed_judge,
+    _show_detail_from_index, _show_result_availability_for_id, _show_stats_from_index,
+    _shows_with_cached_stats, _update_index_breed_judge,
 )
 from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
@@ -38,6 +38,22 @@ from app.dog_show.utils import _clean_breed_list, _clean_judge_name, _utc_iso
 logger = structlog.get_logger(__name__)
 
 dog_bp = Blueprint('dog', __name__)
+
+def _results_not_ready_response(show_id, availability):
+    reason_messages = {
+        "future_show": "Tuloksia ei haeta vielä ennen näyttelypäivän aamua.",
+        "show_morning": "Tuloksia ei haeta vielä ennen näyttelypäivän klo 6:ta.",
+    }
+    return {
+        "show_id": int(show_id),
+        "status": "not_ready",
+        "reason": availability.get("reason"),
+        "message": reason_messages.get(
+            availability.get("reason"),
+            "Tuloksia ei haeta vielä tälle näyttelylle.",
+        ),
+        "availability": availability,
+    }
 
 
 @dog_bp.route("/api/dog/shows")
@@ -147,6 +163,10 @@ def breed_results(show_id):
             _breed_result_cache[cache_key] = {"data": persisted, "ts": now}
             return jsonify(persisted)
 
+        availability = _show_result_availability_for_id(show_id)
+        if not availability.get("can_fetch", True):
+            return jsonify(_results_not_ready_response(show_id, availability)), 425
+
         url = _source_url(show_id, group, breed)
         soup = _fetch_page(url)
         data = _parse_breed_results(soup, show_id)
@@ -189,11 +209,16 @@ def breed_results(show_id):
 @limiter.limit("20/minute")
 def show_all_results(show_id):
     try:
+        availability = _show_result_availability_for_id(show_id)
         cached = _cached_all_results_response(show_id, allow_stale=True)
         if cached:
-            if cached.get("cache", {}).get("stale"):
+            cached["availability"] = availability
+            if cached.get("cache", {}).get("stale") and availability.get("can_fetch", True):
                 _queue_result_cache_job(show_id, reason="stale-refresh")
             return jsonify(cached)
+
+        if not availability.get("can_fetch", True):
+            return jsonify(_results_not_ready_response(show_id, availability)), 425
 
         job = _queue_result_cache_job(show_id, reason="user")
         started = _start_result_cache_warmup(show_id, reason="user-immediate")
@@ -207,6 +232,7 @@ def show_all_results(show_id):
             "retry_after": RESULT_RETRY_AFTER_SECONDS,
             "progress": _result_cache_progress(show_id, doc=doc, job=job),
             "started": started,
+            "availability": availability,
         }), 202
     except Exception as e:
         logger.exception("show_all_results_error", show_id=show_id)

@@ -34,6 +34,7 @@ const {
   allDogsError,
   allDogsProgressPercent,
   allDogsProgressText,
+  allDogsAvailability,
   collapsedMonths,
   expandedCritiques,
   showSearchPlaceholder,
@@ -123,6 +124,7 @@ const pageTitle = computed(() => {
         :all-dogs-error="allDogsError"
         :all-dogs-progress-percent="allDogsProgressPercent"
         :all-dogs-progress-text="allDogsProgressText"
+        :all-dogs-availability="allDogsAvailability"
         :show-search-placeholder="showSearchPlaceholder"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"

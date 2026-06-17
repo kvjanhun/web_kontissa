@@ -1,7 +1,7 @@
 import datetime
 import re
 
-from .config import FINNISH_MONTHS
+from .config import FINNISH_MONTHS, RESULT_SHOW_MORNING_HOUR
 
 def _is_recent_show(month_str):
     """Check if the show month is the current or previous month."""
@@ -160,3 +160,62 @@ def _show_age_days(show, today=None):
         return None
     today = today or datetime.date.today()
     return (today - show_date).days
+
+def _local_iso(dt):
+    return dt.isoformat(timespec="seconds") if dt else None
+
+def _show_result_availability(show, now=None, morning_hour=RESULT_SHOW_MORNING_HOUR):
+    """Decide whether result pages are worth checking for a show."""
+    start_date, end_date = _parse_show_date_range(show)
+    if not start_date or not end_date:
+        return {
+            "can_fetch": True,
+            "show_state": "unknown",
+            "reason": "unknown_date",
+            "morning_hour": morning_hour,
+        }
+
+    now = now or datetime.datetime.now()
+    if isinstance(now, datetime.date) and not isinstance(now, datetime.datetime):
+        now = datetime.datetime.combine(now, datetime.time())
+
+    today = now.date()
+    available_from = datetime.datetime.combine(start_date, datetime.time(hour=morning_hour))
+
+    base = {
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "available_from_iso": _local_iso(available_from),
+        "morning_hour": morning_hour,
+    }
+
+    if today < start_date:
+        return {
+            **base,
+            "can_fetch": False,
+            "show_state": "upcoming",
+            "reason": "future_show",
+        }
+
+    if today == start_date and now < available_from:
+        return {
+            **base,
+            "can_fetch": False,
+            "show_state": "live",
+            "reason": "show_morning",
+        }
+
+    if start_date <= today <= end_date:
+        return {
+            **base,
+            "can_fetch": True,
+            "show_state": "live",
+            "reason": "show_day",
+        }
+
+    return {
+        **base,
+        "can_fetch": True,
+        "show_state": "past",
+        "reason": "past_show",
+    }

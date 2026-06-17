@@ -61,6 +61,10 @@ defineProps({
     type: String,
     default: '',
   },
+  allDogsAvailability: {
+    type: Object,
+    default: null,
+  },
   showSearchPlaceholder: {
     type: String,
     default: '',
@@ -134,6 +138,7 @@ defineEmits([
         :all-dogs-error="allDogsError"
         :all-dogs-progress-percent="allDogsProgressPercent"
         :all-dogs-progress-text="allDogsProgressText"
+        :all-dogs-availability="allDogsAvailability"
         :show-search-placeholder="showSearchPlaceholder"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"

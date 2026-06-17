@@ -394,4 +394,82 @@ test.describe('Dog Show Browser', () => {
     await expect(showSearchInput).toHaveValue('')
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
   })
+
+  test('future shows explain that whole-show results are not checked yet', async ({ page }) => {
+    let allResultsCalled = false
+
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 15001,
+              date: '20.06.',
+              name: 'Future Basenji Show',
+              month: 'kesäkuu 2999',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=15001',
+              stats: {
+                indexed: true,
+                breed_count: 1,
+                entry_count: 4,
+                result_breed_count: 0,
+                show_state: 'upcoming',
+                is_live: false,
+              },
+            },
+          ],
+          index: {
+            indexed_show_count: 1,
+            total_show_count: 1,
+            last_updated: null,
+            last_updated_iso: null,
+          },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/15001', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 15001,
+          title: 'Future Basenji Show 2999',
+          date: '20.06.',
+          month: 'kesäkuu 2999',
+          breeds: [
+            {
+              name: 'Basenji',
+              count: 4,
+              group: '6',
+              breed_id: '123',
+              has_results: false,
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=15001&R=6&RO=123',
+            },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=15001',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/15001/all-results', async route => {
+      allResultsCalled = true
+      await route.fulfill({
+        status: 425,
+        contentType: 'application/json',
+        body: JSON.stringify({ status: 'not_ready' }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByRole('button', { name: /kesäkuu 2999/ }).click()
+    await page.getByRole('button', { name: /Future Basenji Show/ }).click()
+
+    await expect(page.getByText('Tuloksia ei haeta vielä')).toBeVisible()
+    await expect(page.getByText(/aikaisintaan näyttelypäivänä klo 6/)).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
+    expect(allResultsCalled).toBe(false)
+  })
 })
