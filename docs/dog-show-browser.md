@@ -12,7 +12,9 @@ Read this section first when changing `/dog`.
 | Frontend list, search, detail, filters, result cards | `frontend/features/dog/components/` |
 | Pure frontend result helpers | `frontend/features/dog/dogResults.js` |
 | Dog frontend agent guide | `frontend/features/dog/AGENTS.md` |
-| Backend endpoints, parsing, cache/job formats | `app/api/dog.py` |
+| Backend route facade and request validation | `app/api/dog.py` |
+| Backend implementation map | `app/dog_show/AGENTS.md` |
+| Backend parsing, storage, result caches, crawler passes | `app/dog_show/` |
 | Crawler process and CLI flags | `scripts/dog_crawl.py` |
 | Backend tests | `tests/test_dog.py` |
 | Frontend helper tests | `frontend/tests/unit/dogResults.test.js` |
@@ -23,6 +25,7 @@ Important guardrails:
 - The frontend must never fan out across all breed result pages; use `/api/dog/shows/<id>/all-results` for whole-show filtering.
 - Persistent dog state is JSON under `DOG_INDEX_DIR`, not SQLite. Do not delete `app/data`, `dog_show_index.json`, `dog_result_jobs.json`, or `dog_result_cache/` casually.
 - `pages/dog.vue` is intentionally thin after the frontend refactor; dog UI belongs in `frontend/features/dog/`.
+- `app/api/dog.py` is intentionally a backend route facade; dog backend implementation belongs in `app/dog_show/`.
 - Keep Showlink request volume bounded. Prefer crawler/job/cache changes over more client polling.
 
 ## Purpose
@@ -35,7 +38,8 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 - Frontend route entry: `frontend/pages/dog.vue`
 - Frontend feature module: `frontend/features/dog/`
-- Flask blueprint: `app/api/dog.py`
+- Flask blueprint and route validation: `app/api/dog.py`
+- Backend feature package: `app/dog_show/`
 - Crawler process: `scripts/dog_crawl.py`
 - Production service: `dog-crawler` in `docker-compose.yml`
 

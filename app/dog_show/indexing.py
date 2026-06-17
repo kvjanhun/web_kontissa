@@ -1,0 +1,368 @@
+import time
+
+import structlog
+
+from .config import SHOW_DETAIL_TTL
+from .store import (
+    _indexed_show, _load_index, _load_result_cache_doc, _save_index, _show_detail_cache,
+    _show_index, _show_list_cache,
+)
+from .showlink import _source_url
+from .utils import (
+    _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
+    _parse_show_date, _show_age_days, _show_date_state, _utc_iso,
+)
+
+logger = structlog.get_logger(__name__)
+
+def _show_list_item_for_id(show_id):
+    sid = str(show_id)
+    for show in _show_list_cache.get("data") or []:
+        if str(show.get("id")) == sid:
+            return show
+    return None
+
+def _indexed_show_as_list_item(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return None
+    return {
+        "id": int(show_id),
+        "date": indexed_show.get("date", ""),
+        "month": indexed_show.get("month", ""),
+    }
+
+def _show_date_for_id(show_id):
+    return _parse_show_date(_show_list_item_for_id(show_id) or _indexed_show_as_list_item(show_id))
+
+def _result_count_from_cache_doc(show_id, entry_count=None):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return None
+
+    try:
+        count = len(doc.get("results") or [])
+    except TypeError:
+        return None
+
+    if isinstance(entry_count, int):
+        return min(count, entry_count)
+    return count
+
+def _show_item_for_stats(show_id, show=None):
+    if show:
+        return show
+
+    indexed_show = _show_index.get("shows", {}).get(str(show_id))
+    if indexed_show:
+        return {
+            "id": int(show_id),
+            "date": indexed_show.get("date", ""),
+            "month": indexed_show.get("month", ""),
+        }
+    return _show_list_item_for_id(show_id)
+
+def _show_stats_from_index(show_id, show=None, today=None):
+    indexed_show = _show_index.get("shows", {}).get(str(show_id))
+    if not indexed_show:
+        return None
+
+    breeds = indexed_show.get("breeds") or []
+    if not breeds:
+        return None
+
+    entry_count = 0
+    entry_count_known = False
+    result_breed_count = 0
+
+    for breed in breeds:
+        if breed.get("has_results"):
+            result_breed_count += 1
+
+        try:
+            entry_count += int(breed.get("count"))
+            entry_count_known = True
+        except (TypeError, ValueError):
+            continue
+
+    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    show_state = _show_date_state(_show_item_for_stats(show_id, show=show), today=today)
+    stats = {
+        "indexed": True,
+        "breed_count": len(breeds),
+        "entry_count": entry_count if entry_count_known else None,
+        "result_breed_count": result_breed_count,
+        "show_state": show_state,
+        "is_live": show_state == "live",
+        "updated_at": updated or None,
+        "updated_at_iso": _utc_iso(updated),
+    }
+    if show_state == "live":
+        result_count = _result_count_from_cache_doc(
+            show_id,
+            entry_count=entry_count if entry_count_known else None,
+        )
+        if result_count is not None:
+            stats["result_count"] = result_count
+    return stats
+
+def _shows_with_cached_stats(shows):
+    enriched = []
+    for show in shows:
+        item = dict(show)
+        stats = _show_stats_from_index(show.get("id"), show=show)
+        if stats:
+            item["stats"] = stats
+        enriched.append(item)
+    return enriched
+
+def _show_from_index_for_search(show_id, indexed_show):
+    try:
+        sid = int(show_id)
+    except (TypeError, ValueError):
+        return None
+
+    title = indexed_show.get("title", "")
+    show = {
+        "id": sid,
+        "date": indexed_show.get("date", ""),
+        "name": indexed_show.get("name") or title,
+        "title": title,
+        "month": indexed_show.get("month", ""),
+        "source_url": indexed_show.get("source_url") or _source_url(sid),
+    }
+    stats = _show_stats_from_index(sid, show=show)
+    if stats:
+        show["stats"] = stats
+    return show
+
+def _breed_identity_from_result(result):
+    breed_obj = result.get("breedObj") or {}
+    group = result.get("breedGroup") or breed_obj.get("group")
+    breed_id = result.get("breedId") or breed_obj.get("breed_id")
+    if not group or not breed_id:
+        return None
+    return str(group), str(breed_id)
+
+def _cached_result_breed_map(show_id):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return {}
+
+    breeds = {}
+    for key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict) or ":" not in key:
+            continue
+        group, breed_id = key.split(":", 1)
+        breed = _clean_breed_data({
+            "name": breed_data.get("name", ""),
+            "group": group,
+            "breed_id": breed_id,
+            "has_results": True,
+            "judge": breed_data.get("judge", ""),
+        })
+        if breed.get("judge"):
+            breeds[(group, breed_id)] = breed
+
+    for result in doc.get("results") or []:
+        key = _breed_identity_from_result(result)
+        if not key:
+            continue
+        breed = _clean_breed_data(result.get("breedObj") or {})
+        if breed.get("judge"):
+            breed.setdefault("group", key[0])
+            breed.setdefault("breed_id", key[1])
+            breed.setdefault("has_results", True)
+            breeds[key] = breed
+
+    return breeds
+
+def _update_index_breed_judge(show_id, group, breed_id, judge):
+    judge = _clean_judge_name(judge)
+    if not judge:
+        return False
+
+    _load_index()
+    show_data = _show_index.get("shows", {}).get(str(int(show_id)))
+    if not show_data:
+        return False
+
+    for breed in show_data.get("breeds", []) or []:
+        if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
+            if _clean_judge_name(breed.get("judge")) == judge:
+                return False
+            breed["judge"] = judge
+            return True
+    return False
+
+def _update_index_breed_judges(show_id, breed_map):
+    updated = False
+    for (group, breed_id), breed in breed_map.items():
+        if _update_index_breed_judge(show_id, group, breed_id, breed.get("judge")):
+            updated = True
+    if updated:
+        _save_index()
+    return updated
+
+def _merge_breed_map_judges_into_breeds(breeds, breed_map):
+    if not breed_map:
+        return False
+
+    updated = False
+    for breed in breeds or []:
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if not group or not breed_id:
+            continue
+
+        cached_breed = breed_map.get((str(group), str(breed_id)))
+        judge = _clean_judge_name(cached_breed.get("judge") if cached_breed else "")
+        if not judge or _clean_judge_name(breed.get("judge")) == judge:
+            continue
+
+        breed["judge"] = judge
+        updated = True
+
+    return updated
+
+def _index_judge_breed_map(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return {}
+
+    breed_map = {}
+    for breed in indexed_show.get("breeds", []) or []:
+        judge = _clean_judge_name(breed.get("judge"))
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if judge and group and breed_id:
+            breed_map[(str(group), str(breed_id))] = {"judge": judge}
+    return breed_map
+
+def _enrich_breeds_with_index_judges(show_id, breeds):
+    try:
+        return _merge_breed_map_judges_into_breeds(
+            breeds,
+            _index_judge_breed_map(show_id),
+        )
+    except Exception as e:
+        logger.warning("dog_detail_index_judge_enrich_failed", show_id=show_id, error=str(e))
+        return False
+
+def _enrich_breeds_with_cached_result_judges(show_id, breeds):
+    try:
+        breed_map = _cached_result_breed_map(show_id)
+        updated = _merge_breed_map_judges_into_breeds(breeds, breed_map)
+        if updated:
+            _update_index_breed_judges(show_id, breed_map)
+        return updated
+    except Exception as e:
+        logger.warning("dog_detail_cached_judge_enrich_failed", show_id=show_id, error=str(e))
+        return False
+
+def _persist_show_detail_to_index(show_id, detail, updated_at):
+    breeds = detail.get("breeds") or []
+    if not breeds:
+        return
+
+    _load_index()
+    sid = str(int(show_id))
+    existing = _show_index.get("shows", {}).get(sid) or {}
+    list_item = _show_list_item_for_id(show_id) or {}
+
+    _show_index.setdefault("shows", {})[sid] = _index_entry_from_detail(
+        show_id,
+        {
+            "name": list_item.get("name") or existing.get("name") or detail.get("title", ""),
+            "date": list_item.get("date") or existing.get("date", ""),
+            "month": list_item.get("month") or existing.get("month", ""),
+        },
+        detail,
+        updated_at,
+    )
+    _show_index["last_updated"] = updated_at
+    _save_index()
+
+def _index_entry_from_detail(show_id, show, detail, updated_at):
+    entry = {
+        "title": detail.get("title") or show.get("title", "") or show.get("name", ""),
+        "name": show.get("name", ""),
+        "date": show.get("date", ""),
+        "month": show.get("month", ""),
+        "source_url": detail.get("source_url") or _source_url(show_id),
+        "breeds": detail.get("breeds") or [],
+        "updated_at": updated_at,
+        "updated_at_iso": _utc_iso(updated_at),
+    }
+    if not entry["breeds"]:
+        entry["empty_breed_list_confirmed"] = True
+    return entry
+
+def _result_breeds_from_index(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show:
+        return []
+    return _clean_breed_list(indexed_show.get("breeds", []))
+
+def _result_breeds_with_results(breeds):
+    return [
+        breed for breed in breeds
+        if breed.get("has_results") and breed.get("group") and breed.get("breed_id")
+    ]
+
+def _show_month_for_id(show_id):
+    _load_index()
+
+    sid = str(show_id)
+    indexed_show = _show_index.get("shows", {}).get(sid)
+    if indexed_show:
+        return indexed_show.get("month", "")
+
+    for show in _show_list_cache.get("data") or []:
+        if str(show.get("id")) == sid:
+            return show.get("month", "")
+
+    return ""
+
+def _is_show_recent_by_id(show_id):
+    return _is_recent_show(_show_month_for_id(show_id))
+
+def _cached_show_detail(show_id, allow_stale=False):
+    cached = _show_detail_cache.get(show_id)
+    if not cached:
+        return None
+
+    if "data" not in cached:
+        return cached if allow_stale else None
+
+    if allow_stale:
+        return cached["data"]
+
+    age = time.time() - cached["ts"]
+    if not _is_show_recent_by_id(show_id) or age < SHOW_DETAIL_TTL:
+        return cached["data"]
+
+    return None
+
+def _show_detail_from_index(show_id):
+    indexed_show = _indexed_show(show_id)
+    if not indexed_show or not indexed_show.get("breeds"):
+        return None
+
+    updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()
+    breeds = _clean_breed_list(indexed_show.get("breeds", []))
+    _enrich_breeds_with_cached_result_judges(show_id, breeds)
+    return {
+        "id": int(show_id),
+        "title": indexed_show.get("title") or indexed_show.get("name", ""),
+        "breeds": breeds,
+        "source_url": indexed_show.get("source_url") or _source_url(show_id),
+        "fetched_at": updated_at,
+        "fetched_at_iso": _utc_iso(updated_at),
+        "cache": {
+            "status": "indexed",
+            "source": "dog_show_index",
+            "updated_at": updated_at,
+            "updated_at_iso": _utc_iso(updated_at),
+        },
+    }

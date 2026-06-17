@@ -16,7 +16,9 @@ if REPO_ROOT not in sys.path:
 os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 
-from app.api.dog import INDEX_PATH, RESULT_CACHE_DIR, crawl_empty_index_once, crawl_index_once, crawl_result_cache_once  # noqa: E402
+from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once  # noqa: E402
+from app.dog_show.result_cache import crawl_result_cache_once  # noqa: E402
+from app.dog_show.store import INDEX_PATH, RESULT_CACHE_DIR  # noqa: E402
 
 
 def main():
