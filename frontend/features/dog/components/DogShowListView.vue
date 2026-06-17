@@ -1,4 +1,5 @@
 <script setup>
+import DogSearchClearButton from './DogSearchClearButton.vue'
 import DogStateBlock from './DogStateBlock.vue'
 import {
   formatShowDay,
@@ -72,7 +73,13 @@ defineEmits([
   <div>
     <div class="dog-view-spacing" />
 
-    <div class="dog-search-wrap">
+    <div
+      :class="[
+        'dog-search-wrap',
+        filterText && 'dog-search-wrap-clearable',
+        searchLoading && 'dog-search-wrap-loading',
+      ]"
+    >
       <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <circle cx="116" cy="116" r="84" />
         <line x1="175.4" y1="175.4" x2="224" y2="224" />
@@ -83,6 +90,10 @@ defineEmits([
         class="dog-search-input"
         placeholder="Hae näyttelyä, rotua tai tuomaria..."
         @input="$emit('filter-input', $event.target.value)"
+      />
+      <DogSearchClearButton
+        v-if="filterText"
+        @clear="$emit('filter-input', '')"
       />
       <span v-if="searchLoading" class="dog-search-spinner" aria-hidden="true" />
     </div>
@@ -112,7 +123,7 @@ defineEmits([
       <div v-else-if="searchResults.length">
         <button
           v-for="result in searchResults"
-          :key="result.show.id + '-' + (result.breed ? result.breed.breed_id : '')"
+          :key="result.show.id + '-' + result.match + '-' + (result.breed ? result.breed.breed_id : '')"
           class="dog-show-row"
           @click="$emit('select-search-result', result)"
         >
@@ -135,6 +146,12 @@ defineEmits([
               {{ result.breed.name }} ({{ result.breed.count }} koiraa)
               <span v-if="result.breed.judge" class="dog-search-judge-sub">
                 Tuomari: {{ result.breed.judge }}
+              </span>
+            </span>
+            <span v-else-if="result.match === 'judge'" class="dog-search-breed-tag">
+              Tuomari
+              <span v-if="result.judge" class="dog-search-judge-sub">
+                {{ result.judge }}
               </span>
             </span>
             <span v-else class="dog-search-breed-tag">Näyttely</span>

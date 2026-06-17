@@ -1166,7 +1166,8 @@ def test_search_shows_by_judge(mock_get, client):
     _show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
         "breeds": [
-            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" }
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
+            { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True, "judge": "Paula Steele" },
         ]
     }
 
@@ -1178,8 +1179,10 @@ def test_search_shows_by_judge(mock_get, client):
     assert data["query"] == "steele"
     assert len(data["results"]) == 1
     assert data["results"][0]["show"]["name"] == "Basenji"
-    assert data["results"][0]["breed"]["judge"] == "Paula Steele"
-    assert data["results"][0]["match"] == "breed"
+    assert data["results"][0]["breed"] is None
+    assert data["results"][0]["judge"] == "Paula Steele"
+    assert data["results"][0]["judge_match_count"] == 2
+    assert data["results"][0]["match"] == "judge"
 
 
 @patch("app.api.dog.requests.get")
@@ -1214,9 +1217,10 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     assert len(data["results"]) == 1
     assert data["results"][0]["show"]["id"] == 13763
     assert data["results"][0]["show"]["name"] == "Vaasa KV"
-    assert data["results"][0]["breed"]["name"] == "sileäkarvainen noutaja"
-    assert data["results"][0]["breed"]["judge"] == "Tarja Kolkka"
-    assert data["results"][0]["match"] == "breed"
+    assert data["results"][0]["breed"] is None
+    assert data["results"][0]["judge"] == "Tarja Kolkka"
+    assert data["results"][0]["judge_match_count"] == 1
+    assert data["results"][0]["match"] == "judge"
 
 
 @patch("app.api.dog.requests.get")
@@ -1275,6 +1279,8 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     data = resp.get_json()
     assert len(data["results"]) == 1
     assert data["results"][0]["show"]["id"] == 13992
-    assert data["results"][0]["breed"]["name"] == "sileäkarvainen noutaja"
-    assert data["results"][0]["breed"]["judge"] == "Tarja Kolkka"
+    assert data["results"][0]["breed"] is None
+    assert data["results"][0]["judge"] == "Tarja Kolkka"
+    assert data["results"][0]["judge_match_count"] == 1
+    assert data["results"][0]["match"] == "judge"
     assert dog_module._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"

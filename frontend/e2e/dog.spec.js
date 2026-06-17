@@ -59,15 +59,10 @@ test.describe('Dog Show Browser', () => {
                   show_state: 'live',
                 },
               },
-              breed: {
-                name: 'basenji',
-                count: 90,
-                group: '5',
-                breed_id: '3',
-                has_results: true,
-                judge: 'Paula Steele',
-              },
-              match: 'breed',
+              breed: null,
+              match: 'judge',
+              judge: 'Paula Steele',
+              judge_match_count: 2,
             },
           ],
           index: {
@@ -96,8 +91,12 @@ test.describe('Dog Show Browser', () => {
 
     await searchInput.fill('paula')
     await expect(page.getByText('Haetaan...')).toBeVisible()
-    await expect(page.getByText('basenji (90 koiraa)')).toBeVisible()
-    await expect(page.getByText('Tuomari: Paula Steele')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(1)
+    await expect(page.getByText('Paula Steele')).toBeVisible()
+
+    await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
+    await expect(searchInput).toHaveValue('')
+    await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(0)
   })
 
   test('browser back restores the previous dog page view', async ({ page }) => {
@@ -129,7 +128,7 @@ test.describe('Dog Show Browser', () => {
         contentType: 'application/json',
         body: JSON.stringify({
           id: 14042,
-          title: 'Basenji Show 2026',
+          title: 'Basenji Show 2026 erittäin pitkä näyttelyn nimi joka tarvitsee katkaisun mobiilissa',
           breeds: [
             {
               name: 'Basenji',
@@ -180,6 +179,8 @@ test.describe('Dog Show Browser', () => {
 
     await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
+    await expect(page.locator('.dog-back-link span').filter({ hasText: 'Näyttelyt' })).toBeVisible()
+    await expect(page.locator('.dog-top-title')).toHaveCSS('text-overflow', 'ellipsis')
     await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toBeVisible()
 
@@ -361,10 +362,10 @@ test.describe('Dog Show Browser', () => {
     await page.goto('/dog')
     await page.getByRole('button', { name: /Basenji Show/ }).click()
     await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
-    
+
     // Open whole-show filter panel
     await page.getByRole('button', { name: 'Suodata koko näyttelyä' }).click()
-    
+
     // Check that one combined search/filter panel remains and breed groups expand on demand
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
@@ -372,20 +373,25 @@ test.describe('Dog Show Browser', () => {
     await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     await expect(page.getByText('Iltatähti')).toBeVisible()
-    
+
     // Filter by grade 'ERI'
     await page.locator('select').first().selectOption('eri')
-    
+
     // Aamun Tähti (ERI) should be visible, Iltatähti (EH) should be hidden
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     await expect(page.getByText('Iltatähti')).not.toBeVisible()
-    
+
     // Search text for 'Aamun'
     await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Aamun')
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
-    
+
     // Non-matching search
-    await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Mustikki')
+    const showSearchInput = page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')
+    await showSearchInput.fill('Mustikki')
     await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
+
+    await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
+    await expect(showSearchInput).toHaveValue('')
+    await expect(page.getByText('Aamun Tähti')).toBeVisible()
   })
 })

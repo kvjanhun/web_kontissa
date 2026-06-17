@@ -1,4 +1,5 @@
 <script setup>
+import DogSearchClearButton from './DogSearchClearButton.vue'
 import { DOG_GRADE_OPTIONS } from '../dogResults.js'
 
 defineProps({
@@ -76,7 +77,13 @@ defineEmits([
         <label class="dog-filter-label">
           {{ allDogsLoaded ? 'Rotu, tuomari tai koira' : 'Rotu tai tuomari' }}
         </label>
-        <div class="dog-search-wrap dog-breed-search">
+        <div
+          :class="[
+            'dog-search-wrap',
+            'dog-breed-search',
+            breedSearchQuery && 'dog-search-wrap-clearable',
+          ]"
+        >
           <svg class="dog-search-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="116" cy="116" r="84" />
             <line x1="175.4" y1="175.4" x2="224" y2="224" />
@@ -87,6 +94,10 @@ defineEmits([
             class="dog-search-input"
             :placeholder="showSearchPlaceholder"
             @input="$emit('update:breedSearchQuery', $event.target.value)"
+          />
+          <DogSearchClearButton
+            v-if="breedSearchQuery"
+            @clear="$emit('update:breedSearchQuery', '')"
           />
         </div>
       </div>

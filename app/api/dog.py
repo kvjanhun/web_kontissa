@@ -2185,6 +2185,7 @@ def search_shows():
 
             indexed_show = _show_index["shows"].get(sid)
             breed_matches = []
+            judge_matches = []
             seen_breed_keys = set()
             indexed_breeds = {}
             if indexed_show:
@@ -2194,16 +2195,16 @@ def search_shows():
                     indexed_breeds[key] = cleaned_breed
                     breed_name = cleaned_breed.get("name", "")
                     judge_name = cleaned_breed.get("judge", "")
-                    if (
-                        _text_matches_query_variants(breed_name, query_variants)
-                        or _text_matches_query_variants(judge_name, query_variants)
-                    ):
+                    if _text_matches_query_variants(breed_name, query_variants):
                         breed_matches.append(cleaned_breed)
+                        seen_breed_keys.add(key)
+                    elif _text_matches_query_variants(judge_name, query_variants):
+                        judge_matches.append(cleaned_breed)
                         seen_breed_keys.add(key)
 
             if not breed_matches:
                 cached_breed_map = _cached_result_breed_map(sid)
-                cached_matches = []
+                cached_judge_matches = []
                 for key, cached_breed in cached_breed_map.items():
                     merged_breed = dict(indexed_breeds.get(key) or {})
                     merged_breed.update({k: v for k, v in cached_breed.items() if v not in ("", None)})
@@ -2211,10 +2212,10 @@ def search_shows():
                         key not in seen_breed_keys
                         and _text_matches_query_variants(merged_breed.get("judge", ""), query_variants)
                     ):
-                        cached_matches.append(merged_breed)
+                        cached_judge_matches.append(merged_breed)
                         seen_breed_keys.add(key)
-                if cached_matches:
-                    breed_matches.extend(cached_matches)
+                if cached_judge_matches:
+                    judge_matches.extend(cached_judge_matches)
                     _update_index_breed_judges(sid, cached_breed_map)
 
             if breed_matches:
@@ -2224,6 +2225,19 @@ def search_shows():
                         "breed": breed_data,
                         "match": "breed",
                     })
+            elif judge_matches:
+                judges = []
+                for breed_data in judge_matches:
+                    judge = _clean_judge_name(breed_data.get("judge"))
+                    if judge and judge not in judges:
+                        judges.append(judge)
+                results.append({
+                    "show": show,
+                    "breed": None,
+                    "match": "judge",
+                    "judge": ", ".join(judges),
+                    "judge_match_count": len(judge_matches),
+                })
             elif show_matches:
                 results.append({
                     "show": show,
