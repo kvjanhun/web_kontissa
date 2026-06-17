@@ -41,6 +41,7 @@ const {
   showBreedGroups,
   availableShowClasses,
   availableShowAwards,
+  showAwardResultGroups,
   indexedSearchActive,
   groupedShows,
   thisWeekShows,
@@ -51,6 +52,7 @@ const {
   availableClasses,
   availableAwards,
   resultsByGenderAndClass,
+  awardResultGroups,
   startShowWideSearch,
   loadAllShowResults,
   fetchShows,
@@ -129,6 +131,7 @@ const pageTitle = computed(() => {
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
         :show-breed-groups="showBreedGroups"
+        :show-award-result-groups="showAwardResultGroups"
         :breed-empty-text="breedEmptyText"
         :expanded-critiques="expandedCritiques"
         :is-breed-group-expanded="isBreedGroupExpanded"
@@ -155,6 +158,7 @@ const pageTitle = computed(() => {
         :available-classes="availableClasses"
         :available-awards="availableAwards"
         :results-by-gender-and-class="resultsByGenderAndClass"
+        :award-result-groups="awardResultGroups"
         :expanded-critiques="expandedCritiques"
         @retry-results="fetchBreedResults"
         @toggle-critique="toggleCritique"

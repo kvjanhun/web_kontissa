@@ -18,6 +18,14 @@ defineProps({
     type: Boolean,
     default: false,
   },
+  showBreedMeta: {
+    type: Boolean,
+    default: false,
+  },
+  showAwardRank: {
+    type: Boolean,
+    default: false,
+  },
 })
 
 defineEmits(['toggle-critique'])
@@ -27,8 +35,10 @@ defineEmits(['toggle-critique'])
   <div class="dog-result-card" :class="gradeBorderClass(dog.grade)">
     <div class="dog-result-main">
       <div class="dog-result-top">
+        <span v-if="showAwardRank && dog.awardRank" class="dog-placement-badge">{{ dog.awardRank }}.</span>
         <span v-if="dog.number" class="dog-catalog-num">#{{ dog.number }}</span>
-        <span v-if="dog.placement" class="dog-placement-badge">{{ dog.placement }}.</span>
+        <span v-if="!showAwardRank && dog.placement" class="dog-placement-badge">{{ dog.placement }}.</span>
+        <span v-if="showBreedMeta && dog.breedName" class="dog-breed-badge-inline">{{ dog.breedName }}</span>
         <span v-if="showInlineMeta" class="dog-class-badge-inline">{{ dog.class_name }}</span>
         <span v-if="showInlineMeta" class="dog-gender-badge-inline">{{ dog.gender === 'uros' ? '♂' : dog.gender === 'narttu' ? '♀' : '' }}</span>
 

@@ -1103,6 +1103,30 @@
   font-weight: 500;
   color: var(--dog-text);
 }
+.dog-award-results {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+.dog-show-award-results {
+  margin-top: 1.25rem;
+}
+.dog-award-result-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+.dog-award-result-heading {
+  margin: 0;
+  padding: 0.5rem 0;
+  border-bottom: 1px dashed var(--dog-border);
+  color: var(--dog-text);
+  font-size: 1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0;
+}
 .dog-results-grid {
   display: flex;
   flex-direction: column;
@@ -1471,6 +1495,7 @@
     display: none;
   }
 }
+.dog-breed-badge-inline,
 .dog-class-badge-inline,
 .dog-gender-badge-inline {
   font-size: 0.75rem;
@@ -1480,6 +1505,9 @@
   padding: 0.15rem 0.45rem;
   border: 1px solid var(--dog-border);
   border-radius: 999px;
+}
+.dog-breed-badge-inline {
+  color: var(--dog-accent);
 }
 
 

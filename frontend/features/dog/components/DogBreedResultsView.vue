@@ -53,6 +53,10 @@ defineProps({
     type: Object,
     default: () => ({}),
   },
+  awardResultGroups: {
+    type: Array,
+    default: () => [],
+  },
   expandedCritiques: {
     type: Set,
     required: true,
@@ -70,6 +74,10 @@ defineEmits([
 
 function critiqueKey(gender, className, dog) {
   return `${gender}-${className}-${dog.number || dog.name}`
+}
+
+function awardCritiqueKey(group, dog) {
+  return `award-${group.key}-${dog.number || dog.name}`
 }
 </script>
 
@@ -117,30 +125,61 @@ function critiqueKey(gender, className, dog) {
         </div>
       </div>
 
-      <div v-for="(classes, gender) in resultsByGenderAndClass" :key="gender" class="dog-gender-group">
-        <h2 class="dog-gender-heading">
-          <span class="dog-gender-symbol">{{ gender === 'uros' ? '♂' : gender === 'narttu' ? '♀' : '🐾' }}</span>
-          {{ gender === 'uros' ? 'Urokset' : gender === 'narttu' ? 'Nartut' : gender }}
-        </h2>
-
-        <div v-for="(dogs, className) in classes" :key="className" class="dog-class-section">
-          <div class="dog-class-title-header">
-            <span class="dog-class-badge">Luokka</span>
-            <span class="dog-class-title-text">{{ className }}</span>
-          </div>
+      <div
+        v-if="dogAwardFilter && awardResultGroups.length"
+        class="dog-award-results"
+      >
+        <div
+          v-for="group in awardResultGroups"
+          :key="group.key"
+          class="dog-award-result-group"
+        >
+          <h2 class="dog-award-result-heading">{{ group.label }}</h2>
 
           <div class="dog-results-grid">
             <DogResultCard
-              v-for="dog in dogs"
+              v-for="dog in group.dogs"
               :key="dog.number || dog.name"
               :dog="dog"
-              :critique-key="critiqueKey(gender, className, dog)"
-              :critique-expanded="expandedCritiques.has(critiqueKey(gender, className, dog))"
+              :critique-key="awardCritiqueKey(group, dog)"
+              :critique-expanded="expandedCritiques.has(awardCritiqueKey(group, dog))"
+              show-award-rank
               @toggle-critique="$emit('toggle-critique', $event)"
             />
           </div>
         </div>
       </div>
+
+      <template v-else>
+        <div
+          v-for="(classes, gender) in resultsByGenderAndClass"
+          :key="gender"
+          class="dog-gender-group"
+        >
+          <h2 class="dog-gender-heading">
+            <span class="dog-gender-symbol">{{ gender === 'uros' ? '♂' : gender === 'narttu' ? '♀' : '🐾' }}</span>
+            {{ gender === 'uros' ? 'Urokset' : gender === 'narttu' ? 'Nartut' : gender }}
+          </h2>
+
+          <div v-for="(dogs, className) in classes" :key="className" class="dog-class-section">
+            <div class="dog-class-title-header">
+              <span class="dog-class-badge">Luokka</span>
+              <span class="dog-class-title-text">{{ className }}</span>
+            </div>
+
+            <div class="dog-results-grid">
+              <DogResultCard
+                v-for="dog in dogs"
+                :key="dog.number || dog.name"
+                :dog="dog"
+                :critique-key="critiqueKey(gender, className, dog)"
+                :critique-expanded="expandedCritiques.has(critiqueKey(gender, className, dog))"
+                @toggle-critique="$emit('toggle-critique', $event)"
+              />
+            </div>
+          </div>
+        </div>
+      </template>
 
       <DogStateBlock
         v-if="!Object.keys(resultsByGenderAndClass).length"

@@ -14,6 +14,7 @@ import {
   getShowResultAvailability,
   gradeBorderClass,
   gradeClasses,
+  groupResultsByAwardFilter,
   groupResultsByGenderAndClass,
   hasShowStats,
   isNumericString,
@@ -23,6 +24,7 @@ import {
   shouldCollapseMonth,
   showStatItems,
   showStatsLabel,
+  sortDogsByAwardFilter,
   sourceForShow,
 } from './dogResults.js'
 
@@ -165,11 +167,12 @@ export function useDogBrowser() {
 
   const allDogsAfterShowFilters = computed(() => {
     if (!allDogsLoaded.value) return []
-    return allDogsResults.value.filter(dog => dogMatchesShowFilters(dog, {
+    const filtered = allDogsResults.value.filter(dog => dogMatchesShowFilters(dog, {
       grade: dogGradeFilter.value,
       className: dogClassFilter.value,
       award: dogAwardFilter.value,
     }))
+    return sortDogsByAwardFilter(filtered, dogAwardFilter.value)
   })
 
   const showWideFiltersActive = computed(() => (
@@ -195,6 +198,10 @@ export function useDogBrowser() {
 
   const availableShowClasses = computed(() => availableClassesFromResults(allDogsResults.value || []))
   const availableShowAwards = computed(() => availableAwardsFromResults(allDogsResults.value || []))
+  const showAwardResultGroups = computed(() => groupResultsByAwardFilter(
+    allDogsAfterShowFilters.value,
+    dogAwardFilter.value,
+  ))
 
   async function loadAllShowResults(options = {}) {
     const { poll = false, sessionId = allDogsSessionId } = options
@@ -535,6 +542,10 @@ export function useDogBrowser() {
   const availableClasses = computed(() => availableClassesFromResults(breedResults.value?.results || []))
   const availableAwards = computed(() => availableAwardsFromResults(breedResults.value?.results || []))
   const resultsByGenderAndClass = computed(() => groupResultsByGenderAndClass(filteredDogResults.value))
+  const awardResultGroups = computed(() => groupResultsByAwardFilter(
+    filteredDogResults.value,
+    dogAwardFilter.value,
+  ))
 
   async function syncRouteState() {
     const syncToken = ++routeSyncToken
@@ -669,6 +680,7 @@ export function useDogBrowser() {
     showBreedGroups,
     availableShowClasses,
     availableShowAwards,
+    showAwardResultGroups,
     showWideFiltersActive,
     indexedSearchActive,
     groupedShows,
@@ -681,6 +693,7 @@ export function useDogBrowser() {
     availableClasses,
     availableAwards,
     resultsByGenderAndClass,
+    awardResultGroups,
     startShowWideSearch,
     loadAllShowResults,
     fetchShows,
