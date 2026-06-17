@@ -150,9 +150,9 @@ describe('award filters', () => {
     expect(groups[1].dogs.map(dog => dog.name)).toEqual([
       'Double winner',
       'Main winner',
-      'Junior winner',
       'Main opposite',
       'Veteran opposite',
+      'Junior winner',
     ])
   })
 
