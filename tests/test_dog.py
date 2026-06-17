@@ -4,6 +4,9 @@ from unittest.mock import patch, MagicMock
 import requests
 from app.api.dog import _show_list_cache, _show_detail_cache, _breed_result_cache, _show_all_results_cache
 from app.api import dog as dog_module
+from app.dog_show import crawler as dog_crawler
+from app.dog_show import result_cache as dog_result_cache
+from app.dog_show import store as dog_store
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -115,22 +118,22 @@ SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML = """
 
 @pytest.fixture(autouse=True)
 def clear_caches(monkeypatch, tmp_path):
-    monkeypatch.setattr(dog_module, "INDEX_DIR", str(tmp_path))
-    monkeypatch.setattr(dog_module, "INDEX_PATH", str(tmp_path / "dog_show_index.json"))
-    monkeypatch.setattr(dog_module, "RESULT_CACHE_DIR", str(tmp_path / "dog_result_cache"))
-    monkeypatch.setattr(dog_module, "RESULT_JOBS_PATH", str(tmp_path / "dog_result_jobs.json"))
-    monkeypatch.setattr(dog_module, "RESULT_IMMEDIATE_WARMUP", False)
+    monkeypatch.setattr(dog_store, "INDEX_DIR", str(tmp_path))
+    monkeypatch.setattr(dog_store, "INDEX_PATH", str(tmp_path / "dog_show_index.json"))
+    monkeypatch.setattr(dog_store, "RESULT_CACHE_DIR", str(tmp_path / "dog_result_cache"))
+    monkeypatch.setattr(dog_store, "RESULT_JOBS_PATH", str(tmp_path / "dog_result_jobs.json"))
+    monkeypatch.setattr(dog_result_cache, "RESULT_IMMEDIATE_WARMUP", False)
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
     _show_detail_cache.clear()
     _breed_result_cache.clear()
     _show_all_results_cache.clear()
-    dog_module._immediate_warmups.clear()
+    dog_result_cache._immediate_warmups.clear()
     dog_module._show_index["shows"].clear()
     dog_module._show_index["last_updated"] = 0
-    dog_module._show_index_mtime = 0
+    dog_store._show_index_mtime = 0
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_shows(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
@@ -151,7 +154,7 @@ def test_get_shows(mock_get, client):
     assert data["index"]["total_show_count"] == 2
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_shows_enriches_cached_index_stats(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -231,7 +234,7 @@ def test_show_stats_include_live_result_progress(client):
     assert "result_count" not in uncached_live_stats
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -251,7 +254,7 @@ def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client)
     assert "stats" not in data["shows"][0]
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_show_detail(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
@@ -275,7 +278,7 @@ def test_get_show_detail(mock_get, client):
     assert data["fetched_at_iso"]
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_recent_show_detail_cache_expires(mock_get, client):
     _show_detail_cache[14042] = {
         "data": {"id": 14042, "title": "stale", "breeds": []},
@@ -293,7 +296,7 @@ def test_recent_show_detail_cache_expires(mock_get, client):
     mock_get.assert_called_once()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_old_show_detail_cache_is_reused(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {"month": "tammikuu 2000", "breeds": []}
     _show_detail_cache[14042] = {
@@ -308,7 +311,7 @@ def test_old_show_detail_cache_is_reused(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -331,7 +334,7 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, client):
     dog_module._show_index["shows"]["13992"] = {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
@@ -376,7 +379,7 @@ def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, clie
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     _show_detail_cache[13992] = {
         "data": {
@@ -434,7 +437,7 @@ def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_cached_show_detail_merges_index_judges(mock_get, client):
     _show_detail_cache[14042] = {
         "data": {
@@ -550,7 +553,7 @@ SAMPLE_AGGREGATE_SHOW_BREEDS_HTML = """
 """
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_show_detail_general(mock_get, client):
     mock_resp_main = MagicMock()
     mock_resp_main.text = SAMPLE_GENERAL_SHOW_MAIN_HTML
@@ -586,7 +589,7 @@ def test_get_show_detail_general(mock_get, client):
     assert data["breeds"][1]["has_results"] is False
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     dog_module._show_index["shows"]["13934"] = {
         "title": "stale empty index",
@@ -622,7 +625,7 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     assert "empty_breed_list_confirmed" not in dog_module._show_index["shows"]["13934"]
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeypatch):
     dog_module._show_index["shows"]["14042"] = {
         "title": "stale empty index",
@@ -640,7 +643,7 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
             {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
         ],
     }
-    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(dog_crawler.time, "sleep", lambda seconds: None)
 
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -660,7 +663,7 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch):
     dog_module._show_index["shows"]["14042"] = {
         "title": "stale empty index",
@@ -678,7 +681,7 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
             {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
         ],
     }
-    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(dog_crawler.time, "sleep", lambda seconds: None)
 
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -700,7 +703,7 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_breed_results(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
@@ -732,7 +735,7 @@ def test_get_breed_results(mock_get, client):
     assert data["fetched_at_iso"]
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     dog_module._show_index["shows"]["13763"] = {
         "title": "18.-19.04.2026 Vaasa KV",
@@ -763,7 +766,7 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     assert dog_module._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -785,13 +788,13 @@ def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client
     assert data["started"] is False
     mock_get.assert_not_called()
 
-    with open(dog_module.RESULT_JOBS_PATH, encoding="utf-8") as f:
+    with open(dog_store.RESULT_JOBS_PATH, encoding="utf-8") as f:
         jobs = json.load(f)
     assert jobs["jobs"]["14042"]["state"] == "queued"
     assert jobs["jobs"]["14042"]["reason"] == "user"
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -801,7 +804,6 @@ def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeyp
         ],
     }
     started = []
-    monkeypatch.setattr(dog_module, "RESULT_IMMEDIATE_WARMUP", True)
     monkeypatch.setattr(
         dog_module,
         "_start_result_cache_warmup",
@@ -816,7 +818,7 @@ def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeyp
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -840,7 +842,7 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
         },
         "updated_at": old_updated_at,
     })
-    monkeypatch.setattr(dog_module.time, "time", lambda: 1000)
+    monkeypatch.setattr(dog_store.time, "time", lambda: 1000)
 
     resp = client.get("/api/dog/shows/14042/all-results")
 
@@ -848,7 +850,7 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
     data = resp.get_json()
     assert data["status"] == "warming"
     assert data["progress"]["state"] == "running"
-    with open(dog_module.RESULT_JOBS_PATH, encoding="utf-8") as f:
+    with open(dog_store.RESULT_JOBS_PATH, encoding="utf-8") as f:
         jobs = json.load(f)["jobs"]
     assert jobs["14042"]["state"] == "running"
     assert jobs["14042"]["requested_at"] == 1000
@@ -856,7 +858,7 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",
@@ -900,7 +902,7 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",
@@ -946,7 +948,7 @@ def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_cached_breed_results_backfill_index_judge(mock_get, client):
     dog_module._show_index["shows"]["13992"] = {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
@@ -997,7 +999,7 @@ def test_cached_breed_results_backfill_index_judge(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",
@@ -1009,7 +1011,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
         ],
     }
     sleeps = []
-    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: sleeps.append(seconds))
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: sleeps.append(seconds))
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
     mock_resp.status_code = 200
@@ -1035,7 +1037,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
     mock_get.assert_not_called()
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatch):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",
@@ -1059,8 +1061,8 @@ def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatc
         "failed_breeds": {},
         "results": [{"name": "Old Cached Dog", "breedName": "basenji"}],
     })
-    monkeypatch.setattr(dog_module, "_result_cache_doc_is_fresh", lambda show_id, doc, now=None: False)
-    monkeypatch.setattr(dog_module.time, "sleep", lambda seconds: None)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda show_id, doc, now=None: False)
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
     mock_get.side_effect = requests.RequestException("rate limited")
 
     summary = dog_module.crawl_result_cache_for_show(14042, delay=0.1, source="test")
@@ -1070,7 +1072,7 @@ def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatc
     assert doc["status"] == "complete"
     assert doc["results"][0]["name"] == "Old Cached Dog"
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_shows(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
@@ -1086,7 +1088,7 @@ def test_search_shows(mock_get, client):
     assert data["results"][0]["breed"] is None
     assert data["results"][0]["match"] == "show"
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_shows_by_breed(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -1113,7 +1115,7 @@ def test_search_shows_by_breed(mock_get, client):
     assert data["results"][0]["match"] == "breed"
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_indexed_show_name_without_breed_match(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -1156,7 +1158,7 @@ def test_breed_results_invalid_params(client):
     resp = client.get("/api/dog/shows/14042/results?group=5&breed=0")
     assert resp.status_code == 400
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_shows_by_judge(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -1185,7 +1187,7 @@ def test_search_shows_by_judge(mock_get, client):
     assert data["results"][0]["match"] == "judge"
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -1223,7 +1225,7 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     assert data["results"][0]["match"] == "judge"
 
 
-@patch("app.api.dog.requests.get")
+@patch("app.dog_show.showlink.requests.get")
 def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
