@@ -99,7 +99,7 @@ describe('award filters', () => {
 
   it('orders NORD cert variants after SERT variants in a Nordic show', () => {
     const nordicResults = [
-      { name: 'A', awards: 'BIS-1, ROP, SERT, JUN-SERT, VET-SERT, VARA-SERT, NORD-SERT, NORD VET-SERT, NORD JUN-SERT, NORD VARA-SERT, SA' },
+      { name: 'A', awards: 'BIS-1, ROP, SERT, JUN-SERT, VET-SERT, VARA-SERT, NORD SERT, NORD VET-SERT, NORD JUN-SERT, NORD VARA-SERT, SA' },
     ]
     const awards = availableAwardsFromResults(nordicResults)
     expect(awards).toEqual([
