@@ -3,6 +3,8 @@ source /home/kvjanhun/.config/site-alerts.env
 
 CONTAINER="web_kontissa-web-1"
 FLAG_FILE="/tmp/site-unhealthy.flag"
+DEPLOY_FLAG="/tmp/erezac-deploying.flag"
+DEPLOY_SUPPRESS_SECONDS=1800
 
 send_telegram() {
   curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
@@ -15,6 +17,15 @@ STATUS=$(docker inspect --format='{{.State.Health.Status}}' "$CONTAINER" 2>/dev/
 [ -z "$STATUS" ] && STATUS="missing"
 
 if [ "$STATUS" != "healthy" ]; then
+  if [ -f "$DEPLOY_FLAG" ]; then
+    NOW=$(date +%s)
+    DEPLOY_STARTED=$(stat -c %Y "$DEPLOY_FLAG" 2>/dev/null || stat -f %m "$DEPLOY_FLAG")
+    DEPLOY_AGE=$(( NOW - DEPLOY_STARTED ))
+    if [ "$DEPLOY_AGE" -lt "$DEPLOY_SUPPRESS_SECONDS" ]; then
+      exit 0
+    fi
+  fi
+
   if [ ! -f "$FLAG_FILE" ]; then
     send_telegram "⚠️ <b>erez.ac is down</b>
 Status: <code>${STATUS}</code>

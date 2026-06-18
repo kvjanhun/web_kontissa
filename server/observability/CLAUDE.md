@@ -4,7 +4,7 @@
 
 ```
 node_exporter (host :9100) → Prometheus (container :9090) → Grafana (container :3000)
-nginx logs + journald + grafana logs → Promtail (container) → Loki (container :3100) → Grafana
+nginx logs + journald + grafana logs → Alloy (container) → Loki (container :3100) → Grafana
 Flask app → Docker Loki driver → Loki → Grafana
 ```
 
@@ -15,7 +15,7 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 | Service | Image | Memory Limit | CPU Limit | Purpose |
 |---------|-------|-------------|-----------|---------|
 | loki | grafana/loki:3.6.7 | 256m | — | Log storage (14-day retention) |
-| promtail | grafana/promtail:3.3.2 | 128m | — | Log collection (nginx, journald, grafana logs) |
+| alloy | grafana/alloy:v1.17.0 | 128m | — | Log collection (nginx, journald, grafana logs) |
 | prometheus | prom/prometheus:v3.3.0 | 128m | 0.25 | Metrics storage (14-day / 500MB cap) |
 | grafana | grafana/grafana:12.4.1 | 256m | 0.5 | Dashboard UI at /logs/ subpath |
 | node_exporter | v1.9.0 (host binary) | ~15MB | — | Host hardware metrics |
@@ -23,7 +23,7 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 ## Configuration Files
 
 - `loki-config.yaml` — TSDB store, filesystem backend, 14-day retention, compaction every 1h with 10 workers
-- `promtail-config.yaml` — Scrapes nginx logs, systemd journal (max_age 12h), grafana file logs. Position file persisted to `promtail_positions` volume.
+- `alloy-config.alloy` — Scrapes nginx logs, systemd journal (max_age 12h), and grafana file logs. Alloy state is persisted to `alloy_data`.
 - `prometheus.yml` — Scrapes node_exporter at `172.18.0.1:9100` (Docker Compose network gateway) every 30s
 - `grafana-datasources.yaml` — Provisions Loki (default) and Prometheus datasources
 - `grafana-dashboards.yaml` — Auto-provisions dashboards from `dashboards/` directory
@@ -54,11 +54,11 @@ Refresh interval: 60s. Default time range: 6h.
 ## Key Decisions
 
 - **node_exporter on host** (not containerized) — more accurate hardware metrics, avoids mounting /proc and /sys
-- **Prometheus over Grafana Alloy** — simpler to add alongside existing Promtail than to replace it
+- **Prometheus remains separate from Alloy** — keeps metrics storage simple while Alloy handles host log collection
 - **No cAdvisor** — overkill for 5 containers on a personal site
 - **Docker Loki logging driver** for Flask — avoids file-based log collection for the main app
 - **Image versions pinned** — prevents surprise breaking changes on rebuild
-- **No Loki healthcheck** — Loki's distroless image has no shell or curl; `depends_on` for Grafana, Promtail, and web uses plain `service_started` semantics (the default when no condition is specified)
+- **No Loki healthcheck** — Loki's distroless image has no shell or curl; `depends_on` for Grafana, Alloy, and web uses plain `service_started` semantics (the default when no condition is specified)
 
 ## Maintenance
 

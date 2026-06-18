@@ -10,7 +10,10 @@ Triggered by the GitHub webhook on every push to main. Pulls the latest code,
 rebuilds the Docker container, and restarts the service. Sends a Telegram
 notification on success or failure. Each step uses explicit `|| fail "<stage>"`
 error handling — the failure message includes the stage name and commit info.
-No `set -e` / ERR trap.
+No `set -e` / ERR trap. A deploy lock prevents overlapping webhook runs, and
+`/tmp/erezac-deploying.flag` suppresses transient health alerts while Docker is
+rebuilding. The script waits for the web container to report healthy and verifies
+`/api/meta` locally before sending the success notification.
 
 **Deployed to:** `/home/kvjanhun/Projects/web_kontissa/deploy-site.sh`
 **Triggered by:** `webhook.service` (listens on port 9000, token-authenticated)
@@ -19,7 +22,9 @@ No `set -e` / ERR trap.
 Checks the Docker container health status every 5 minutes via cron. Sends a
 Telegram alert when the container becomes unhealthy, and a recovery message
 with approximate downtime when it comes back up. Uses a flag file
-(`/tmp/site-unhealthy.flag`) to avoid alert spam.
+(`/tmp/site-unhealthy.flag`) to avoid alert spam. During a fresh deploy it
+honors `/tmp/erezac-deploying.flag`; if that flag is older than 30 minutes,
+alerts resume so a hung deploy still pages you.
 
 **Deployed to:** `/home/kvjanhun/scripts/health-alert.sh`
 **Scheduled via:** `crontab -l` (runs as kvjanhun)
@@ -30,7 +35,7 @@ with approximate downtime when it comes back up. Uses a flag file
 ### `erez.ac.conf`
 Nginx virtual host configuration for erez.ac. Defines the HTTP→HTTPS redirect,
 TLS settings, reverse proxy rules, and security headers (HSTS, X-Content-Type-Options,
-X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is in report-only mode.
+X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is enforced.
 
 **Deployed to:** `/etc/nginx/conf.d/erez.ac.conf`
 

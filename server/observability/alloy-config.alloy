@@ -1,0 +1,68 @@
+logging {
+  level  = "info"
+  format = "logfmt"
+}
+
+loki.write "local" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
+
+loki.source.file "nginx" {
+  targets = [
+    {
+      __path__ = "/var/log/nginx/*log",
+      job      = "nginx",
+      host     = "nuc",
+    },
+  ]
+  forward_to = [loki.write.local.receiver]
+
+  file_match {
+    enabled     = true
+    sync_period = "10s"
+  }
+}
+
+loki.relabel "journal" {
+  forward_to = []
+
+  rule {
+    source_labels = ["__journal__systemd_unit"]
+    target_label  = "unit"
+  }
+
+  rule {
+    source_labels = ["__journal__hostname"]
+    target_label  = "hostname"
+  }
+}
+
+loki.source.journal "systemd" {
+  forward_to    = [loki.write.local.receiver]
+  relabel_rules = loki.relabel.journal.rules
+  labels        = {
+    job  = "systemd",
+    host = "nuc",
+  }
+  max_age       = "12h"
+  path          = "/run/log/journal"
+}
+
+loki.source.file "grafana" {
+  targets = [
+    {
+      __path__         = "/var/lib/grafana/log/*.log",
+      job              = "grafana",
+      compose_service  = "grafana",
+      host             = "nuc",
+    },
+  ]
+  forward_to = [loki.write.local.receiver]
+
+  file_match {
+    enabled     = true
+    sync_period = "10s"
+  }
+}

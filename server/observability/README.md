@@ -6,7 +6,7 @@ Logging and hardware monitoring for erez.ac, running on a self-hosted Intel NUC.
 
 - **Grafana** — Dashboard UI, accessible at `https://erez.ac/logs/`
 - **Loki** — Log aggregation (14-day retention)
-- **Promtail** — Log collection from nginx, systemd journal, and Grafana
+- **Grafana Alloy** — Log collection from nginx, systemd journal, and Grafana
 - **Prometheus** — Metrics storage (14-day retention, 500MB cap)
 - **node_exporter** — Host hardware metrics (CPU, memory, disk, network)
 
@@ -77,7 +77,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | File | Purpose |
 |------|---------|
 | `loki-config.yaml` | Loki storage, retention (14d), compaction settings |
-| `promtail-config.yaml` | Log scrape targets and label configuration |
+| `alloy-config.alloy` | Log scrape targets and label configuration |
 | `prometheus.yml` | Scrape config for node_exporter (30s interval) |
 | `grafana-datasources.yaml` | Loki + Prometheus datasource provisioning |
 | `grafana-dashboards.yaml` | Dashboard auto-provisioning from JSON files |
@@ -89,7 +89,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | Service | Memory | CPU |
 |---------|--------|-----|
 | Loki | 256 MB | — |
-| Promtail | 128 MB | — |
+| Alloy | 128 MB | — |
 | Prometheus | 128 MB | 0.25 |
 | Grafana | 256 MB | 0.5 |
 | node_exporter | ~15 MB | negligible |
