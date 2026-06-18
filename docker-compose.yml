@@ -112,8 +112,7 @@ services:
     mem_limit: 256m
     entrypoint:
       - /bin/sh
-      - -c
-      - 'export GRAFANA_TELEGRAM_CHAT_ID="\"$${TELEGRAM_CHAT_ID}\""; exec /run.sh'
+      - /etc/grafana/render-grafana-alerting.sh
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
@@ -125,7 +124,8 @@ services:
     volumes:
       - ./server/observability/grafana-datasources.yaml:/etc/grafana/provisioning/datasources/datasources.yaml:ro
       - ./server/observability/grafana-dashboards.yaml:/etc/grafana/provisioning/dashboards/dashboards.yaml:ro
-      - ./server/observability/alerting:/etc/grafana/provisioning/alerting:ro
+      - ./server/observability/alerting:/etc/grafana/provisioning/alerting-source:ro
+      - ./server/observability/render-grafana-alerting.sh:/etc/grafana/render-grafana-alerting.sh:ro
       - ./server/observability/dashboards:/etc/grafana/provisioning/dashboards/json:ro
       - grafana_data:/var/lib/grafana
     environment:
@@ -134,6 +134,7 @@ services:
       - GF_SERVER_ROOT_URL=https://erez.ac/logs/
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - GF_LOG_MODE=console file
+      - GF_PATHS_PROVISIONING=/tmp/grafana-provisioning
     restart: unless-stopped
 
 volumes:

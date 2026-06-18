@@ -9,8 +9,6 @@ contactPoints:
         disableResolveMessage: false
         settings:
           bottoken: $TELEGRAM_BOT_TOKEN
-          # GRAFANA_TELEGRAM_CHAT_ID includes quote characters so Grafana's
-          # alerting provisioner keeps numeric Telegram chat IDs as strings.
-          chatid: $GRAFANA_TELEGRAM_CHAT_ID
+          chatid: "__TELEGRAM_CHAT_ID__"
           message: |
             {{ template "default.message" . }}
