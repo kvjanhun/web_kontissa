@@ -110,6 +110,10 @@ services:
   grafana:
     image: grafana/grafana:12.4.1
     mem_limit: 256m
+    entrypoint:
+      - /bin/sh
+      - -c
+      - 'export GRAFANA_TELEGRAM_CHAT_ID="\"$${TELEGRAM_CHAT_ID}\""; exec /run.sh'
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
