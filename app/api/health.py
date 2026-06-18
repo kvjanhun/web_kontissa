@@ -76,6 +76,10 @@ def _query_node_exporter():
 
 @health_bp.route("/api/server-info")
 def server_info():
+    # Intentionally public: the terminal's "fetch" command displays this
+    # coarse server-status snapshot. Keep this response limited to the
+    # whitelisted fields covered by tests; detailed host/db/runtime state
+    # belongs behind /api/admin/health.
     node = _query_node_exporter()
 
     # Uptime: system boot time from node_exporter, else Flask process start

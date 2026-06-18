@@ -4,17 +4,22 @@
 class TestServerInfo:
     """GET /api/server-info"""
 
+    PUBLIC_KEYS = {
+        "uptime_seconds",
+        "request_count",
+        "disk_used_percent",
+        "memory_total_mb",
+        "memory_used_mb",
+        "load_1min",
+    }
+
     def test_public_no_auth_required(self, client):
         res = client.get("/api/server-info")
         assert res.status_code == 200
 
     def test_returns_expected_keys(self, client):
         data = client.get("/api/server-info").get_json()
-        assert "uptime_seconds" in data
-        assert "request_count" in data
-        assert "disk_used_percent" in data
-        assert "memory_total_mb" in data
-        assert "memory_used_mb" in data
+        assert set(data) == self.PUBLIC_KEYS
 
     def test_uptime_non_negative(self, client):
         data = client.get("/api/server-info").get_json()

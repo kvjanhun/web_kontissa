@@ -37,6 +37,69 @@ class TestLogin:
         res = client.post("/api/login", json={"email": "", "password": ""})
         assert res.status_code == 400
 
+    def test_invalid_login_logs_hashed_email_only(self, client, monkeypatch):
+        from app import auth as auth_module
+
+        records = []
+
+        class CaptureLogger:
+            def warning(self, event, **kwargs):
+                records.append((event, kwargs))
+
+        monkeypatch.setattr(auth_module, "logger", CaptureLogger())
+
+        email = "Somebody@Test.com"
+        res = client.post("/api/login", json={"email": email, "password": "wrong"})
+
+        assert res.status_code == 401
+        assert len(records) == 1
+        assert records[0][0] == "login_failed"
+        payload = records[0][1]
+        assert payload["reason"] == "invalid credentials"
+        assert "email" not in payload
+        assert len(payload["email_hash"]) == 64
+        assert email not in str(records)
+
+    def test_login_email_hash_is_normalized_and_deterministic(self, client, monkeypatch):
+        from app import auth as auth_module
+
+        records = []
+
+        class CaptureLogger:
+            def warning(self, event, **kwargs):
+                records.append(kwargs)
+
+        monkeypatch.setattr(auth_module, "logger", CaptureLogger())
+
+        client.post("/api/login", json={"email": "Somebody@Test.com", "password": "wrong"})
+        client.post("/api/login", json={"email": " somebody@test.com ", "password": "wrong"})
+
+        assert records[0]["email_hash"] == records[1]["email_hash"]
+
+    def test_successful_login_logs_hashed_email_only(self, client, admin_user, monkeypatch):
+        from app import auth as auth_module
+
+        records = []
+
+        class CaptureLogger:
+            def info(self, event, **kwargs):
+                records.append((event, kwargs))
+
+        monkeypatch.setattr(auth_module, "logger", CaptureLogger())
+
+        res = client.post("/api/login", json={
+            "email": admin_user["email"],
+            "password": admin_user["password"],
+        })
+
+        assert res.status_code == 200
+        assert records[0][0] == "login_success"
+        payload = records[0][1]
+        assert payload["user_id"] == admin_user["id"]
+        assert "email" not in payload
+        assert len(payload["email_hash"]) == 64
+        assert admin_user["email"] not in str(records)
+
 
 class TestLogout:
     def test_logout_when_logged_in(self, logged_in_admin):

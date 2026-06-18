@@ -63,52 +63,8 @@ def unauthorized():
     return jsonify({"error": "Authentication required"}), 401
 
 
-def _run_migrations():
-    """Add columns to existing tables that db.create_all() won't add to SQLite."""
-    migrations = [
-        "ALTER TABLE section ADD COLUMN locale VARCHAR(5) NOT NULL DEFAULT 'en'",
-        "ALTER TABLE section ADD COLUMN collapsible BOOLEAN NOT NULL DEFAULT 0",
-        "ALTER TABLE section ADD COLUMN hidden BOOLEAN NOT NULL DEFAULT 0",
-    ]
-    for sql in migrations:
-        try:
-            db.session.execute(db.text(sql))
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
-
-    # SQLite can't ALTER constraints. Recreate the section table to replace
-    # the old unique(slug) with unique(slug, locale).
-    try:
-        # Check if locale column is missing (means table needs migration)
-        columns = [row[1] for row in db.session.execute(db.text("PRAGMA table_info(section)")).fetchall()]
-        if 'locale' not in columns:
-            db.session.execute(db.text("""
-                CREATE TABLE section_new (
-                    id INTEGER PRIMARY KEY,
-                    slug VARCHAR NOT NULL,
-                    title VARCHAR NOT NULL,
-                    content TEXT NOT NULL,
-                    section_type VARCHAR NOT NULL DEFAULT 'text',
-                    position INTEGER DEFAULT 0,
-                    collapsible BOOLEAN NOT NULL DEFAULT 0,
-                    locale VARCHAR(5) NOT NULL DEFAULT 'en',
-                    UNIQUE(slug, locale)
-                )
-            """))
-            db.session.execute(db.text(
-                "INSERT INTO section_new (id, slug, title, content, section_type, position, locale) "
-                "SELECT id, slug, title, content, section_type, position, locale FROM section"
-            ))
-            db.session.execute(db.text("DROP TABLE section"))
-            db.session.execute(db.text("ALTER TABLE section_new RENAME TO section"))
-            db.session.commit()
-    except Exception:
-        db.session.rollback()
-
 with app.app_context():
     db.create_all()
-    _run_migrations()
 
 # App-wide request counter (used by AdminHealth)
 _stats = {"requests": 0, "start_time": time.time()}

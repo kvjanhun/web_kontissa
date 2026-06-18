@@ -1,4 +1,7 @@
-from flask import Blueprint, request, jsonify
+import hashlib
+import hmac
+
+from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_user, logout_user, current_user, login_required
 from .models import db, User
 from . import limiter
@@ -6,6 +9,12 @@ import structlog
 
 auth_bp = Blueprint('auth', __name__)
 logger = structlog.get_logger(__name__)
+
+
+def _email_log_hash(email):
+    normalized = (email or "").strip().lower()
+    secret = (current_app.secret_key or "").encode("utf-8")
+    return hmac.new(secret, normalized.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
 @auth_bp.route("/api/login", methods=["POST"])
@@ -24,11 +33,11 @@ def api_login():
 
     user = User.query.filter_by(email=email).first()
     if user is None or not user.check_password(password):
-        logger.warning("login_failed", reason="invalid credentials", email=email)
+        logger.warning("login_failed", reason="invalid credentials", email_hash=_email_log_hash(email))
         return jsonify({"error": "Invalid email or password"}), 401
 
     login_user(user)
-    logger.info("login_success", email=email, user_id=user.id)
+    logger.info("login_success", email_hash=_email_log_hash(email), user_id=user.id)
     return jsonify(user.to_dict())
 
 
