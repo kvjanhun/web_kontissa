@@ -115,6 +115,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | `prometheus.yml` | Scrape config for node_exporter (30s interval) |
 | `grafana-datasources.yaml` | Loki + Prometheus datasource provisioning |
 | `grafana-dashboards.yaml` | Dashboard auto-provisioning from JSON files |
+| `render-grafana-alerting.sh` | Copies Grafana provisioning files into `/tmp/grafana-provisioning` and renders the Telegram chat id placeholder |
 | `alerting/contact-points.yaml` | Telegram contact point provisioning |
 | `alerting/notification-policies.yaml` | Grafana notification routing |
 | `alerting/nginx-alerts.yaml` | Loki-backed shared nginx/security alert rules |
