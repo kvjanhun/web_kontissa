@@ -24,7 +24,7 @@ Personal portfolio site for Konsta Janhunen (erez.ac). Nuxt 3 SSG frontend, Flas
 | Auth | Flask-Login session cookies, werkzeug scrypt password hashing |
 | Container | Docker (multi-stage: Node → Python), Docker Compose |
 | Server | RHEL on Intel NUC, Nginx with Let's Encrypt TLS |
-| Observability | Loki + Promtail (logs), Prometheus + node_exporter (metrics), Grafana (dashboards) |
+| Observability | Loki + Grafana Alloy (logs), Prometheus + node_exporter (metrics), Grafana (dashboards) |
 | Backup | Litestream → Backblaze B2 (continuous SQLite replication) |
 | Deployment | GitHub webhook → deploy script → docker compose up --build |
 
@@ -57,20 +57,24 @@ web_kontissa/
 ├── tests/                  # Backend pytest
 ├── scripts/                # seed_e2e.py, dog_crawl.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
-    └── observability/      # Loki, Promtail, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
+    └── observability/      # Loki, Alloy, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```
 
 ## Development
 
 ```bash
-# Terminal 1 — Flask API
-SECRET_KEY=dev FLASK_DEBUG=1 DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
+# Install local Python/frontend dependencies once
+npm run setup
 
-# Terminal 2 — Nuxt dev server
-cd frontend && npm run dev
+# Start Flask API + Nuxt dev server
+npm run dev
+
+# Or start them separately
+npm run dev:backend
+npm run dev:frontend
 ```
 
-Nuxt at http://localhost:3000, proxies `/api/*` to Flask at :5001 via `routeRules`.
+Nuxt at http://localhost:3000, proxies `/api/*` to Flask at :5001 via `routeRules`. `npm run dev:backend` sets safe local defaults (`SECRET_KEY=dev`, `FLASK_DEBUG=1`, `DATABASE_URI=sqlite:///.../app/data/site.db`) and fails fast if the selected Python cannot verify Werkzeug `scrypt` password hashes. Prefer a local `.venv` created by `npm run setup`.
 
 ```bash
 # Tests
@@ -87,6 +91,8 @@ cd frontend && npm run build           # nuxt generate → .output/public/
 # Docker
 docker compose up --build -d
 ```
+
+**Database schema changes**: Do not add live migrations to Flask startup, import time, or request handling. In particular, do not add `ALTER TABLE`, table rebuilds, or migration helpers to `app/__init__.py`. Schema changes must be planned explicitly, covered by tests and seed data updates, and shipped with a reviewed one-off manual migration/restore procedure for the production SQLite file.
 
 **Local E2E gotcha**: `playwright.config.js` sets `reuseExistingServer: !process.env.CI`, so any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is reused instead of the correctly-configured test server. DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running E2E, invoke with `CI=1 npm run test:e2e`, or use alternate ports via `PLAYWRIGHT_API_PORT=5101 PLAYWRIGHT_WEB_PORT=3100`.
 

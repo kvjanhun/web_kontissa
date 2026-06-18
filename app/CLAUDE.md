@@ -10,6 +10,10 @@
 - GitHub API responses cached 6 hours (`utils.py`). FMI weather cached 10 minutes with stale fallback (`api/weather.py`).
 - Showlink dog show data is scraped server-side (`api/dog.py` route facade, `dog_show/` implementation). Breed indexing runs from `scripts/dog_crawl.py` as a separate process, not from Flask/Gunicorn workers.
 
+## Schema Changes
+
+Never run migrations from Flask startup, imports, or request handlers. `app/__init__.py` may create empty tables for fresh local/test databases, but it must not contain `ALTER TABLE`, table rebuilds, schema probes, or hidden migration helpers. Any schema change needs an explicit plan, tests, E2E seed updates, and a reviewed one-off production SQLite migration/restore procedure.
+
 ## API Endpoints
 
 | Method | Endpoint | Auth | Purpose |
@@ -28,6 +32,7 @@
 | POST | `/api/pageview` | Public | Track page view (session-deduped) |
 | GET | `/api/pageviews` | Admin | All page views (aggregated counts) |
 | GET | `/api/pageviews/events` | Admin | Time-series events (days param 1–90) |
+| GET | `/api/server-info` | Public | Intentional coarse terminal status; keep fields limited to the tested whitelist |
 | GET | `/api/admin/health` | Admin | System health |
 | GET | `/api/cowsay` | Public | ASCII cow art |
 | GET | `/api/weather` | Public | FMI weather (Helsinki-Vantaa) |

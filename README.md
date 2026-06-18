@@ -32,7 +32,7 @@ These docs cover stateful features, server-side integrations, and operational to
 
 - [Dog show browser](./frontend/features/dog/README.md) — Human overview of the `/dog` frontend.
 - [Dog show browser operations](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
-- [Observability stack](./server/observability) - Live logging with Grafana, Loki, Promtail, Prometheus.
+- [Observability stack](./server/observability) - Live logging with Grafana, Loki, Alloy, Prometheus.
 
 ### Server configuration
 Documented [here](./server). Running on a small mini-PC.
@@ -54,15 +54,25 @@ Then visit: [http://localhost:8080](http://localhost:8080)
 ### Without Docker (development)
 
 ```bash
-# Terminal 1 — Flask API
-pip install -r requirements.txt
-DATABASE_URI="sqlite:///$(pwd)/app/data/site.db" python3 run.py
+# Install once
+npm run setup
 
-# Terminal 2 — Nuxt dev server with HMR
-cd frontend && npm install && npm run dev
+# Start Flask + Nuxt
+npm run dev
 ```
 
 Then visit: [http://localhost:3000](http://localhost:3000)
+
+The root dev scripts are:
+
+```bash
+npm run setup         # Create .venv and install backend/frontend dev deps
+npm run dev           # Flask API + Nuxt dev server
+npm run dev:backend   # Flask API only, http://127.0.0.1:5001
+npm run dev:frontend  # Nuxt only, http://localhost:3000
+```
+
+The backend setup/dev launchers prefer `.venv/bin/python`, then `python3.14`, then `python3.13`, then `python3`. They refuse to use a Python that cannot verify Werkzeug `scrypt` password hashes, which avoids local login failures caused by Apple Python builds linked against LibreSSL.
 
 Nuxt proxies `/api/*` requests to Flask on port 5001 via `routeRules` in `nuxt.config.ts`.
 
@@ -83,14 +93,23 @@ Playwright locally reuses any server already on :5001 — stop the dev Flask fir
 
 A `.env` file is required with at least `SECRET_KEY` for session signing. The SQLite database lives at `/app/data/site.db` (container path). For local development, set `DATABASE_URI` to point to a database on local drive.
 
-To create an admin user (admin tools, recipes):
+To create or reset a local user:
+
 ```bash
-docker compose exec web python3 -c "from app.create_user import create; create('username', 'email', 'password', role='admin')"
+npm run user:create -- konsta konsta@example.com --role admin
+npm run user:reset -- konsta@example.com
 ```
 
-Or a regular user (recipes only):
+Both commands use the local dev database by default (`app/data/site.db`) and prompt for the password.
+
+To create an admin user in production:
 ```bash
-docker compose exec web python3 -c "from app.create_user import create; create('username', 'email', 'password', role='user')"
+docker compose exec web python3 -m app.create_user create username email@example.com --role admin
+```
+
+Or reset a production user password:
+```bash
+docker compose exec web python3 -m app.create_user reset-password email@example.com
 ```
 
 ## Production Notes

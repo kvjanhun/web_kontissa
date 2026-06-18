@@ -138,7 +138,7 @@
   "gallery.sanakennoAdmin.description": "Itse rakennettu hallintapaneeli päivittäisten pulmien luomiseen, sanalistojen hallintaan sekä pelaajatilastojen tarkasteluun. LLM-suodatetut suositukset, joiden perusteella pelejä voi luoda hyväksyttäväksi tai hylättäväksi. Pelien luominen onnistuu myös ilman suosituksia validien yhdistelmien joukosta hakemalla.",
   "gallery.siteAdmin.name": "erez.ac-hallintapaneeli",
   "gallery.siteAdmin.tagline": "Portfolion sisällönhallinta ja analytiikka",
-  "gallery.siteAdmin.description": "Tämän sivuston hallintapaneeli: sisällön lisääminen ja muokkaus. Rakennettu Nuxtilla ja Node.js:llä. Lisäksi myös reaaliaikainen seurantapaneeli sisältäen lokitiedot, Grafana ja Loki.",
+  "gallery.siteAdmin.description": "Tämän sivuston hallintapaneeli: sisällön lisääminen ja muokkaus. Rakennettu Nuxtilla, Flask/Pythonilla ja SQLitellä. Lisäksi myös reaaliaikainen seurantapaneeli sisältäen lokitiedot, Grafana ja Loki.",
 
   "title.home": "Konsta Janhunen - erez.ac",
   "title.about": "Tietoa - erez.ac",

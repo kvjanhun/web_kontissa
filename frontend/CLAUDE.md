@@ -15,7 +15,7 @@
 
 ## Components
 
-- **SectionBlock.vue**: Handles `quote` (blockquote, no card), `currently` (label:value rows), `pills` (3-col grid), and a default `text` branch (v-html via `renderMarkdown`). Card types have orange accent bar. Not used for `intro`, `project`, `git_stats`, or `timeline` — those are dispatched in `pages/about.vue` to `AboutSectionCard`, `GitStatsSection`, and `TimelineSection`.
+- **SectionBlock.vue**: Handles `quote` (blockquote, no card), `currently` (label:value rows), `pills` (3-col grid), and a default `text` branch (v-html via `renderMarkdown`). Card types have orange accent bar. The current standalone home route handles `intro` and `project` sections directly in `pages/index.vue`.
 - **AboutSectionCard.vue**: Used for `project` (name|url|description|icon lines), `currently`, `text`, and other card types in the about bento layout.
 - **GitStatsSection.vue**: Fetches `/api/project-stats` (GitHub API, cached 6h in `utils.py`) and renders commit count, repo age, size, and languages.
 - **TimelineSection.vue**: Parses `date|title|description` lines; auto-scrolling marquee animation.
@@ -40,7 +40,8 @@ All in `frontend/composables/` (auto-imported):
 
 - `useGameTimer.js` — elapsed timer with pause/resume on `visibilitychange`/`blur`/`pagehide`
 - `useHintData.js` — pure computeds for hint panels: `letterMap`, `unfoundLengths`, `pangramStats`, `lengthDistribution`, `pairMap`
-- `useMarkdown.js` — wraps `marked` + `DOMPurify`; exported as `renderMarkdown(source)`
+- `useMarkdown.js` — wraps `marked` + isomorphic DOMPurify; exported as `renderMarkdown(source)`
+- `useSafeHtml.js` — shared safe URL, HTML escaping, sanitization, and inline link helpers
 - `useNavLinks.js` — shared nav link list consumed by `AppHeader` and `AppFooter`
 - `usePageView.js` — fires `POST /api/pageview` on route change (used in `pageview.global.js`)
 - `useTerminal.js` — terminal command registry and execution logic for `TerminalWindow.vue`
