@@ -39,6 +39,14 @@ X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is enforced.
 
 **Deployed to:** `/etc/nginx/conf.d/erez.ac.conf`
 
+### `nginx-observability.conf`
+Shared nginx observability config. Defines the `kontissa_json` access-log format
+used by both `erez.ac` and `sanakenno.fi`, so Loki/Grafana can query nginx
+events by `host`, `remote_addr`, `request_uri`, `status`, and upstream fields
+instead of regexing combined-access-log text.
+
+**Deployed to:** `/etc/nginx/conf.d/00-observability.conf`
+
 ### `sanakenno.fi.conf`
 Nginx virtual host configuration for the separate Sanakenno deployment. The app
 code lives in `~/Projects/sanakenno`, but the live host config is maintained
@@ -130,6 +138,7 @@ b2 ls erezac-db-backup site.db/
 scp server/deploy-site.sh kvjanhun@erez.ac:/home/kvjanhun/Projects/web_kontissa/deploy-site.sh
 scp server/health-alert.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/health-alert.sh
 scp server/backup-configs.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/backup-configs.sh
+sudo scp server/nginx-observability.conf kvjanhun@erez.ac:/etc/nginx/conf.d/00-observability.conf
 sudo scp server/erez.ac.conf kvjanhun@erez.ac:/etc/nginx/conf.d/erez.ac.conf && sudo nginx -t && sudo systemctl reload nginx
 sudo scp server/sanakenno.fi.conf kvjanhun@erez.ac:/etc/nginx/conf.d/sanakenno.fi.conf && sudo nginx -t && sudo systemctl reload nginx
 ```

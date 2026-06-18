@@ -9,6 +9,7 @@ Logging and hardware monitoring for erez.ac, running on a self-hosted Intel NUC.
 - **Grafana Alloy** — Log collection from nginx, systemd journal, and Grafana
 - **Prometheus** — Metrics storage (14-day retention, 500MB cap)
 - **node_exporter** — Host hardware metrics (CPU, memory, disk, network)
+- **Grafana Alerting** — Loki-backed nginx alerts routed to Telegram
 
 ## Setup
 
@@ -57,6 +58,39 @@ docker compose up -d
 
 All observability services are defined in the project root `docker-compose.yml`.
 
+### 4. Telegram alerting
+
+Grafana provisions a Telegram contact point from
+`alerting/contact-points.yaml`. It reads `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID` from the Grafana container environment. On the production
+NUC, only the Grafana service loads `/home/kvjanhun/.config/site-alerts.env`
+through `env_file`, so the existing deploy alert secrets also feed Grafana
+without exposing them to the app containers.
+
+This is server-only plumbing. A laptop `docker compose up` will need either that
+same env file path or a temporary local override; the production path is the one
+that matters.
+
+The provisioned policy routes Grafana alerts to `telegram-critical`. Because
+Grafana treats the notification policy tree as one resource, keep policy edits
+in `alerting/notification-policies.yaml` rather than changing the UI by hand.
+
+Provisioned alerts:
+
+| Alert | Source | Fires when |
+|-------|--------|------------|
+| Nginx error log activity | Loki nginx error logs | Either site writes to its nginx error log |
+| Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures |
+| Nginx 5xx spike | Loki nginx JSON access logs | More than 3 5xx responses per host in 5 minutes |
+| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 30 common scanner/probe requests to one host in 5 minutes |
+| Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on auth/admin/Grafana paths |
+| Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one host in 5 minutes |
+| Host root disk free space low | Prometheus node_exporter | `/` free space stays below 15% for 10 minutes |
+
+Scanner alerts include the source IP in the alert labels/description and add
+lookup links for Shodan, Censys Search, and AbuseIPDB. No external enrichment API
+is called by Grafana.
+
 ## Dashboard
 
 The **System Overview** dashboard is auto-provisioned from `dashboards/overview.json`. `dashboards/sanakenno.json` is also provisioned here because Sanakenno runs in separate containers on the same NUC and writes to this shared Loki instance.
@@ -81,8 +115,24 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | `prometheus.yml` | Scrape config for node_exporter (30s interval) |
 | `grafana-datasources.yaml` | Loki + Prometheus datasource provisioning |
 | `grafana-dashboards.yaml` | Dashboard auto-provisioning from JSON files |
+| `alerting/contact-points.yaml` | Telegram contact point provisioning |
+| `alerting/notification-policies.yaml` | Grafana notification routing |
+| `alerting/nginx-alerts.yaml` | Loki-backed shared nginx/security alert rules |
+| `alerting/system-alerts.yaml` | Prometheus-backed host alert rules |
 | `dashboards/overview.json` | System Overview dashboard definition |
 | `dashboards/sanakenno.json` | Shared Sanakenno traffic and application log dashboard |
+
+## Nginx JSON Logs
+
+`server/nginx-observability.conf` defines the shared `kontissa_json` access-log
+format. The live file must be installed as
+`/etc/nginx/conf.d/00-observability.conf`, before the vhost files that reference
+the format. Both `erez.ac.conf` and `sanakenno.fi.conf` write JSON access logs
+with fields such as `host`, `remote_addr`, `request_uri`, `status`,
+`upstream_status`, and `user_agent`.
+
+Grafana log panels still display these as normal log lines. Loki queries can add
+`| json` to parse the fields for filters, grouping, tables, and alerts.
 
 ## Resource Budget
 

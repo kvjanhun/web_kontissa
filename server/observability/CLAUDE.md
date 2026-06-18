@@ -27,7 +27,9 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 - `prometheus.yml` — Scrapes node_exporter at `172.18.0.1:9100` (Docker Compose network gateway) every 30s
 - `grafana-datasources.yaml` — Provisions Loki (default) and Prometheus datasources
 - `grafana-dashboards.yaml` — Auto-provisions dashboards from `dashboards/` directory
+- `alerting/` — Provisions Grafana alerting: Telegram contact point, notification policy, and nginx log alert rules
 - `dashboards/overview.json` — System Overview dashboard (see below)
+- `dashboards/sanakenno.json` — Sanakenno traffic and application logs from the shared Loki instance
 
 ## Dashboard: System Overview
 
@@ -43,6 +45,27 @@ Refresh interval: 60s. Default time range: 6h.
 - `before_request` binds context: `path`, `method`, `ip` (from X-Forwarded-For)
 - `after_request` logs every request with `status` and `duration_ms`
 - Silent exception handlers in `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's existing App errors/warnings panels
+
+## Grafana Alerting
+
+- Telegram contact point: `alerting/contact-points.yaml`, using `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from the Grafana container environment
+- Notification policy: `alerting/notification-policies.yaml`, routes provisioned Grafana alerts to `telegram-critical`
+- Rules: `alerting/nginx-alerts.yaml`
+  - Shared nginx error log activity for `erez.ac` and `sanakenno.fi`
+  - Shared upstream failure detection from nginx error logs
+  - Shared 5xx spike detection from JSON nginx access logs
+  - Shared scanner-burst detection grouped by `host` and `remote_addr`
+  - Shared auth/admin suspicious-response detection for 401/403/429 on auth/admin/Grafana paths
+  - Shared 429 burst detection grouped by `host` and `remote_addr`
+- Rules: `alerting/system-alerts.yaml`
+  - Host root disk free space below 15% for 10 minutes
+- The Grafana Compose service loads `/home/kvjanhun/.config/site-alerts.env` directly through `env_file`, so production deploys pass the existing Telegram alert secrets into Grafana without committing them or exposing them to app containers.
+
+## Nginx Structured Logs
+
+- `server/nginx-observability.conf` must be deployed to `/etc/nginx/conf.d/00-observability.conf`.
+- Both nginx vhost files use `access_log ... kontissa_json`.
+- Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `host`, `remote_addr`, `request_uri`, `status`, or upstream fields.
 
 ## Networking
 

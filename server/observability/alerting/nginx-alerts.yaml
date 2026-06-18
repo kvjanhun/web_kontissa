@@ -1,0 +1,445 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: shared-nginx-log-alerts
+    folder: Infrastructure
+    interval: 1m
+    rules:
+      - uid: nginx-error-log-activity
+        title: Nginx error log activity
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"}[5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Nginx wrote to an error log
+          description: '{{ $labels.filename }} received one or more lines in the last 5 minutes.'
+        labels:
+          severity: warning
+          service: nginx
+
+      - uid: nginx-upstream-failure
+        title: Nginx upstream failure
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "(connect\\(\\) failed|upstream timed out|no live upstreams|upstream prematurely closed connection|recv\\(\\) failed|send\\(\\) failed)" [5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Nginx upstream failure detected
+          description: '{{ $labels.filename }} contains an upstream connectivity or timeout failure in the last 5 minutes.'
+        labels:
+          severity: critical
+          service: nginx
+
+      - uid: nginx-5xx-spike
+        title: Nginx 5xx spike
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (host) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | status=~"5.." [5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 3
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: 5xx spike on {{ $labels.host }}
+          description: '{{ $labels.host }} returned more than 3 nginx 5xx responses in 5 minutes.'
+        labels:
+          severity: critical
+          service: nginx
+
+      - uid: nginx-scanner-burst
+        title: Nginx scanner burst
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (host, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | request_uri=~"(?i).*(wp-|wordpress|xmlrpc\\.php|\\.env|\\.git|phpmyadmin|/pma|/cgi-bin/|/boaform/|/HNAP1|/vendor/|composer\\.(json|lock)|/actuator|/solr/|/shell|/setup|/config|/backup|\\.php|\\.asp|\\.aspx).*" [5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 30
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Scanner burst from {{ $labels.remote_addr }} against {{ $labels.host }}
+          description: '{{ $labels.remote_addr }} sent more than 30 common probe requests to {{ $labels.host }} in 5 minutes. Lookup: https://www.shodan.io/host/{{ $labels.remote_addr }} | https://search.censys.io/hosts/{{ $labels.remote_addr }} | https://www.abuseipdb.com/check/{{ $labels.remote_addr }}'
+        labels:
+          severity: warning
+          service: nginx
+
+      - uid: nginx-auth-admin-guardrail
+        title: Auth/admin suspicious response
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (host, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | request_uri=~"^/(api/auth|api/admin|api/login|logs/).*" | status=~"401|403|429" [5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 0
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: Auth/admin suspicious response from {{ $labels.remote_addr }} on {{ $labels.host }}
+          description: '{{ $labels.remote_addr }} received a 401, 403, or 429 on an auth/admin/Grafana path for {{ $labels.host }} in the last 5 minutes.'
+        labels:
+          severity: warning
+          service: nginx
+
+      - uid: nginx-429-burst
+        title: Nginx 429 burst
+        condition: C
+        data:
+          - refId: A
+            queryType: instant
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki_ds_1
+            model:
+              datasource:
+                type: loki
+                uid: loki_ds_1
+              editorMode: code
+              expr: 'sum by (host, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | status="429" [5m]))'
+              intervalMs: 1000
+              maxDataPoints: 43200
+              queryType: instant
+              refId: A
+          - refId: B
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+              reducer: last
+              refId: B
+              type: reduce
+          - refId: C
+            relativeTimeRange:
+              from: 0
+              to: 0
+            datasourceUid: __expr__
+            model:
+              conditions:
+                - evaluator:
+                    params:
+                      - 5
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params:
+                      - C
+                  reducer:
+                    params: []
+                    type: last
+                  type: query
+              datasource:
+                type: __expr__
+                uid: __expr__
+              expression: B
+              intervalMs: 1000
+              maxDataPoints: 43200
+              refId: C
+              type: threshold
+        noDataState: OK
+        execErrState: Error
+        for: 1m
+        annotations:
+          summary: 429 burst from {{ $labels.remote_addr }} against {{ $labels.host }}
+          description: '{{ $labels.remote_addr }} received more than 5 rate-limit responses from {{ $labels.host }} in 5 minutes.'
+        labels:
+          severity: warning
+          service: nginx
