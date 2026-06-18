@@ -1,0 +1,15 @@
+{
+  "name": "web-kontissa-workspace",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "setup": "npm run setup:backend && npm run setup:frontend",
+    "setup:backend": "bash scripts/setup-backend.sh --dev",
+    "setup:frontend": "npm --prefix frontend install",
+    "dev": "node scripts/dev.mjs",
+    "dev:backend": "bash scripts/dev-backend.sh",
+    "dev:frontend": "npm --prefix frontend run dev",
+    "user:create": "bash scripts/local-user.sh create",
+    "user:reset": "bash scripts/local-user.sh reset-password"
+  }
+}

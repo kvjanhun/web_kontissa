@@ -14,7 +14,15 @@
 app/static/dist/
 
 # Node modules
+node_modules/
 frontend/node_modules/
+
+# Python virtual environments
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
 
 # Nuxt build artifacts
 frontend/.nuxt/
