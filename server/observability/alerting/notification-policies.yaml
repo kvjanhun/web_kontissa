@@ -6,6 +6,7 @@ policies:
     group_by:
       - alertname
       - host
+      - vhost
       - remote_addr
       - filename
       - mountpoint

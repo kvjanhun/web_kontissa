@@ -53,10 +53,10 @@ Refresh interval: 60s. Default time range: 6h.
 - Rules: `alerting/nginx-alerts.yaml`
   - Shared nginx error log activity for `erez.ac` and `sanakenno.fi`
   - Shared upstream failure detection from nginx error logs
-  - Shared 5xx spike detection from JSON nginx access logs
-  - Shared scanner-burst detection grouped by `host` and `remote_addr`
+  - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`
+  - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`
   - Shared auth/admin suspicious-response detection for 401/403/429 on app auth/admin paths
-  - Shared 429 burst detection grouped by `host` and `remote_addr`
+  - Shared 429 burst detection grouped by extracted `vhost` and `remote_addr`
 - Rules: `alerting/system-alerts.yaml`
   - Host root disk free space below 15% for 10 minutes
 - The Grafana Compose service loads `/home/kvjanhun/.config/site-alerts.env` directly through `env_file`, so production deploys pass the existing Telegram alert secrets into Grafana without committing them or exposing them to app containers.
@@ -65,7 +65,7 @@ Refresh interval: 60s. Default time range: 6h.
 
 - `server/nginx-observability.conf` must be deployed to `/etc/nginx/conf.d/00-observability.conf`.
 - Both nginx vhost files use `access_log ... kontissa_json`.
-- Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `host`, `remote_addr`, `request_uri`, `status`, or upstream fields.
+- Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `host`, `remote_addr`, `request_uri`, `status`, or upstream fields. Alert queries extract JSON `host` as `vhost` to avoid colliding with Alloy's `host=nuc` stream label.
 
 ## Networking
 

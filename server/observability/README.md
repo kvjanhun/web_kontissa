@@ -81,10 +81,10 @@ Provisioned alerts:
 |-------|--------|------------|
 | Nginx error log activity | Loki nginx error logs | Either site writes to its nginx error log |
 | Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures |
-| Nginx 5xx spike | Loki nginx JSON access logs | More than 3 5xx responses per host in 5 minutes |
-| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 30 common scanner/probe requests to one host in 5 minutes |
+| Nginx 5xx spike | Loki nginx JSON access logs | More than 3 5xx responses per vhost in 5 minutes |
+| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 300 common scanner/probe requests to one vhost in 5 minutes, sustained for 5 minutes |
 | Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on app auth/admin paths |
-| Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one host in 5 minutes |
+| Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one vhost in 5 minutes |
 | Host root disk free space low | Prometheus node_exporter | `/` free space stays below 15% for 10 minutes |
 
 Scanner alerts include the source IP in the alert labels/description and add
@@ -132,7 +132,9 @@ with fields such as `host`, `remote_addr`, `request_uri`, `status`,
 `upstream_status`, and `user_agent`.
 
 Grafana log panels still display these as normal log lines. Loki queries can add
-`| json` to parse the fields for filters, grouping, tables, and alerts.
+`| json` to parse the fields for filters, grouping, tables, and alerts. Alert
+queries extract the JSON `host` field as `vhost` so it does not collide with the
+Alloy stream label `host=nuc`.
 
 ## Resource Budget
 
