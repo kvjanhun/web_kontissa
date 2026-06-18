@@ -21,7 +21,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"}[5m]))'
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} !~ "limiting requests" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -313,7 +313,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (host, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | request_uri=~"^/(api/auth|api/admin|api/login|logs/).*" | status=~"401|403|429" [5m]))'
+              expr: 'sum by (host, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json | request_uri=~"^/(api/auth|api/admin|api/login).*" | status=~"401|403|429" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant

@@ -83,7 +83,7 @@ Provisioned alerts:
 | Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures |
 | Nginx 5xx spike | Loki nginx JSON access logs | More than 3 5xx responses per host in 5 minutes |
 | Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 30 common scanner/probe requests to one host in 5 minutes |
-| Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on auth/admin/Grafana paths |
+| Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on app auth/admin paths |
 | Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one host in 5 minutes |
 | Host root disk free space low | Prometheus node_exporter | `/` free space stays below 15% for 10 minutes |
 

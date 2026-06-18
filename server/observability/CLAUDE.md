@@ -55,7 +55,7 @@ Refresh interval: 60s. Default time range: 6h.
   - Shared upstream failure detection from nginx error logs
   - Shared 5xx spike detection from JSON nginx access logs
   - Shared scanner-burst detection grouped by `host` and `remote_addr`
-  - Shared auth/admin suspicious-response detection for 401/403/429 on auth/admin/Grafana paths
+  - Shared auth/admin suspicious-response detection for 401/403/429 on app auth/admin paths
   - Shared 429 burst detection grouped by `host` and `remote_addr`
 - Rules: `alerting/system-alerts.yaml`
   - Host root disk free space below 15% for 10 minutes
