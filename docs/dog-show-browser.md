@@ -6,7 +6,7 @@ Read this section first when changing `/dog`.
 
 | Task | First file to open |
 |------|--------------------|
-| Frontend route metadata or layout | `frontend/pages/dog.vue` |
+| Frontend route metadata or layout | `frontend/pages/dog/index.vue` |
 | Frontend state, route query sync, API calls, polling | `frontend/features/dog/useDogBrowser.js` |
 | Frontend view wiring | `frontend/features/dog/DogBrowser.vue` |
 | Frontend list, search, detail, filters, result cards | `frontend/features/dog/components/` |
@@ -24,7 +24,7 @@ Important guardrails:
 
 - The frontend must never fan out across all breed result pages; use `/api/dog/shows/<id>/all-results` for whole-show filtering.
 - Persistent dog state is JSON under `DOG_INDEX_DIR`, not SQLite. Do not delete `app/data`, `dog_show_index.json`, `dog_result_jobs.json`, or `dog_result_cache/` casually.
-- `pages/dog.vue` is intentionally thin after the frontend refactor; dog UI belongs in `frontend/features/dog/`.
+- `pages/dog/index.vue` is intentionally thin after the frontend refactor; dog UI belongs in `frontend/features/dog/`.
 - `app/api/dog.py` is intentionally a backend route facade; dog backend implementation belongs in `app/dog_show/`.
 - Keep Showlink request volume bounded. Prefer crawler/job/cache changes over more client polling.
 
@@ -36,7 +36,7 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 
 ## Entry Points
 
-- Frontend route entry: `frontend/pages/dog.vue`
+- Frontend route entry: `frontend/pages/dog/index.vue`
 - Frontend feature module: `frontend/features/dog/`
 - Flask blueprint and route validation: `app/api/dog.py`
 - Backend feature package: `app/dog_show/`
@@ -117,6 +117,18 @@ Environment knobs:
 - `DOG_RESULT_SHOW_MORNING_HOUR`: local hour when missing result pages may first be checked on the first show date; defaults to `6`.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
+
+## Public Crawler Identity
+
+All outbound Showlink HTTP requests are centralized in `app/dog_show/showlink.py` and use the shared headers from `app/dog_show/config.py`.
+
+Current `User-Agent`:
+
+```text
+erez.ac-dog-show-browser/1.0 (+https://erez.ac/dog/about-crawler)
+```
+
+The public info page at `/dog/about-crawler` explains in Finnish and English what the crawler fetches, why it exists, and how often it runs. Keep that page, this section, and `docker-compose.yml` crawler cadence in sync when crawler behavior changes.
 
 ## Production Crawler Cadence
 

@@ -8,7 +8,7 @@ For backend crawling, cache formats, Showlink parsing, and operational tuning, r
 
 | Need | Start here |
 |------|------------|
-| Route metadata, standalone layout, head tags | `../../pages/dog.vue` |
+| Route metadata, standalone layout, head tags | `../../pages/dog/index.vue` |
 | View composition and prop/event wiring | `DogBrowser.vue` |
 | Route query sync, API calls, polling, state transitions | `useDogBrowser.js` |
 | Pure filtering, grouping, formatting, and URL helpers | `dogResults.js` |
@@ -23,7 +23,7 @@ For backend crawling, cache formats, Showlink parsing, and operational tuning, r
 
 ## Architecture
 
-- `pages/dog.vue` should stay thin: page metadata plus `<DogBrowser />`.
+- `pages/dog/index.vue` should stay thin: page metadata plus `<DogBrowser />`.
 - `DogBrowser.vue` should stay mostly declarative. It imports `useDogBrowser()`, passes state down, and translates child events into composable actions.
 - `useDogBrowser.js` is the stateful boundary. Put `$fetch`, route query reads/writes, timers, polling, and current-view transitions here.
 - `dogResults.js` is the pure boundary. Put deterministic filtering, grouping, formatting, and query helpers here, then cover risky changes with Vitest.

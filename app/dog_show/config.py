@@ -1,7 +1,7 @@
 import os
 
 BASE_URL = "https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset"
-REQUEST_HEADERS = {"User-Agent": "erez.ac dog show browser"}
+REQUEST_HEADERS = {"User-Agent": "erez.ac-dog-show-browser/1.0 (+https://erez.ac/dog/about-crawler)"}
 REQUEST_TIMEOUT = 10
 
 SHOW_LIST_TTL = 1800

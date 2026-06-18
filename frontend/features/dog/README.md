@@ -12,7 +12,7 @@ The page lets visitors browse current and past shows, search by show, breed, or 
 - `components/` contains the list view, show detail view, result view, filters, and shared state blocks.
 - `dog.css` contains the feature styling.
 
-The Nuxt route itself lives at `frontend/pages/dog.vue` and only sets metadata/layout before rendering this feature.
+The Nuxt route itself lives at `frontend/pages/dog/index.vue` and only sets metadata/layout before rendering this feature.
 
 ## Data Source
 

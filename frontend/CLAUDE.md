@@ -26,7 +26,7 @@
 
 Standalone `/dog` browser for Showlink data. Read `features/dog/AGENTS.md` before changing this feature. The frontend must not fan out across all breed result pages; whole-show filtering uses `/api/dog/shows/<id>/all-results`, which is backed by the persisted server cache documented in `../docs/dog-show-browser.md`.
 
-- **Route entry**: `pages/dog.vue` only sets page metadata/layout and renders `features/dog/DogBrowser.vue`.
+- **Route entry**: `pages/dog/index.vue` only sets page metadata/layout and renders `features/dog/DogBrowser.vue`.
 - **Feature module**: Dog-specific components, `useDogBrowser.js`, `dogResults.js`, and `dog.css` live under `features/dog/`; do not move them into shared components unless another route genuinely reuses them.
 - **Route state**: `?show=<id>` opens a show; `?show=<id>&group=<group>&breed=<breed>` opens a breed result page.
 - **Show detail tabs**: `Rotuluettelo` lists breeds; `Koirat & Tulokset` loads the whole-show cache and filters all dogs.

@@ -6,6 +6,7 @@ from app.api.dog import _show_list_cache, _show_detail_cache, _breed_result_cach
 from app.api import dog as dog_module
 from app.dog_show import crawler as dog_crawler
 from app.dog_show import result_cache as dog_result_cache
+from app.dog_show import showlink as dog_showlink
 from app.dog_show import store as dog_store
 from app.dog_show.utils import _show_result_availability
 
@@ -133,6 +134,18 @@ def clear_caches(monkeypatch, tmp_path):
     dog_module._show_index["shows"].clear()
     dog_module._show_index["last_updated"] = 0
     dog_store._show_index_mtime = 0
+
+@patch("app.dog_show.showlink.requests.get")
+def test_fetch_page_advertises_crawler_identity(mock_get):
+    mock_resp = MagicMock()
+    mock_resp.text = "<html><body>ok</body></html>"
+    mock_get.return_value = mock_resp
+
+    dog_showlink._fetch_page("https://example.test/showlink")
+
+    assert mock_get.call_args.kwargs["headers"]["User-Agent"] == (
+        "erez.ac-dog-show-browser/1.0 (+https://erez.ac/dog/about-crawler)"
+    )
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_shows(mock_get, client):
