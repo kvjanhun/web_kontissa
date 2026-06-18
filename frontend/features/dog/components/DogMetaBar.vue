@@ -1,7 +1,7 @@
 <script setup>
 import { formatTimestamp } from '../dogResults.js'
 
-defineProps({
+const props = defineProps({
   judge: {
     type: String,
     default: '',
@@ -15,6 +15,8 @@ defineProps({
     default: '',
   },
 })
+
+const safeSourceUrl = computed(() => safeHref(props.sourceUrl))
 </script>
 
 <template>
@@ -28,8 +30,8 @@ defineProps({
     </span>
 
     <a
-      v-if="sourceUrl"
-      :href="sourceUrl"
+      v-if="safeSourceUrl"
+      :href="safeSourceUrl"
       target="_blank"
       rel="noopener noreferrer"
       class="dog-source-link-pill"

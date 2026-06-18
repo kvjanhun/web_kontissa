@@ -57,26 +57,17 @@ const projects = computed(() => {
   const raw = sections.value.find(s => s.section_type === 'project')?.content || ''
   return raw.split('\n').map(line => {
     const [name, url, desc] = line.split('|')
-    return { name: name?.trim(), url: url?.trim(), desc: desc?.trim() }
+    return { name: name?.trim(), href: safeHref(url), desc: desc?.trim() }
   }).filter(p => p.name)
 })
 
 const intro = computed(() => byType.value['intro']?.content || '')
 const contact = computed(() => bySlug.value['contact']?.content || '')
 
-// Simple markdown-ish link parser: [text](url)
 const EXTERNAL_ICON = '<svg class="contact-link__arrow" xmlns="http://www.w3.org/2000/svg" width="0.9em" height="0.9em" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>'
 
 function renderLinks(text) {
-  if (!text) return ''
-  return text
-    .replace(/</g, '&lt;')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_, label, url) => {
-      const external = /^https?:\/\//.test(url)
-      const attrs = external ? ' target="_blank" rel="noopener"' : ''
-      const arrow = external ? EXTERNAL_ICON : ''
-      return `<a href="${url}" class="contact-link"${attrs}>${label}${arrow}</a>`
-    })
+  return renderSafeInlineLinks(text, { className: 'contact-link', externalIcon: EXTERNAL_ICON })
 }
 </script>
 
@@ -112,7 +103,7 @@ function renderLinks(text) {
             <header class="card__label">// projects</header>
             <ul class="proj-list">
               <li v-for="p in projects" :key="p.name">
-                <a v-if="p.url" :href="p.url" class="proj-link">
+                <a v-if="p.href" :href="p.href" class="proj-link">
                   <span class="proj-name">{{ p.name }}</span>
                   <span class="proj-arrow">→</span>
                 </a>

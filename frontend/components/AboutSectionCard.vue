@@ -29,7 +29,7 @@ const projectItems = computed(() => {
   if (props.section.section_type !== 'project') return []
   return props.section.content.split('\n').map(line => {
     const parts = line.split('|').map(s => s.trim())
-    return { name: parts[0] || '', url: parts[1] || '', description: parts[2] || '', icon: parts[3] || 'code' }
+    return { name: parts[0] || '', url: safeHref(parts[1]), description: parts[2] || '', icon: parts[3] || 'code' }
   }).filter(item => item.name)
 })
 

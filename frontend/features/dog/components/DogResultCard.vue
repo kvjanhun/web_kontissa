@@ -1,7 +1,7 @@
 <script setup>
 import { gradeBorderClass, gradeClasses, splitAwards } from '../dogResults.js'
 
-defineProps({
+const props = defineProps({
   dog: {
     type: Object,
     required: true,
@@ -29,6 +29,8 @@ defineProps({
 })
 
 defineEmits(['toggle-critique'])
+
+const safeRegUrl = computed(() => safeHref(props.dog.reg_url))
 </script>
 
 <template>
@@ -43,8 +45,8 @@ defineEmits(['toggle-critique'])
         <span v-if="showInlineMeta" class="dog-gender-badge-inline">{{ dog.gender === 'uros' ? '♂' : dog.gender === 'narttu' ? '♀' : '' }}</span>
 
         <a
-          v-if="dog.reg_url"
-          :href="dog.reg_url"
+          v-if="safeRegUrl"
+          :href="safeRegUrl"
           target="_blank"
           rel="noopener noreferrer"
           class="dog-dog-name"

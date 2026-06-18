@@ -1,13 +1,15 @@
 import { marked } from 'marked'
-import DOMPurify from 'dompurify'
+import { escapeHtml, isExternalHref, safeHref, sanitizeHtml } from './useSafeHtml.js'
 
 const renderer = new marked.Renderer()
 
-renderer.link = ({ href, title, text }) => {
-  const isExternal = href && !href.startsWith('/') && !href.startsWith('#')
+renderer.link = ({ href, text }) => {
+  const cleanHref = safeHref(href)
+  if (!cleanHref) return text
+
+  const isExternal = isExternalHref(cleanHref)
   const attrs = isExternal ? ' target="_blank" rel="noopener noreferrer"' : ''
-  const titleAttr = title ? ` title="${title}"` : ''
-  return `<a href="${href}"${titleAttr}${attrs}>${text}</a>`
+  return `<a href="${escapeHtml(cleanHref)}"${attrs}>${text}</a>`
 }
 
 marked.use({
@@ -18,13 +20,22 @@ marked.use({
 
 const ALLOWED_TAGS = ['p', 'br', 'strong', 'em', 'a', 'ul', 'ol', 'li', 'code', 'pre', 'blockquote']
 const ALLOWED_ATTR = ['href', 'title', 'target', 'rel']
+const ALLOWED_URI_REGEXP = /^(?:(?:https?|mailto):|\/(?!\/)|#)/i
+
+function addExternalLinkAttrs(html) {
+  return html.replace(/<a href="(https?:\/\/[^"]+)">/gi, (_, href) => (
+    `<a href="${href}" target="_blank" rel="noopener noreferrer">`
+  ))
+}
 
 export function renderMarkdown(source) {
   if (!source) return ''
   const html = marked.parse(source)
-  // DOMPurify requires a browser DOM — skip sanitization during SSR.
-  // In production (SSG) section content is always loaded client-side, so
-  // DOMPurify always runs before any rendered HTML reaches the user.
-  if (import.meta.server) return html
-  return DOMPurify.sanitize(html, { ALLOWED_TAGS, ALLOWED_ATTR })
+  const clean = sanitizeHtml(html, {
+    ALLOWED_TAGS,
+    ALLOWED_ATTR,
+    ALLOWED_URI_REGEXP,
+    ADD_ATTR: ['target', 'rel'],
+  })
+  return addExternalLinkAttrs(clean)
 }
