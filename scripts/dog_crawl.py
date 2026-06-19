@@ -9,6 +9,8 @@ import os
 import sys
 import time
 
+import structlog
+
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
@@ -19,6 +21,8 @@ os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once  # noqa: E402
 from app.dog_show.result_cache import crawl_result_cache_once  # noqa: E402
 from app.dog_show.store import INDEX_PATH, RESULT_CACHE_DIR  # noqa: E402
+
+logger = structlog.get_logger(__name__)
 
 
 def main():
@@ -43,11 +47,12 @@ def main():
     parser.add_argument("--result-workers", type=int, default=3, help="Maximum concurrent result page requests for one show")
     args = parser.parse_args()
 
-    print({
-        "event": "dog_crawler_boot",
-        "index_path": INDEX_PATH,
-        "result_cache_dir": RESULT_CACHE_DIR,
-    }, flush=True)
+    logger.info(
+        "dog_crawler_boot",
+        index_path=INDEX_PATH,
+        result_cache_dir=RESULT_CACHE_DIR,
+        loop=args.loop,
+    )
 
     maintenance_interval = args.maintenance_interval if args.maintenance_interval is not None else args.interval
     auto_results_interval = args.auto_results_interval if args.auto_results_interval is not None else maintenance_interval
@@ -65,6 +70,14 @@ def main():
         run_empty_index = now >= next_empty_index_at
         summary = {}
         queued_attempted = 0
+
+        logger.info(
+            "dog_crawler_pass_start",
+            run_empty_index=run_empty_index and not args.no_empty_index_repair,
+            run_queued_results=not args.no_results,
+            run_index_maintenance=run_maintenance and not args.no_index_maintenance,
+            run_auto_results=run_auto_results and not args.no_results and not args.no_auto_results,
+        )
 
         if run_empty_index and not args.no_empty_index_repair:
             summary["empty_index"] = crawl_empty_index_once(
@@ -106,7 +119,7 @@ def main():
         else:
             summary["next_auto_results_in"] = max(0, round(next_auto_results_at - now))
 
-        print(summary, flush=True)
+        logger.info("dog_crawler_pass_complete", **summary)
 
         if not args.loop:
             break
@@ -118,4 +131,7 @@ if __name__ == "__main__":
     try:
         main()
     except KeyboardInterrupt:
-        pass
+        logger.info("dog_crawler_shutdown", reason="keyboard_interrupt")
+    except Exception:
+        logger.exception("dog_crawler_fatal")
+        raise

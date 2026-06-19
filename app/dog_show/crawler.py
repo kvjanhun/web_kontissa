@@ -32,6 +32,7 @@ def _crawl_index_candidates(candidates, total_count, delay=1.5, reason="maintena
     for idx, show in enumerate(candidates):
         sid = show["id"]
         try:
+            logger.info("dog_crawler_show_start", show_id=sid, reason=reason)
             _update_index_show(show)
             updated += 1
         except Exception as e:
@@ -57,6 +58,7 @@ def crawl_index_once(limit=None, delay=1.5):
     _load_index()
     shows_list = _get_show_list()
     if not shows_list:
+        logger.info("dog_crawler_index_pass_complete", total=0, updated=0, failed=0, skipped=0)
         return {"total": 0, "updated": 0, "skipped": 0}
 
     missing = []
@@ -90,6 +92,7 @@ def crawl_index_once(limit=None, delay=1.5):
     summary["missing_candidates"] = len(missing)
     summary["empty_candidates"] = len(empty_indexed)
     summary["recent_candidates"] = len(recent)
+    logger.info("dog_crawler_index_pass_complete", **summary)
     return summary
 
 def crawl_empty_index_once(limit=20, delay=0.5):
@@ -97,6 +100,14 @@ def crawl_empty_index_once(limit=20, delay=0.5):
     _load_index()
     shows_list = _get_show_list()
     if not shows_list:
+        logger.info(
+            "dog_crawler_empty_index_pass_complete",
+            total=0,
+            updated=0,
+            failed=0,
+            skipped=0,
+            empty_candidates=0,
+        )
         return {"total": 0, "updated": 0, "failed": 0, "skipped": 0, "empty_candidates": 0}
 
     candidates = []
@@ -118,4 +129,5 @@ def crawl_empty_index_once(limit=20, delay=0.5):
 
     summary = _crawl_index_candidates(to_update, len(shows_list), delay=delay, reason="empty_index_repair")
     summary["empty_candidates"] = len(candidates)
+    logger.info("dog_crawler_empty_index_pass_complete", **summary)
     return summary

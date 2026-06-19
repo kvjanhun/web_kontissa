@@ -428,6 +428,12 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         now=datetime.datetime.fromtimestamp(now),
     )
     if not force and not availability.get("can_fetch", True):
+        logger.info(
+            "dog_result_cache_skipped",
+            show_id=show_id,
+            source=source,
+            reason=availability.get("reason"),
+        )
         return {
             "show_id": show_id,
             "status": "skipped",
@@ -438,11 +444,21 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
 
     existing = _load_result_cache_doc(show_id)
     if not force and _result_cache_doc_is_fresh(show_id, existing, now=now):
+        progress = _result_cache_progress(show_id, doc=existing)
+        logger.info(
+            "dog_result_cache_skipped",
+            show_id=show_id,
+            source=source,
+            reason="fresh",
+            total_breeds=progress["total_breeds"],
+            fetched_breeds=progress["fetched_breeds"],
+            total_dogs=progress["total_dogs"],
+        )
         return {
             "show_id": show_id,
             "status": "skipped",
             "reason": "fresh",
-            "progress": _result_cache_progress(show_id, doc=existing),
+            "progress": progress,
         }
 
     preserve_existing_complete = (
@@ -467,7 +483,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         doc["updated_at"] = time.time()
         if not preserve_existing_complete:
             _save_result_cache_doc(show_id, doc)
-        logger.warning("dog_result_cache_detail_failed", show_id=show_id, error=str(exc))
+        logger.warning("dog_result_cache_detail_failed", show_id=show_id, source=source, error=str(exc))
         return {
             "show_id": show_id,
             "status": "failed",
@@ -490,6 +506,19 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         breed for breed in breeds_with_results
         if _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
+    logger.info(
+        "dog_result_cache_crawl_start",
+        show_id=show_id,
+        source=source,
+        force=force,
+        resumable=resumable,
+        preserve_existing_complete=preserve_existing_complete,
+        total_breeds=len(breeds_with_results),
+        completed_breeds=len(completed_breeds),
+        pending_breeds=len(pending_breeds),
+        workers=max(1, int(workers or 1)),
+        delay=delay,
+    )
     failure = _crawl_missing_breed_results(
         show_id,
         pending_breeds,
@@ -513,6 +542,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     logger.info(
         "dog_result_cache_complete",
         show_id=show_id,
+        source=source,
         breed_count=len(completed_breeds),
         result_count=len(doc.get("results", [])),
     )
@@ -544,6 +574,12 @@ def _queued_result_cache_candidates(now):
 
     for show_id in stale_complete_jobs:
         _remove_result_cache_job(show_id)
+    if stale_complete_jobs:
+        logger.info(
+            "dog_result_cache_removed_fresh_jobs",
+            count=len(stale_complete_jobs),
+            show_ids=stale_complete_jobs,
+        )
     return candidates
 
 def _auto_result_cache_candidates(now):
@@ -601,8 +637,21 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
             if candidate["show_id"] not in queued_ids:
                 candidates.append(candidate)
 
+    candidate_count = len(candidates)
     if limit is not None:
         candidates = candidates[:max(0, limit)]
+
+    logger.info(
+        "dog_result_cache_pass_start",
+        selected=len(candidates),
+        candidates=candidate_count,
+        queued_candidates=queued_count,
+        auto_recent=bool(auto_recent),
+        limit=limit,
+        workers=max(1, int(workers or 1)),
+        delay=delay,
+        show_ids=[candidate["show_id"] for candidate in candidates],
+    )
 
     attempted = []
     completed = 0
@@ -615,8 +664,17 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
         if source == "queued":
             _set_result_job_running(show_id)
 
+        logger.info("dog_result_cache_job_start", show_id=show_id, source=source)
         summary = crawl_result_cache_for_show(show_id, delay=delay, source=source, workers=workers)
         attempted.append(summary)
+        logger.info(
+            "dog_result_cache_job_complete",
+            show_id=show_id,
+            source=source,
+            status=summary.get("status"),
+            reason=summary.get("reason"),
+            error=summary.get("error"),
+        )
 
         if summary.get("status") == "complete":
             completed += 1
@@ -629,7 +687,7 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
             if source == "queued":
                 _defer_result_cache_job(show_id, summary.get("error") or summary.get("status"))
 
-    return {
+    pass_summary = {
         "attempted": len(attempted),
         "completed": completed,
         "failed": failed,
@@ -638,6 +696,16 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
         "auto_recent": bool(auto_recent),
         "items": attempted,
     }
+    logger.info(
+        "dog_result_cache_pass_complete",
+        attempted=pass_summary["attempted"],
+        completed=completed,
+        failed=failed,
+        skipped=skipped,
+        queued_candidates=queued_count,
+        auto_recent=bool(auto_recent),
+    )
+    return pass_summary
 
 def _finish_immediate_warmup(show_id):
     with _immediate_warmups_lock:
@@ -657,6 +725,13 @@ def _run_immediate_result_cache_warmup(show_id):
             _remove_result_cache_job(show_id)
         else:
             _defer_result_cache_job(show_id, summary.get("error") or status)
+        logger.info(
+            "dog_immediate_result_warmup_complete",
+            show_id=show_id,
+            status=status,
+            reason=summary.get("reason"),
+            error=summary.get("error"),
+        )
     except Exception as exc:
         logger.exception("dog_immediate_result_warmup_failed", show_id=show_id)
         _defer_result_cache_job(show_id, exc)
@@ -676,11 +751,13 @@ def _start_result_cache_warmup(show_id, reason="user-immediate"):
     if not _immediate_warmup_slots.acquire(blocking=False):
         with _immediate_warmups_lock:
             _immediate_warmups.discard(show_id)
+        logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="no_slot")
         return False
 
     claimed = _claim_result_cache_job(show_id, reason=reason)
     if not claimed:
         _finish_immediate_warmup(show_id)
+        logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="job_running")
         return False
 
     thread = threading.Thread(
@@ -690,4 +767,5 @@ def _start_result_cache_warmup(show_id, reason="user-immediate"):
         daemon=True,
     )
     thread.start()
+    logger.info("dog_immediate_result_warmup_started", show_id=show_id, reason=reason)
     return True

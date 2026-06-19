@@ -347,11 +347,38 @@
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
           "expr": "{compose_service=\"web\"} | json | level=~\"error|warning\"",
+          "queryType": "range",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{compose_service=\"web\"} !~ \"^\\\\{\" |~ \"(?i)(error|exception|traceback|failed)\"",
+          "queryType": "range",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/erez.ac.access.log\"} | json status=\"status\", uri=\"uri\" | uri!~\"^/logs/\" | status=~\"5..\"",
+          "queryType": "range",
+          "refId": "C"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/erez.ac.error.log\"} |~ \"\\\\[(warn|error|crit|alert|emerg)\\\\]\" !~ \"request: \\\"[A-Z]+ /logs/\"",
+          "queryType": "range",
+          "refId": "D"
         }
       ],
-      "title": "Application Errors & Warnings",
+      "title": "Erez.ac Errors & Warnings",
       "type": "logs"
     },
     {
@@ -378,7 +405,7 @@
           "datasource": { "type": "loki", "uid": "loki_ds_1" },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{compose_service=\"web\"} |= \"login_failed\"",
+          "expr": "{compose_service=\"web\"} | json | event=\"login_failed\"",
           "queryType": "range",
           "refId": "A"
         },
@@ -386,7 +413,7 @@
           "datasource": { "type": "loki", "uid": "loki_ds_1" },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/erez.ac.access.log\"} | json request_uri=\"request_uri\", status=\"status\" | request_uri=~\"^/(api/auth|api/login|api/logout|api/admin|admin|api/sections|api/pageviews|api/recipes).*\" | status=~\"401|403|429\"",
           "queryType": "range",
           "refId": "B"
         },
@@ -394,12 +421,36 @@
           "datasource": { "type": "loki", "uid": "loki_ds_1" },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{compose_service=\"grafana\"} |= \"login\" |= \"failed\"",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/erez.ac.access.log\"} | json request_uri=\"request_uri\" | request_uri=~\"(?i).*(wp-|wordpress|xmlrpc\\\\.php|\\\\.env|\\\\.git|phpmyadmin|/pma|/cgi-bin/|/boaform/|/HNAP1|/vendor/|composer\\\\.(json|lock)|/actuator|/solr/|/shell|/setup|/config\\\\.(js|json|php|ya?ml)|/backup|\\\\.php|\\\\.asp|\\\\.aspx).*\"",
           "queryType": "range",
           "refId": "C"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"nginx\", filename=\"/var/log/nginx/erez.ac.access.log\"} | json status=\"status\" | status=\"429\"",
+          "queryType": "range",
+          "refId": "D"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"systemd\", unit=\"sshd.service\"} |= \"Failed password\"",
+          "queryType": "range",
+          "refId": "E"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"grafana\"} |~ \"(?i)(login|auth)\" |~ \"(?i)(fail|invalid|denied)\"",
+          "queryType": "range",
+          "refId": "F"
         }
       ],
-      "title": "Security Events (Failed Logins)",
+      "title": "Security Events",
       "type": "logs"
     }
   ],

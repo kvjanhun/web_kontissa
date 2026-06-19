@@ -29,22 +29,34 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 - `grafana-dashboards.yaml` — Auto-provisions dashboards from `dashboards/` directory
 - `alerting/` — Provisions Grafana alerting: Telegram contact point, notification policy, and nginx log alert rules
 - `dashboards/overview.json` — System Overview dashboard (see below)
+- `dashboards/dog.json` — Dog Show Logs dashboard for `/dog` API and crawler logs
 - `dashboards/sanakenno.json` — Sanakenno traffic and application logs from the shared Loki instance
 
 ## Dashboard: System Overview
 
 **Top row** — Gauges: CPU %, Memory %, Disk %, Uptime
 **Middle rows** — Time series: CPU & Memory over time, Network I/O, Disk I/O, Filesystem free space
-**Bottom rows** — Logs: Nginx traffic, App errors/warnings (Flask JSON logs), Security events (failed logins from Flask, SSH, Grafana)
+**Bottom rows** — Logs: Nginx traffic, erez.ac errors/warnings (Flask JSON logs, unstructured web container errors, nginx 5xx/error logs), Security events (failed logins, auth/admin 401/403/429, scanner probes, rate limits, SSH, Grafana)
 
 Refresh interval: 60s. Default time range: 6h.
+
+## Dashboard: Dog Show Logs
+
+`dashboards/dog.json` tracks `/dog` operational logs from Loki:
+
+- Crawler log rate, Showlink request rate, result cache completions, and warnings/errors
+- Crawler pass/result-cache event timelines grouped by structured `event`
+- `/api/dog` and `/dog` request rate and p95 duration from Flask request logs
+- Focused log panels for crawler passes, result-cache jobs, Showlink requests, dog API requests, and dog warnings/errors
+
+Refresh interval: 60s. Default time range: 24h.
 
 ## Flask Structured Logging
 
 - `structlog` with `JSONRenderer` outputs to stdout, captured by Docker's Loki logging driver
 - `before_request` binds context: `path`, `method`, `ip` (from X-Forwarded-For)
 - `after_request` logs every request with `status` and `duration_ms`
-- Silent exception handlers in `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's existing App errors/warnings panels
+- Silent exception handlers in `health.py`, `weather.py`, and `utils.py` log errors/warnings instead of swallowing them silently — all appear in Grafana's erez.ac errors/warnings panel
 
 ## Grafana Alerting
 

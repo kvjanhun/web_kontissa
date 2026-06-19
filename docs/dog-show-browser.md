@@ -186,6 +186,15 @@ Check crawler logs:
 docker compose logs -f dog-crawler
 ```
 
+Grafana also provisions a **Dog Show Logs** dashboard from
+`server/observability/dashboards/dog.json`. It combines dog-crawler logs with
+`/api/dog` and `/dog` request logs from the web container.
+
+Crawler logs are structured JSON on stdout. Useful event names include
+`dog_crawler_pass_complete`, `dog_crawler_index_pass_complete`,
+`dog_crawler_empty_index_pass_complete`, `dog_result_cache_pass_complete`,
+`dog_result_cache_job_complete`, and `dog_result_cache_complete`.
+
 Run one crawler pass locally:
 
 ```bash

@@ -97,7 +97,11 @@ is called by Grafana.
 
 ## Dashboard
 
-The **System Overview** dashboard is auto-provisioned from `dashboards/overview.json`. `dashboards/sanakenno.json` is also provisioned here because Sanakenno runs in separate containers on the same NUC and writes to this shared Loki instance.
+The **System Overview** dashboard is auto-provisioned from
+`dashboards/overview.json`. The Dog Show Logs dashboard lives in
+`dashboards/dog.json`. `dashboards/sanakenno.json` is also provisioned here
+because Sanakenno runs in separate containers on the same NUC and writes to
+this shared Loki instance.
 
 | Section | Source | Data |
 |---------|--------|------|
@@ -107,8 +111,9 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | Disk I/O | Prometheus | node_exporter metrics |
 | Filesystem free space | Prometheus | node_exporter metrics |
 | Nginx traffic | Loki | nginx access/error logs |
-| Application errors/warnings | Loki | Flask structured JSON logs (all exception handlers log via structlog) |
-| Security events | Loki | Failed logins (Flask, SSH, Grafana) |
+| Erez.ac errors/warnings | Loki | Flask structured JSON logs, unstructured web container errors, nginx 5xx responses, nginx warn/error logs |
+| Security events | Loki | Failed logins, auth/admin 401/403/429 responses, scanner probes, rate limits, SSH, Grafana |
+| Dog Show Logs | Loki | `/dog` API request logs, dog-crawler pass logs, Showlink requests, result-cache jobs, dog warnings/errors |
 
 ## Configuration
 
@@ -126,6 +131,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | `alerting/nginx-alerts.yaml` | Loki-backed shared nginx/security alert rules |
 | `alerting/system-alerts.yaml` | Prometheus-backed host alert rules |
 | `dashboards/overview.json` | System Overview dashboard definition |
+| `dashboards/dog.json` | Dog Show Logs dashboard definition |
 | `dashboards/sanakenno.json` | Shared Sanakenno traffic and application log dashboard |
 
 ## Nginx JSON Logs
