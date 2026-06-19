@@ -632,6 +632,41 @@ export function formatShowDay(dateStr) {
   return String(parseInt(match[0], 10))
 }
 
+function formatDatePart(date, includeYear = false) {
+  const day = String(date.getDate()).padStart(2, '0')
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const year = date.getFullYear()
+  return includeYear ? `${day}.${month}.${year}` : `${day}.${month}.`
+}
+
+function datesAreSameDay(left, right) {
+  return (
+    left.getFullYear() === right.getFullYear() &&
+    left.getMonth() === right.getMonth() &&
+    left.getDate() === right.getDate()
+  )
+}
+
+export function formatShowFullDate(show) {
+  const rawDate = show?.date || ''
+  const range = parseShowDateRange(rawDate, show?.month)
+  if (!range?.start || !range?.end) return rawDate
+
+  if (datesAreSameDay(range.start, range.end)) {
+    return formatDatePart(range.end, true)
+  }
+
+  if (range.start.getFullYear() !== range.end.getFullYear()) {
+    return `${formatDatePart(range.start, true)}–${formatDatePart(range.end, true)}`
+  }
+
+  if (range.start.getMonth() === range.end.getMonth()) {
+    return `${String(range.start.getDate()).padStart(2, '0')}.–${formatDatePart(range.end, true)}`
+  }
+
+  return `${formatDatePart(range.start)}–${formatDatePart(range.end, true)}`
+}
+
 export function isThisWeekLeft(showDate, now = new Date()) {
   if (!showDate) return false
   const today = new Date(now)

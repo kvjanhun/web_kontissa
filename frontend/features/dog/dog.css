@@ -812,6 +812,13 @@
   background: var(--dog-accent-2);
   font-weight: 600;
 }
+.dog-search-full-date {
+  display: block;
+  color: var(--dog-text-muted);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.25;
+}
 .dog-search-result-info {
   display: flex;
   flex-direction: column;

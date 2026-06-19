@@ -6,6 +6,7 @@ import {
   createShowBreedGroups,
   dogMatchesShowFilters,
   filterDogResults,
+  formatShowFullDate,
   getShowResultAvailability,
   gradeMatchesFilter,
   groupResultsByAwardFilter,
@@ -263,6 +264,16 @@ describe('showStatItems and showStatsLabel', () => {
 })
 
 describe('show date result availability', () => {
+  it('formats full search-result dates from Showlink date labels', () => {
+    expect(formatShowFullDate({ date: '14.06.', month: 'kesäkuu 2026' })).toBe('14.06.2026')
+    expect(formatShowFullDate({ date: '13.-14.06.', month: 'kesäkuu 2026' })).toBe('13.–14.06.2026')
+    expect(formatShowFullDate({ date: '31.01.-01.02.', month: 'helmikuu 2026' })).toBe('31.01.–01.02.2026')
+  })
+
+  it('falls back to the raw show date when the date cannot be parsed', () => {
+    expect(formatShowFullDate({ date: 'Tänään', month: 'kesäkuu 2026' })).toBe('Tänään')
+  })
+
   it('parses Showlink date labels with the year from the month heading', () => {
     const range = parseShowDateRange('20.06.', 'kesäkuu 2026')
 

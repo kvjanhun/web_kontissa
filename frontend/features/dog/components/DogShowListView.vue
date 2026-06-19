@@ -2,6 +2,7 @@
 import DogSearchClearButton from './DogSearchClearButton.vue'
 import DogStateBlock from './DogStateBlock.vue'
 import {
+  formatShowFullDate,
   formatShowDay,
   formatTimestamp,
   hasShowStats,
@@ -141,6 +142,9 @@ defineEmits([
               >
                 {{ stat.label }}
               </span>
+            </span>
+            <span v-if="formatShowFullDate(result.show)" class="dog-search-full-date">
+              {{ formatShowFullDate(result.show) }}
             </span>
             <span v-if="result.breed" class="dog-search-breed-tag">
               {{ result.breed.name }} ({{ result.breed.count }} koiraa)

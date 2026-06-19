@@ -93,6 +93,7 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByText('Haetaan...')).toBeVisible()
     await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(1)
     await expect(page.getByText('Paula Steele')).toBeVisible()
+    await expect(page.getByText('14.06.2026')).toBeVisible()
 
     await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
     await expect(searchInput).toHaveValue('')
