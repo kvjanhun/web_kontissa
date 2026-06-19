@@ -1,0 +1,41 @@
+apiVersion: 1
+
+templates:
+  - orgId: 1
+    name: telegram-compact
+    template: |
+      {{ define "telegram.compact.message" -}}
+      {{ if gt (len .Alerts.Firing) 0 -}}
+      FIRING: {{ len .Alerts.Firing }} alert(s)
+      {{ template "telegram.compact.alert_list" .Alerts.Firing }}
+      {{ end -}}
+      {{ if and (gt (len .Alerts.Firing) 0) (gt (len .Alerts.Resolved) 0) }}
+
+      {{ end -}}
+      {{ if gt (len .Alerts.Resolved) 0 -}}
+      RESOLVED: {{ len .Alerts.Resolved }} alert(s)
+      {{ template "telegram.compact.alert_list" .Alerts.Resolved }}
+      {{ end -}}
+      {{ end }}
+
+      {{ define "telegram.compact.alert_list" -}}
+      {{ range . }}
+      {{ index .Labels "alertname" }}
+      {{ with index .Annotations "summary" }}{{ . }}
+      {{ end -}}
+      {{ with index .Labels "vhost" }}vhost: {{ . }}
+      {{ end -}}
+      {{ with index .Labels "remote_addr" }}ip: {{ . }}
+      {{ end -}}
+      {{ with index .Labels "filename" }}file: {{ . }}
+      {{ end -}}
+      {{ with index .Labels "mountpoint" }}mount: {{ . }}
+      {{ end -}}
+      {{ with index .Labels "instance" }}instance: {{ . }}
+      {{ end -}}
+      {{ with .GeneratorURL }}open: {{ . }}
+      {{ end -}}
+      {{ with .SilenceURL }}silence: {{ . }}
+      {{ end }}
+      {{ end -}}
+      {{ end }}

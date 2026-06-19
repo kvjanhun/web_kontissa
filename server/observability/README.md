@@ -74,6 +74,10 @@ that matters.
 The provisioned policy routes Grafana alerts to `telegram-critical`. Because
 Grafana treats the notification policy tree as one resource, keep policy edits
 in `alerting/notification-policies.yaml` rather than changing the UI by hand.
+Telegram messages use the provisioned `telegram-compact` notification template,
+which keeps notifications to the alert status/count, alert name, summary, key
+labels, and Grafana open/silence links. The fuller descriptions remain on the
+alert rules for Grafana UI context.
 
 Provisioned alerts:
 
@@ -117,6 +121,7 @@ The **System Overview** dashboard is auto-provisioned from `dashboards/overview.
 | `grafana-dashboards.yaml` | Dashboard auto-provisioning from JSON files |
 | `render-grafana-alerting.sh` | Copies Grafana provisioning files into `/tmp/grafana-provisioning` and renders the Telegram chat id placeholder |
 | `alerting/contact-points.yaml` | Telegram contact point provisioning |
+| `alerting/templates.yaml` | Compact Telegram notification template |
 | `alerting/notification-policies.yaml` | Grafana notification routing |
 | `alerting/nginx-alerts.yaml` | Loki-backed shared nginx/security alert rules |
 | `alerting/system-alerts.yaml` | Prometheus-backed host alert rules |

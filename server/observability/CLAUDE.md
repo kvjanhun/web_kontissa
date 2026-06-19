@@ -49,6 +49,7 @@ Refresh interval: 60s. Default time range: 6h.
 ## Grafana Alerting
 
 - Telegram contact point: `alerting/contact-points.yaml`, using `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from the Grafana container environment
+- Notification template: `alerting/templates.yaml`, uses a compact plaintext Telegram body with only the alert status/count, alert name, summary, key labels, and Grafana open/silence links
 - Notification policy: `alerting/notification-policies.yaml`, routes provisioned Grafana alerts to `telegram-critical`
 - Rules: `alerting/nginx-alerts.yaml`
   - Shared unexpected nginx error-log burst detection for `erez.ac` and `sanakenno.fi`

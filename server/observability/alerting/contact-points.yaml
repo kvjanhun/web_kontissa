@@ -11,4 +11,4 @@ contactPoints:
           bottoken: $TELEGRAM_BOT_TOKEN
           chatid: "__TELEGRAM_CHAT_ID__"
           message: |
-            {{ template "default.message" . }}
+            {{ template "telegram.compact.message" . }}
