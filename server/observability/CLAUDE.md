@@ -14,7 +14,7 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 
 | Service | Image | Memory Limit | CPU Limit | Purpose |
 |---------|-------|-------------|-----------|---------|
-| loki | grafana/loki:3.6.7 | 256m | — | Log storage (14-day retention) |
+| loki | grafana/loki:3.6.7 | 256m | — | Log storage (30-day retention) |
 | alloy | grafana/alloy:v1.17.0 | 128m | — | Log collection (nginx, journald, grafana logs) |
 | prometheus | prom/prometheus:v3.3.0 | 128m | 0.25 | Metrics storage (14-day / 500MB cap) |
 | grafana | grafana/grafana:12.4.1 | 256m | 0.5 | Dashboard UI at /logs/ subpath |
@@ -22,7 +22,7 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 
 ## Configuration Files
 
-- `loki-config.yaml` — TSDB store, filesystem backend, 14-day retention, compaction every 1h with 10 workers
+- `loki-config.yaml` — TSDB store, filesystem backend, 30-day retention, compaction every 1h with 10 workers
 - `alloy-config.alloy` — Scrapes nginx logs, systemd journal (max_age 12h), and grafana file logs. Alloy state is persisted to `alloy_data`.
 - `prometheus.yml` — Scrapes node_exporter at `172.18.0.1:9100` (Docker Compose network gateway) every 30s
 - `grafana-datasources.yaml` — Provisions Loki (default) and Prometheus datasources

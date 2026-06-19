@@ -5,7 +5,7 @@ Logging and hardware monitoring for erez.ac, running on a self-hosted Intel NUC.
 ## Components
 
 - **Grafana** — Dashboard UI, accessible at `https://erez.ac/logs/`
-- **Loki** — Log aggregation (14-day retention)
+- **Loki** — Log aggregation (30-day retention)
 - **Grafana Alloy** — Log collection from nginx, systemd journal, and Grafana
 - **Prometheus** — Metrics storage (14-day retention, 500MB cap)
 - **node_exporter** — Host hardware metrics (CPU, memory, disk, network)
@@ -119,7 +119,7 @@ this shared Loki instance.
 
 | File | Purpose |
 |------|---------|
-| `loki-config.yaml` | Loki storage, retention (14d), compaction settings |
+| `loki-config.yaml` | Loki storage, retention (30d), compaction settings |
 | `alloy-config.alloy` | Log scrape targets and label configuration |
 | `prometheus.yml` | Scrape config for node_exporter (30s interval) |
 | `grafana-datasources.yaml` | Loki + Prometheus datasource provisioning |
