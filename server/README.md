@@ -35,7 +35,9 @@ alerts resume so a hung deploy still pages you.
 ### `erez.ac.conf`
 Nginx virtual host configuration for erez.ac. Defines the HTTP→HTTPS redirect,
 TLS settings, reverse proxy rules, and security headers (HSTS, X-Content-Type-Options,
-X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is enforced.
+X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is enforced. Common
+scanner probe paths such as hidden dotfiles, PHP/ASP, and WordPress endpoints
+return 404 before reaching the app fallback.
 
 **Deployed to:** `/etc/nginx/conf.d/erez.ac.conf`
 
@@ -50,7 +52,8 @@ instead of regexing combined-access-log text.
 ### `sanakenno.fi.conf`
 Nginx virtual host configuration for the separate Sanakenno deployment. The app
 code lives in `~/Projects/sanakenno`, but the live host config is maintained
-here with the other NUC nginx config.
+here with the other NUC nginx config. Common scanner probe paths return 404
+before reaching the SPA fallback.
 
 **Deployed to:** `/etc/nginx/conf.d/sanakenno.fi.conf`
 

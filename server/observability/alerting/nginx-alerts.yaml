@@ -7,7 +7,7 @@ groups:
     interval: 1m
     rules:
       - uid: nginx-error-log-activity
-        title: Nginx error log activity
+        title: Nginx unexpected error log burst
         condition: C
         data:
           - refId: A
@@ -21,7 +21,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} !~ "limiting requests" [5m]))'
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "\\[(error|crit|alert|emerg)\\]" !~ "limiting requests" !~ "SSL_do_handshake\\(\\) failed .*bad key share" !~ "request: \"[A-Z]+ /logs/" !~ "directory index of \"/var/www/html/\\.well-known/acme-challenge/\" is forbidden" !~ "request: \"[A-Z]+ /(?:\\.well-known/acme-challenge/|.*\\.env|.*\\.git|wp-|wordpress|xmlrpc\\.php|phpmyadmin|pma|cgi-bin/|boaform/|HNAP1|vendor/|composer\\.(json|lock)|actuator|solr/|shell|setup|config\\.|backup|app\\.js|livewire/|plugins/|owa/|.*\\.(php|asp|aspx))" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -50,7 +50,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 0
+                      - 5
                     type: gt
                   operator:
                     type: and
@@ -71,10 +71,10 @@ groups:
               type: threshold
         noDataState: OK
         execErrState: Error
-        for: 1m
+        for: 5m
         annotations:
-          summary: Nginx wrote to an error log
-          description: '{{ $labels.filename }} received one or more lines in the last 5 minutes.'
+          summary: Unexpected nginx error-log burst
+          description: '{{ $labels.filename }} received more than 5 non-scanner error lines in 5 minutes, sustained for 5 minutes.'
         labels:
           severity: warning
           service: nginx
@@ -94,7 +94,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "(connect\\(\\) failed|upstream timed out|no live upstreams|upstream prematurely closed connection|recv\\(\\) failed|send\\(\\) failed)" [5m]))'
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "(connect\\(\\) failed|upstream timed out|no live upstreams|upstream prematurely closed connection|recv\\(\\) failed|send\\(\\) failed)" !~ "request: \"[A-Z]+ /logs/" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -167,7 +167,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (vhost) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="host", status="status" | status=~"5.." [5m]))'
+              expr: 'sum by (vhost) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", uri="uri", status="status" | uri!~"^/logs/" | status=~"5.." [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -196,7 +196,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 3
+                      - 2
                     type: gt
                   operator:
                     type: and
@@ -220,7 +220,7 @@ groups:
         for: 1m
         annotations:
           summary: 5xx spike on {{ $labels.vhost }}
-          description: '{{ $labels.vhost }} returned more than 3 nginx 5xx responses in 5 minutes.'
+          description: '{{ $labels.vhost }} returned more than 2 non-Grafana nginx 5xx responses in 5 minutes.'
         labels:
           severity: critical
           service: nginx
@@ -240,7 +240,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="host", remote_addr="remote_addr", request_uri="request_uri" | request_uri=~"(?i).*(wp-|wordpress|xmlrpc\\.php|\\.env|\\.git|phpmyadmin|/pma|/cgi-bin/|/boaform/|/HNAP1|/vendor/|composer\\.(json|lock)|/actuator|/solr/|/shell|/setup|/config|/backup|\\.php|\\.asp|\\.aspx).*" [5m]))'
+              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", remote_addr="remote_addr", uri="uri", request_uri="request_uri" | uri!~"^/logs/" | request_uri=~"(?i).*(wp-|wordpress|xmlrpc\\.php|\\.env|\\.git|phpmyadmin|/pma|/cgi-bin/|/boaform/|/HNAP1|/vendor/|composer\\.(json|lock)|/actuator|/solr/|/shell|/setup|/config\\.(js|json|php|ya?ml)|/backup|\\.php|\\.asp|\\.aspx).*" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -313,7 +313,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="host", remote_addr="remote_addr", request_uri="request_uri", status="status" | request_uri=~"^/(api/auth|api/admin|api/login).*" | status=~"401|403|429" [5m]))'
+              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", remote_addr="remote_addr", request_uri="request_uri", status="status" | request_uri=~"^/(api/auth|api/admin|api/login).*" | status=~"401|403|429" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -386,7 +386,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="host", remote_addr="remote_addr", status="status" | status="429" [5m]))'
+              expr: 'sum by (vhost, remote_addr) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", remote_addr="remote_addr", status="status" | status="429" [5m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant

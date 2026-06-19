@@ -79,10 +79,10 @@ Provisioned alerts:
 
 | Alert | Source | Fires when |
 |-------|--------|------------|
-| Nginx error log activity | Loki nginx error logs | Either site writes to its nginx error log |
-| Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures |
-| Nginx 5xx spike | Loki nginx JSON access logs | More than 3 5xx responses per vhost in 5 minutes |
-| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 300 common scanner/probe requests to one vhost in 5 minutes, sustained for 5 minutes |
+| Nginx unexpected error log burst | Loki nginx error logs | More than 5 non-scanner nginx error-log lines in 5 minutes, sustained for 5 minutes |
+| Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures outside Grafana `/logs/` |
+| Nginx 5xx spike | Loki nginx JSON access logs | More than 2 non-Grafana 5xx responses per vhost in 5 minutes |
+| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 300 common scanner/probe requests outside `/logs/` to one vhost in 5 minutes, sustained for 5 minutes |
 | Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on app auth/admin paths |
 | Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one vhost in 5 minutes |
 | Host root disk free space low | Prometheus node_exporter | `/` free space stays below 15% for 10 minutes |
@@ -132,9 +132,14 @@ the format. Both `erez.ac.conf` and `sanakenno.fi.conf` write JSON access logs
 with fields such as `host`, `remote_addr`, `request_uri`, `status`,
 `upstream_status`, and `user_agent`.
 
+The vhost files also return a direct 404 for common scanner probes such as
+`.env`, `.git`, WordPress/PHP, `config.js`, and similar paths so those requests
+do not fall through to the app/SPA fallback as successful 200 responses.
+
 Grafana log panels still display these as normal log lines. Loki queries can add
 `| json` to parse the fields for filters, grouping, tables, and alerts. Alert
-queries extract the JSON `host` field as `vhost` so it does not collide with the
+queries extract the JSON `server_name` field as `vhost` so direct-IP Host
+headers do not create misleading vhost labels and it does not collide with the
 Alloy stream label `host=nuc`.
 
 ## Resource Budget

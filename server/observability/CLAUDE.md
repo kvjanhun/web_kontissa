@@ -51,10 +51,10 @@ Refresh interval: 60s. Default time range: 6h.
 - Telegram contact point: `alerting/contact-points.yaml`, using `TELEGRAM_BOT_TOKEN` and `TELEGRAM_CHAT_ID` from the Grafana container environment
 - Notification policy: `alerting/notification-policies.yaml`, routes provisioned Grafana alerts to `telegram-critical`
 - Rules: `alerting/nginx-alerts.yaml`
-  - Shared nginx error log activity for `erez.ac` and `sanakenno.fi`
-  - Shared upstream failure detection from nginx error logs
-  - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`
-  - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`
+  - Shared unexpected nginx error-log burst detection for `erez.ac` and `sanakenno.fi`
+  - Shared upstream failure detection from nginx error logs, excluding Grafana `/logs/` restart noise
+  - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`, excluding Grafana `/logs/`
+  - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`, excluding Grafana `/logs/`
   - Shared auth/admin suspicious-response detection for 401/403/429 on app auth/admin paths
   - Shared 429 burst detection grouped by extracted `vhost` and `remote_addr`
 - Rules: `alerting/system-alerts.yaml`
@@ -64,8 +64,8 @@ Refresh interval: 60s. Default time range: 6h.
 ## Nginx Structured Logs
 
 - `server/nginx-observability.conf` must be deployed to `/etc/nginx/conf.d/00-observability.conf`.
-- Both nginx vhost files use `access_log ... kontissa_json`.
-- Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `host`, `remote_addr`, `request_uri`, `status`, or upstream fields. Alert queries extract JSON `host` as `vhost` to avoid colliding with Alloy's `host=nuc` stream label.
+- Both nginx vhost files use `access_log ... kontissa_json` and return 404 for common scanner probe paths so `.env`, `.git`, WordPress/PHP, and similar requests do not fall through to app/SPA 200 responses.
+- Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `server_name`, `remote_addr`, `request_uri`, `status`, or upstream fields. Alert queries extract JSON `server_name` as `vhost` to avoid direct-IP Host labels and colliding with Alloy's `host=nuc` stream label.
 
 ## Networking
 
