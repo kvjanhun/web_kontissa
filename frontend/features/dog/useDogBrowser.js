@@ -541,6 +541,16 @@ export function useDogBrowser() {
     expandedCritiques.value = critiques
   }
 
+  function toggleAllCritiques(keys, expand) {
+    const critiques = new Set(expandedCritiques.value)
+    if (expand) {
+      keys.forEach(k => critiques.add(k))
+    } else {
+      keys.forEach(k => critiques.delete(k))
+    }
+    expandedCritiques.value = critiques
+  }
+
   function toggleBreedGroup(key) {
     const groups = new Set(expandedBreedGroups.value)
     if (groups.has(key)) groups.delete(key)
@@ -802,6 +812,7 @@ export function useDogBrowser() {
     isBreedGroupExpanded,
     toggleMonth,
     toggleCritique,
+    toggleAllCritiques,
     formatShowDay,
     hasShowStats,
     showStatItems,

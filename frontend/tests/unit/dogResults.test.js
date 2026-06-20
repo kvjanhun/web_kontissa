@@ -13,6 +13,7 @@ import {
   parseShowDateRange,
   showStatItems,
   showStatsLabel,
+  sortBreedAwards,
 } from '~/features/dog/dogResults.js'
 
 describe('gradeMatchesFilter', () => {
@@ -520,3 +521,48 @@ describe('buildDogQuery', () => {
     })
   })
 })
+
+describe('sortBreedAwards', () => {
+  it('sorts breed awards correctly according to AWARD_FILTER_ORDER and sub-orderings', () => {
+    const input = [
+      { type: 'KP', text: 'Dog KP' },
+      { type: 'VSP Pentu', text: 'Puppy VSP' },
+      { type: 'ROP', text: 'Dog ROP' },
+      { type: 'SERT Narttu', text: 'Bitch SERT' },
+      { type: 'VSP Veteraani', text: 'Vet VSP' },
+      { type: 'CACIB Uros', text: 'Dog CACIB' },
+      { type: 'ROP Pentu', text: 'Puppy ROP' },
+      { type: 'VSP', text: 'Dog VSP' },
+      { type: 'ROP Juniori', text: 'Jun ROP' },
+      { type: 'MVA Narttu', text: 'Bitch MVA' },
+      { type: 'SERT Uros', text: 'Dog SERT' },
+      { type: 'SA Uros', text: 'Dog SA' },
+      { type: 'ROP Kasvattaja', text: 'Breeder ROP' },
+    ]
+
+    const sorted = sortBreedAwards(input)
+    
+    expect(sorted.map(a => a.type)).toEqual([
+      // 1. ROP/VSP variations sorted first (plain -> VET -> JUN -> PEN -> KASVATTAJA, and ROP before VSP)
+      'ROP',
+      'VSP',
+      'VSP Veteraani',
+      'ROP Juniori',
+      'ROP Pentu',
+      'VSP Pentu',
+      'ROP Kasvattaja',
+      // 2. MVA
+      'MVA Narttu',
+      // 3. SERT (Uros before Narttu)
+      'SERT Uros',
+      'SERT Narttu',
+      // 4. CACIB
+      'CACIB Uros',
+      // 5. SA
+      'SA Uros',
+      // 6. KP
+      'KP',
+    ])
+  })
+})
+

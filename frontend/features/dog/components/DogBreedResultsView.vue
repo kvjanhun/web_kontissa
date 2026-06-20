@@ -1,10 +1,12 @@
 <script setup>
+import { computed } from 'vue'
 import DogMetaBar from './DogMetaBar.vue'
 import DogResultCard from './DogResultCard.vue'
 import DogResultFilters from './DogResultFilters.vue'
 import DogStateBlock from './DogStateBlock.vue'
+import { sortBreedAwards } from '../dogResults.js'
 
-defineProps({
+const props = defineProps({
   breedResults: {
     type: Object,
     default: null,
@@ -63,13 +65,14 @@ defineProps({
   },
 })
 
-defineEmits([
+const emit = defineEmits([
   'retry-results',
   'update:dogSearchQuery',
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
   'toggle-critique',
+  'toggle-all-critiques',
 ])
 
 function critiqueKey(gender, className, dog) {
@@ -78,6 +81,64 @@ function critiqueKey(gender, className, dog) {
 
 function awardCritiqueKey(group, dog) {
   return `award-${group.key}-${dog.number || dog.name}`
+}
+
+const sortedAwards = computed(() => {
+  return sortBreedAwards(props.breedResults?.awards || [])
+})
+
+const visibleCritiqueKeys = computed(() => {
+  const keys = []
+  if (!props.breedResults) return keys
+
+  if (props.dogAwardFilter && props.awardResultGroups.length) {
+    props.awardResultGroups.forEach(group => {
+      group.dogs.forEach(dog => {
+        if (dog.critique) {
+          keys.push(awardCritiqueKey(group, dog))
+        }
+      })
+    })
+  } else {
+    for (const gender in props.resultsByGenderAndClass) {
+      const classes = props.resultsByGenderAndClass[gender]
+      for (const className in classes) {
+        const dogs = classes[className]
+        dogs.forEach(dog => {
+          if (dog.critique) {
+            keys.push(critiqueKey(gender, className, dog))
+          }
+        })
+      }
+    }
+  }
+  return keys
+})
+
+const allVisibleExpanded = computed(() => {
+  const keys = visibleCritiqueKeys.value
+  if (keys.length === 0) return false
+  return keys.every(key => props.expandedCritiques.has(key))
+})
+
+const totalResultsCount = computed(() => {
+  if (props.dogAwardFilter && props.awardResultGroups.length) {
+    return props.awardResultGroups.reduce((acc, group) => acc + (group.dogs?.length || 0), 0)
+  }
+  let count = 0
+  for (const gender in props.resultsByGenderAndClass) {
+    const classes = props.resultsByGenderAndClass[gender]
+    for (const className in classes) {
+      count += classes[className]?.length || 0
+    }
+  }
+  return count
+})
+
+function toggleAllVisible() {
+  const keys = visibleCritiqueKeys.value
+  const expand = !allVisibleExpanded.value
+  emit('toggle-all-critiques', keys, expand)
 }
 </script>
 
@@ -114,9 +175,26 @@ function awardCritiqueKey(group, dog) {
         @update:awardFilter="$emit('update:dogAwardFilter', $event)"
       />
 
-      <div v-if="breedResults.awards?.length && !dogSearchQuery && !dogGradeFilter && !dogClassFilter && !dogAwardFilter" class="dog-awards">
+      <div class="dog-results-meta-row-header">
+        <div class="dog-results-meta-left">
+          Löytyi <span class="dog-highlight-text">{{ totalResultsCount }}</span> {{ totalResultsCount === 1 ? 'koira' : 'koiraa' }}
+        </div>
+        <button
+          v-if="visibleCritiqueKeys.length"
+          type="button"
+          class="dog-critique-toggle-all-btn"
+          @click="toggleAllVisible"
+        >
+          <svg class="dog-chevron-icon" :class="{ 'dog-chevron-up': allVisibleExpanded }" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="196 96 128 164 60 96" />
+          </svg>
+          <span>{{ allVisibleExpanded ? 'Piilota arvostelut' : 'Näytä kaikki arvostelut' }}</span>
+        </button>
+      </div>
+
+      <div v-if="sortedAwards.length && !dogSearchQuery && !dogGradeFilter && !dogClassFilter && !dogAwardFilter" class="dog-awards">
         <div
-          v-for="(award, index) in breedResults.awards"
+          v-for="(award, index) in sortedAwards"
           :key="index"
           class="dog-award-card"
         >

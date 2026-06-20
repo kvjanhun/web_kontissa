@@ -70,6 +70,7 @@ const {
   isBreedGroupExpanded,
   toggleMonth,
   toggleCritique,
+  toggleAllCritiques,
 } = useDogBrowser()
 
 const pageTitle = computed(() => {
@@ -166,6 +167,7 @@ const pageTitle = computed(() => {
         :expanded-critiques="expandedCritiques"
         @retry-results="fetchBreedResults"
         @toggle-critique="toggleCritique"
+        @toggle-all-critiques="toggleAllCritiques"
       />
     </Transition>
   </div>

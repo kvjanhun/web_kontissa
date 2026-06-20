@@ -10,6 +10,22 @@ import {
   showStatsLabel,
 } from '../dogResults.js'
 
+const FINNISH_MONTHS_SHORT = [
+  'tammi', 'helmi', 'maalis', 'huhti', 'touko', 'kesä',
+  'heinä', 'elo', 'syys', 'loka', 'marras', 'joulu'
+]
+
+function getShowDateParts(dateStr) {
+  const match = String(dateStr || '').match(/(\d{1,2})\.(\d{1,2})\./)
+  if (match) {
+    const day = parseInt(match[1], 10)
+    const monthIndex = parseInt(match[2], 10) - 1
+    const month = FINNISH_MONTHS_SHORT[monthIndex] || ''
+    return { day, month }
+  }
+  return { day: formatShowDay(dateStr), month: '' }
+}
+
 defineProps({
   filterText: {
     type: String,
@@ -121,44 +137,50 @@ defineEmits([
 
       <DogStateBlock v-else-if="searchError" mode="error" :message="searchError" />
 
-      <div v-else-if="searchResults.length">
+      <div v-else-if="searchResults.length" class="dog-search-results-list">
         <button
           v-for="result in searchResults"
           :key="result.show.id + '-' + result.match + '-' + (result.breed ? result.breed.breed_id : '')"
           class="dog-show-row"
           @click="$emit('select-search-result', result)"
         >
+          <span class="dog-show-date">
+            <span class="dog-show-date-day">{{ getShowDateParts(result.show.date).day }}</span>
+            <span class="dog-show-date-month">{{ getShowDateParts(result.show.date).month }}</span>
+          </span>
           <div class="dog-search-result-info">
-            <span class="dog-search-show-line">
-              <span class="dog-show-date">{{ formatShowDay(result.show.date) }}</span>
+            <div class="dog-show-body">
               <span class="dog-show-name">{{ result.show.name }}</span>
-            </span>
-            <span v-if="hasShowStats(result.show)" class="dog-show-stats" :aria-label="showStatsLabel(result.show)">
-              <span
-                v-for="stat in showStatItems(result.show)"
-                :key="stat.key"
-                :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
-                :title="stat.title"
-              >
-                {{ stat.label }}
+              <span v-if="hasShowStats(result.show)" class="dog-show-stats" :aria-label="showStatsLabel(result.show)">
+                <span
+                  v-for="stat in showStatItems(result.show)"
+                  :key="stat.key"
+                  :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
+                  :title="stat.title"
+                >
+                  <span v-if="stat.live" class="dog-live-dot" />
+                  {{ stat.label }}
+                </span>
               </span>
-            </span>
-            <span v-if="formatShowFullDate(result.show)" class="dog-search-full-date">
-              {{ formatShowFullDate(result.show) }}
-            </span>
-            <span v-if="result.breed" class="dog-search-breed-tag">
-              {{ result.breed.name }} ({{ result.breed.count }} koiraa)
-              <span v-if="result.breed.judge" class="dog-search-judge-sub">
-                Tuomari: {{ result.breed.judge }}
+            </div>
+            <div class="dog-search-meta-row">
+              <span v-if="formatShowFullDate(result.show)" class="dog-search-full-date">
+                {{ formatShowFullDate(result.show) }}
               </span>
-            </span>
-            <span v-else-if="result.match === 'judge'" class="dog-search-breed-tag">
-              Tuomari
-              <span v-if="result.judge" class="dog-search-judge-sub">
-                {{ result.judge }}
+              <span v-if="result.breed" class="dog-search-breed-tag">
+                {{ result.breed.name }} ({{ result.breed.count }} koiraa)
+                <span v-if="result.breed.judge" class="dog-search-judge-sub">
+                  Tuomari: {{ result.breed.judge }}
+                </span>
               </span>
-            </span>
-            <span v-else class="dog-search-breed-tag">Näyttely</span>
+              <span v-else-if="result.match === 'judge'" class="dog-search-breed-tag">
+                Tuomari
+                <span v-if="result.judge" class="dog-search-judge-sub">
+                  {{ result.judge }}
+                </span>
+              </span>
+              <span v-else class="dog-search-breed-tag">Näyttely</span>
+            </div>
           </div>
           <svg class="dog-arrow" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
             <polyline points="96 48 176 128 96 208" />
@@ -187,7 +209,10 @@ defineEmits([
             class="dog-show-row dog-show-row-featured"
             @click="$emit('open-show', show)"
           >
-            <span class="dog-show-date">{{ formatShowDay(show.date) }}</span>
+            <span class="dog-show-date">
+              <span class="dog-show-date-day">{{ getShowDateParts(show.date).day }}</span>
+              <span class="dog-show-date-month">{{ getShowDateParts(show.date).month }}</span>
+            </span>
             <span class="dog-show-body">
               <span class="dog-show-name">{{ show.name }}</span>
               <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
@@ -197,6 +222,7 @@ defineEmits([
                   :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
                   :title="stat.title"
                 >
+                  <span v-if="stat.live" class="dog-live-dot" />
                   {{ stat.label }}
                 </span>
               </span>
@@ -238,7 +264,10 @@ defineEmits([
                 class="dog-show-row"
                 @click="$emit('open-show', show)"
               >
-                <span class="dog-show-date">{{ formatShowDay(show.date) }}</span>
+                <span class="dog-show-date">
+                  <span class="dog-show-date-day">{{ getShowDateParts(show.date).day }}</span>
+                  <span class="dog-show-date-month">{{ getShowDateParts(show.date).month }}</span>
+                </span>
                 <span class="dog-show-body">
                   <span class="dog-show-name">{{ show.name }}</span>
                   <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
@@ -248,6 +277,7 @@ defineEmits([
                       :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
                       :title="stat.title"
                     >
+                      <span v-if="stat.live" class="dog-live-dot" />
                       {{ stat.label }}
                     </span>
                   </span>

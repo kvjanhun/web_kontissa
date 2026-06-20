@@ -37,8 +37,8 @@ function critiqueKey(dog) {
       <span class="dog-breed-group-main">
         <span class="dog-breed-group-title">{{ group.breedName }}</span>
         <span class="dog-breed-group-meta">
-          <span v-if="typeof group.count === 'number'">{{ group.count }} koiraa</span>
-          <span v-if="group.judge">Tuomari: {{ group.judge }}</span>
+          <span v-if="typeof group.count === 'number'" class="dog-breed-group-count">{{ group.count }} koiraa</span>
+          <span v-if="group.judge" class="dog-breed-group-judge">Tuomari: {{ group.judge }}</span>
         </span>
       </span>
 
@@ -62,9 +62,8 @@ function critiqueKey(dog) {
           title="Tulokset saatavilla"
           aria-label="Tulokset saatavilla"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="128" cy="128" r="84" />
-            <polyline points="88 132 116 160 172 96" />
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="64 128 104 168 192 80" />
           </svg>
         </span>
         <span
@@ -73,9 +72,8 @@ function critiqueKey(dog) {
           title="Ei tuloksia"
           aria-label="Ei tuloksia"
         >
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="128" cy="128" r="84" />
-            <line x1="88" y1="128" x2="168" y2="128" />
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="64" y1="128" x2="192" y2="128" />
           </svg>
         </span>
         <svg

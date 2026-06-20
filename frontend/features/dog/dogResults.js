@@ -915,3 +915,113 @@ export function getAllDogsProgressText(progress) {
   }
   return `${state}. Taustaprosessi hakee tiedot rauhallisesti.`
 }
+
+function getAwardFilterKey(norm) {
+  if (norm.includes('BIS')) return 'BIS'
+  if (norm.includes('RYP')) return 'RYP'
+  
+  if (norm.includes('ROP') || norm.includes('VSP')) {
+    return 'ROP/VSP'
+  }
+
+  if (norm.includes('JMVA')) return 'JMVA'
+  if (norm.includes('VMVA')) return 'VMVA'
+  if (norm.includes('MVA')) return 'MVA'
+
+  if (norm.includes('SERT')) {
+    if (norm.includes('VET')) {
+      if (norm.includes('NORD')) return 'NORD VET-SERT'
+      return 'VET-SERT'
+    }
+    if (norm.includes('JUN')) {
+      if (norm.includes('NORD')) return 'NORD JUN-SERT'
+      return 'JUN-SERT'
+    }
+    if (norm.includes('VARA')) {
+      if (norm.includes('NORD')) return 'NORD VARA-SERT'
+      return 'VARA-SERT'
+    }
+    if (norm.includes('NORD')) return 'NORD SERT'
+    return 'SERT'
+  }
+
+  if (norm.includes('CACIB')) {
+    if (norm.includes('CACIB-J') || norm.includes('CACIB J') || norm.includes('JUN')) return 'CACIB-J'
+    if (norm.includes('CACIB-V') || norm.includes('CACIB V') || norm.includes('VET')) return 'CACIB-V'
+    if (norm.includes('VARA')) return 'VARA-CACIB'
+    return 'CACIB'
+  }
+
+  if (norm.includes('NORD')) {
+    if (norm.includes('VET')) return 'NORD VET-SERT'
+    if (norm.includes('JUN')) return 'NORD JUN-SERT'
+    if (norm.includes('VARA')) return 'NORD VARA-SERT'
+    return 'NORD SERT'
+  }
+
+  const tokens = norm.split(/[\s-]+/)
+  if (tokens.includes('SA')) return 'SA'
+  if (tokens.includes('KP')) return 'KP'
+
+  return null
+}
+
+function parseBreedAwardForSort(type) {
+  const norm = String(type || '').trim().toUpperCase()
+  const genderSort = norm.includes('NARTTU') ? 2 : 1
+
+  const filterKey = getAwardFilterKey(norm)
+  const groupOrder = filterKey ? AWARD_FILTER_ORDER.indexOf(filterKey) : 99
+
+  // For ROP/VSP variations, we apply specific sub-orderings
+  const isRop = norm.includes('ROP')
+  const isVsp = norm.includes('VSP')
+  if (isRop || isVsp) {
+    const resultOrder = isRop ? 1 : 2
+    let qualifierOrder = 0
+
+    if (norm.includes('KASVATTAJA')) {
+      qualifierOrder = 4
+    } else if (norm.includes('JÄLKELÄIS') || norm.includes('JALKELAIS')) {
+      qualifierOrder = 5
+    } else if (norm.includes('VETERAANI') || norm.includes('VET')) {
+      qualifierOrder = 1
+    } else if (norm.includes('JUNIORI') || norm.includes('JUN')) {
+      qualifierOrder = 2
+    } else if (norm.includes('PENTU') || norm.includes('PEN')) {
+      qualifierOrder = 3
+    }
+
+    return { groupOrder, qualifierOrder, subOrder: resultOrder }
+  }
+
+  // BIS and RYP should parse rank as subOrder
+  if (filterKey === 'BIS') {
+    const match = norm.match(/BIS\s*-?\s*(\d+)/)
+    const rank = match ? parseInt(match[1], 10) : 99
+    return { groupOrder, qualifierOrder: 0, subOrder: rank }
+  }
+  if (filterKey === 'RYP') {
+    const match = norm.match(/RYP\s*-?\s*(\d+)/)
+    const rank = match ? parseInt(match[1], 10) : 99
+    return { groupOrder, qualifierOrder: 0, subOrder: rank }
+  }
+
+  // Other awards sort by genderSort as subOrder
+  return { groupOrder, qualifierOrder: 0, subOrder: genderSort }
+}
+
+export function sortBreedAwards(awards) {
+  if (!Array.isArray(awards)) return []
+  return [...awards].sort((left, right) => {
+    const l = parseBreedAwardForSort(left.type)
+    const r = parseBreedAwardForSort(right.type)
+    
+    return (
+      l.groupOrder - r.groupOrder
+      || l.qualifierOrder - r.qualifierOrder
+      || l.subOrder - r.subOrder
+      || String(left.type || '').localeCompare(String(right.type || ''), 'fi')
+    )
+  })
+}
