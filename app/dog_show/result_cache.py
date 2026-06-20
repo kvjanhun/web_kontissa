@@ -370,6 +370,92 @@ def _map_breed_results_to_all_results(show_id, breed, breed_data):
 def _breed_cache_key_from_breed(breed):
     return f"{breed.get('group', '')}:{breed.get('breed_id', '')}"
 
+def _safe_int(value):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+def _result_cache_breed_progress_map(show_id, doc=None):
+    doc = doc if isinstance(doc, dict) else _load_result_cache_doc(show_id)
+    if not isinstance(doc, dict):
+        return {}
+
+    progress = {}
+    completed_breeds = doc.get("completed_breeds") or {}
+    for key, breed_data in completed_breeds.items():
+        if not isinstance(breed_data, dict) or ":" not in str(key):
+            continue
+
+        result_count = _safe_int(breed_data.get("result_count"))
+        updated_at = breed_data.get("updated_at") or doc.get("updated_at") or doc.get("cached_at")
+        progress[str(key)] = {
+            "result_count": max(0, result_count or 0),
+            "updated_at": updated_at,
+            "updated_at_iso": _utc_iso(updated_at),
+        }
+
+    # Older or partially-written cache docs may have result rows before a
+    # matching completed_breeds entry. Count them as a best-effort fallback.
+    counted_results = {}
+    for result in doc.get("results") or []:
+        group = result.get("breedGroup") or (result.get("breedObj") or {}).get("group")
+        breed_id = result.get("breedId") or (result.get("breedObj") or {}).get("breed_id")
+        if not group or not breed_id:
+            continue
+        key = f"{group}:{breed_id}"
+        counted_results[key] = counted_results.get(key, 0) + 1
+
+    doc_updated_at = doc.get("updated_at") or doc.get("cached_at")
+    for key, count in counted_results.items():
+        if key in progress:
+            progress[key]["result_count"] = max(progress[key]["result_count"], count)
+            continue
+        progress[key] = {
+            "result_count": count,
+            "updated_at": doc_updated_at,
+            "updated_at_iso": _utc_iso(doc_updated_at),
+        }
+
+    return progress
+
+def _enrich_breeds_with_result_progress(show_id, breeds, doc=None):
+    progress_by_key = _result_cache_breed_progress_map(show_id, doc=doc)
+    if not progress_by_key:
+        return False
+
+    updated = False
+    for breed in breeds or []:
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if not group or not breed_id:
+            continue
+
+        progress = progress_by_key.get(f"{group}:{breed_id}")
+        if not progress:
+            continue
+
+        total_count = _safe_int(breed.get("count"))
+        result_count = progress["result_count"]
+        if total_count is not None:
+            result_count = min(result_count, max(0, total_count))
+
+        breed["result_count"] = result_count
+        breed["result_total_count"] = total_count
+        breed["result_updated_at"] = progress.get("updated_at")
+        breed["result_updated_at_iso"] = progress.get("updated_at_iso")
+        breed["result_progress"] = {
+            "rated_count": result_count,
+            "total_count": total_count,
+            "updated_at": progress.get("updated_at"),
+            "updated_at_iso": progress.get("updated_at_iso"),
+        }
+        if result_count > 0:
+            breed["has_results"] = True
+        updated = True
+
+    return updated
+
 def _fetch_breed_results_for_show_cache(show_id, breed):
     group = str(breed.get("group", ""))
     breed_id = str(breed.get("breed_id", ""))
@@ -712,6 +798,29 @@ def _auto_result_cache_candidates(now):
         candidate.pop("rank", None)
     return candidates
 
+def _queue_live_result_cache_refresh(show_id, show=None, reason="live-detail-refresh", immediate=True, now=None):
+    now = now or time.time()
+    availability = (
+        _show_result_availability(show, now=_availability_now(now))
+        if show
+        else _show_result_availability_for_id(show_id, now=_availability_now(now))
+    )
+    if availability.get("show_state") != "live" or not availability.get("can_fetch", True):
+        return None
+
+    show_id = int(show_id)
+    if not _result_cache_due(show_id, now=now):
+        return None
+
+    job = _queue_result_cache_job(show_id, reason=reason)
+    started = _start_result_cache_warmup(show_id, reason=reason) if immediate else False
+    queued = {
+        "show_id": show_id,
+        "started": started,
+        "job_state": job.get("state"),
+    }
+    return queued
+
 def _queue_live_result_cache_refreshes(shows, limit=2, immediate=True):
     now = time.time()
     queued = []
@@ -724,20 +833,15 @@ def _queue_live_result_cache_refreshes(shows, limit=2, immediate=True):
         except (TypeError, ValueError, AttributeError):
             continue
 
-        availability = _show_result_availability(show, now=_availability_now(now))
-        if availability.get("show_state") != "live" or not availability.get("can_fetch", True):
-            continue
-
-        if not _result_cache_due(show_id, now=now):
-            continue
-
-        job = _queue_result_cache_job(show_id, reason="live-list-refresh")
-        started = _start_result_cache_warmup(show_id, reason="live-list-refresh") if immediate else False
-        queued.append({
-            "show_id": show_id,
-            "started": started,
-            "job_state": job.get("state"),
-        })
+        item = _queue_live_result_cache_refresh(
+            show_id,
+            show=show,
+            reason="live-list-refresh",
+            immediate=immediate,
+            now=now,
+        )
+        if item:
+            queued.append(item)
 
     if queued:
         logger.info("dog_live_result_refresh_queued", count=len(queued), shows=queued)

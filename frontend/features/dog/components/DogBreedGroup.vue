@@ -44,7 +44,14 @@ function critiqueKey(dog) {
 
       <span class="dog-breed-group-side">
         <span
-          v-if="allDogsLoaded && group.dogs.length"
+          v-if="group.resultProgressLabel"
+          class="dog-breed-group-badge dog-breed-progress-badge"
+          :title="`${group.resultProgressLabel} arvosteltu`"
+        >
+          {{ group.resultProgressLabel }}
+        </span>
+        <span
+          v-else-if="allDogsLoaded && group.dogs.length"
           class="dog-breed-group-badge"
         >
           {{ group.dogs.length }} tulosta

@@ -22,6 +22,7 @@ from app.dog_show.indexing import (
 from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
     _breed_results_from_all_results_cache, _cached_all_results_response,
+    _enrich_breeds_with_result_progress, _queue_live_result_cache_refresh,
     _queue_live_result_cache_refreshes, _result_cache_progress, _start_result_cache_warmup,
     crawl_result_cache_for_show, crawl_result_cache_once,
 )
@@ -93,7 +94,9 @@ def show_detail(show_id):
             data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
             updated_from_index = _enrich_breeds_with_index_judges(show_id, data["breeds"])
             updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data["breeds"])
-            if updated_from_index or updated_from_results:
+            progress_updated = _enrich_breeds_with_result_progress(show_id, data["breeds"])
+            _queue_live_result_cache_refresh(show_id)
+            if updated_from_index or updated_from_results or progress_updated:
                 existing_cache = _show_detail_cache.get(show_id) or {}
                 _show_detail_cache[show_id] = {
                     "data": data,
@@ -103,6 +106,8 @@ def show_detail(show_id):
 
         indexed = _show_detail_from_index(show_id, refresh_stale_result_flags=True)
         if indexed:
+            _enrich_breeds_with_result_progress(show_id, indexed.get("breeds", []))
+            _queue_live_result_cache_refresh(show_id)
             _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
             return jsonify(indexed)
 
@@ -116,6 +121,8 @@ def show_detail(show_id):
 
         _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
         _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))
+        _enrich_breeds_with_result_progress(show_id, data.get("breeds", []))
+        _queue_live_result_cache_refresh(show_id)
 
         try:
             _persist_show_detail_to_index(show_id, data, fetched_at)

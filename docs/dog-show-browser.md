@@ -46,7 +46,7 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 ## Public API
 
 - `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed. Active shows also include current result progress from the whole-show result cache.
-- `GET /api/dog/shows/<show_id>`: breed list for one show.
+- `GET /api/dog/shows/<show_id>`: breed list for one show. Live/recent detail responses enrich breeds with compact result progress from the whole-show cache when available.
 - `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page. Missing result pages are not fetched before the show date at 06:00 local time.
 - `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters. Missing whole-show caches return `425`/`not_ready` instead of queueing work before the show date at 06:00 local time.
 - `GET /api/dog/search?q=<query>`: search shows and indexed breeds.
@@ -62,14 +62,16 @@ Rate limits are intentionally lower than internal crawler throughput:
 2. The show list is enriched from `dog_show_index.json` with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches. When a live show's result cache is stale, this endpoint queues a bounded server-side refresh so front-page polling can move the number forward.
 3. Opening a show calls `/api/dog/shows/<show_id>`.
 4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
-5. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
-6. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
-7. Opening the whole-show filter calls `/api/dog/shows/<show_id>/all-results`.
-8. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
-9. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
-10. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
-11. The crawler service also processes queued jobs and proactively warms recent shows.
-12. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
+5. For live shows, the detail response also reads `dog_result_cache/<show_id>.json` and adds per-breed `result_count`, `result_total_count`, `result_updated_at`, and `result_progress` fields when the cache has seen that breed.
+6. If a live show's result cache is stale, the detail endpoint queues the same bounded background refresh used by the show list. The open detail page polls the detail endpoint every 2 minutes.
+7. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
+8. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
+9. Opening the whole-show filter calls `/api/dog/shows/<show_id>/all-results`.
+10. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
+11. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
+12. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
+13. The crawler service also processes queued jobs and proactively warms recent shows.
+14. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
 ## Persistent Files
 
@@ -179,6 +181,7 @@ Important UI behavior:
 - The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache. If a judge is only present in a warmed whole-show result cache, search uses that cache and writes the judge back to the compact index.
 - Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; past and upcoming show rows show only the full signup count.
 - The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
+- On live show detail pages, `Tuloksia saaneet` is on by default. Breed rows with cached progress show `n/N` judged dogs and, when the toggle is active, breeds with the freshest result progress sort first.
 - Whole-show filters run only against the persisted `/all-results` cache. Before show-day 06:00, the UI keeps the breed list searchable and explains that whole-show results are not checked yet.
 - On the show date after 06:00, the UI allows checking whole-show data but warns that classes and results can fill in gradually as the day progresses.
 - While `/all-results` is warming, the page shows an animated progress card and polls the API.

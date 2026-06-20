@@ -1533,6 +1533,12 @@
   border-radius: 999px;
   border: 1px solid var(--dog-border);
 }
+.dog-breed-progress-badge {
+  color: var(--dog-accent);
+  border-color: color-mix(in srgb, var(--dog-accent) 32%, var(--dog-border));
+  background: color-mix(in srgb, var(--dog-accent) 10%, var(--dog-surface));
+  font-variant-numeric: tabular-nums;
+}
 .dog-breed-result-icon {
   display: inline-flex;
   align-items: center;
@@ -1600,7 +1606,7 @@
   .dog-breed-group-side {
     gap: 0.35rem;
   }
-  .dog-breed-group-badge {
+  .dog-breed-group-badge:not(.dog-breed-progress-badge) {
     display: none;
   }
 }

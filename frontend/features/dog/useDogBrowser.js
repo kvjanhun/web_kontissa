@@ -28,6 +28,8 @@ import {
   sourceForShow,
 } from './dogResults.js'
 
+const LIVE_DETAIL_REFRESH_SECONDS = 120
+
 export function useDogBrowser() {
   const route = useRoute()
   const router = useRouter()
@@ -75,6 +77,7 @@ export function useDogBrowser() {
   let searchRequestId = 0
   let indexPollTimer = null
   let allDogsPollTimer = null
+  let liveDetailPollTimer = null
   let allDogsSessionId = 0
   let routeSyncToken = 0
   let pendingLinkScrollToTop = false
@@ -83,6 +86,13 @@ export function useDogBrowser() {
     if (allDogsPollTimer) {
       clearTimeout(allDogsPollTimer)
       allDogsPollTimer = null
+    }
+  }
+
+  function clearLiveDetailPoll() {
+    if (liveDetailPollTimer) {
+      clearTimeout(liveDetailPollTimer)
+      liveDetailPollTimer = null
     }
   }
 
@@ -153,6 +163,7 @@ export function useDogBrowser() {
     allDogsError.value = ''
     allDogsResults.value = []
     allDogsProgress.value = null
+    clearLiveDetailPoll()
   }
 
   const allDogsProgressPercent = computed(() => getAllDogsProgressPercent(allDogsProgress.value))
@@ -163,6 +174,44 @@ export function useDogBrowser() {
   const resultBreedFilterAvailable = computed(() => (
     Boolean(selectedShow.value?.stats?.is_live || allDogsAvailability.value?.phase === 'show_day')
   ))
+
+  function shouldPollLiveShowDetail() {
+    return Boolean(
+      import.meta.client &&
+      currentView.value === 'detail' &&
+      selectedShow.value?.id &&
+      resultBreedFilterAvailable.value
+    )
+  }
+
+  function scheduleLiveShowDetailPoll(delaySeconds = LIVE_DETAIL_REFRESH_SECONDS) {
+    clearLiveDetailPoll()
+    if (!shouldPollLiveShowDetail()) return
+    const showId = selectedShow.value.id
+    liveDetailPollTimer = setTimeout(() => {
+      liveDetailPollTimer = null
+      refreshLiveShowDetail(showId)
+    }, Math.max(30, Number(delaySeconds) || LIVE_DETAIL_REFRESH_SECONDS) * 1000)
+  }
+
+  async function refreshLiveShowDetail(showId = selectedShow.value?.id) {
+    if (!showId || !shouldPollLiveShowDetail() || detailLoading.value) {
+      scheduleLiveShowDetailPoll()
+      return
+    }
+
+    try {
+      const data = await $fetch(`/api/dog/shows/${showId}`)
+      if (!selectedShow.value?.id || !sameId(selectedShow.value.id, showId)) return
+      showDetail.value = data
+    } catch {
+      // Keep the current live list visible; the next tick will try again.
+    } finally {
+      if (selectedShow.value?.id && sameId(selectedShow.value.id, showId)) {
+        scheduleLiveShowDetailPoll()
+      }
+    }
+  }
 
   const showSearchPlaceholder = computed(() => (
     allDogsLoaded.value
@@ -307,6 +356,7 @@ export function useDogBrowser() {
     if (!show) return
     const { updateRoute = false, syncToken = null } = options
     if (syncToken !== null && syncToken !== routeSyncToken) return
+    const openingDifferentShow = !sameId(selectedShow.value?.id, show.id)
     selectedShow.value = show
     currentView.value = 'detail'
     scrollDogPageToTop()
@@ -324,6 +374,10 @@ export function useDogBrowser() {
     allDogsResults.value = []
     allDogsProgress.value = null
     expandedBreedGroups.value = new Set()
+    clearLiveDetailPoll()
+    if (openingDifferentShow) {
+      resultBreedsOnly.value = resultBreedFilterAvailable.value
+    }
 
     try {
       const data = await $fetch(`/api/dog/shows/${show.id}`)
@@ -539,8 +593,20 @@ export function useDogBrowser() {
     firstQueryValue(route.query.breed) || '',
   ].join('|'))
 
-  watch(resultBreedFilterAvailable, (available) => {
-    if (!available) resultBreedsOnly.value = false
+  watch(resultBreedFilterAvailable, (available, wasAvailable) => {
+    if (!available) {
+      resultBreedsOnly.value = false
+    } else if (!wasAvailable && currentView.value === 'detail') {
+      resultBreedsOnly.value = true
+    }
+  })
+
+  watch([
+    currentView,
+    () => selectedShow.value?.id,
+    resultBreedFilterAvailable,
+  ], () => {
+    scheduleLiveShowDetailPoll()
   })
 
   const filteredDogResults = computed(() => filterDogResults(breedResults.value?.results || [], {
@@ -655,6 +721,7 @@ export function useDogBrowser() {
     if (indexPollTimer) clearInterval(indexPollTimer)
     allDogsSessionId += 1
     clearAllDogsPoll()
+    clearLiveDetailPoll()
   })
 
   return {

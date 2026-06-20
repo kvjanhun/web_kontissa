@@ -480,6 +480,59 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
 
 
 @patch("app.dog_show.showlink.requests.get")
+def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock_get, monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "updated_at": now,
+        "breeds": [
+            { "name": "basenji", "count": 26, "group": "5", "breed_id": "3", "has_results": True },
+            { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True },
+        ],
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "source_url": dog_module._source_url(13771),
+        "started_at": now - 240,
+        "updated_at": now - 180,
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "total_breeds": 2,
+        "completed_breeds": {
+            "5:3": {"name": "basenji", "result_count": 5, "updated_at": now - 30},
+            "5:4": {"name": "ibizanpodenco", "result_count": 0, "updated_at": now - 60},
+        },
+        "failed_breeds": {},
+        "results": [
+            {"name": f"Basenji {idx}", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}
+            for idx in range(5)
+        ],
+    })
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+
+    resp = client.get("/api/dog/shows/13771")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breeds"][0]["result_count"] == 5
+    assert data["breeds"][0]["result_total_count"] == 26
+    assert data["breeds"][0]["result_progress"]["rated_count"] == 5
+    assert data["breeds"][0]["result_updated_at_iso"] == dog_module._utc_iso(now - 30)
+    assert data["breeds"][1]["result_count"] == 0
+    assert data["breeds"][1]["result_total_count"] == 12
+    jobs = dog_module._load_result_jobs()["jobs"]
+    assert jobs["13771"]["state"] == "queued"
+    assert jobs["13771"]["reason"] == "live-detail-refresh"
+    mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
 def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2026 Basenji",

@@ -95,6 +95,40 @@ export function dogMatchesShowFilters(dog, filters = {}) {
   return true
 }
 
+function optionalNumber(value) {
+  if (value === undefined || value === null || value === '') return null
+  const number = Number(value)
+  return Number.isFinite(number) ? number : null
+}
+
+function timestampValue(value) {
+  const numeric = optionalNumber(value)
+  if (numeric !== null) return numeric
+  if (!value) return 0
+  const parsed = Date.parse(value)
+  return Number.isNaN(parsed) ? 0 : parsed
+}
+
+function breedResultProgress(breed, breedDogs = []) {
+  const progress = breed?.result_progress || {}
+  const explicitCount = optionalNumber(breed?.result_count ?? progress.rated_count)
+  const explicitTotal = optionalNumber(breed?.result_total_count ?? progress.total_count ?? breed?.count)
+  const totalCount = explicitTotal === null ? null : Math.max(0, explicitTotal)
+  let resultCount = explicitCount === null ? breedDogs.length : Math.max(0, explicitCount)
+  if (totalCount !== null) resultCount = Math.min(resultCount, totalCount)
+
+  const updatedAt = breed?.result_updated_at ?? progress.updated_at ?? null
+  const known = explicitCount !== null || Boolean(breed?.result_progress)
+  return {
+    known,
+    resultCount,
+    totalCount,
+    updatedAt,
+    updatedTime: timestampValue(updatedAt),
+    label: known && totalCount !== null ? `${resultCount}/${totalCount}` : '',
+  }
+}
+
 export function createShowBreedGroups({
   breeds = [],
   dogs = [],
@@ -113,10 +147,16 @@ export function createShowBreedGroups({
   }
 
   const groups = {}
+  let order = 0
   for (const breed of breeds) {
     const key = breedGroupKey(breed)
     const breedDogs = dogsByBreed[key] || []
-    if (resultsOnly && !breed.has_results && !breedDogs.length) continue
+    const progress = breedResultProgress(breed, breedDogs)
+    const hasRatedResults = progress.known
+      ? progress.resultCount > 0
+      : Boolean(breed.has_results || breedDogs.length)
+    if (resultsOnly && !hasRatedResults) continue
+
     const breedMatch = breedMatchesSearch(breed, q)
     const matchingDogs = q ? breedDogs.filter(dog => dogMatchesShowSearch(dog, q)) : breedDogs
     const hasResultFilters = Boolean(filters.grade || filters.className || filters.award)
@@ -132,13 +172,22 @@ export function createShowBreedGroups({
 
     groups[key] = {
       key,
-      breed: { ...breed, has_results: breed.has_results || Boolean(breedDogs.length) },
+      breed: { ...breed, has_results: breed.has_results || hasRatedResults || Boolean(breedDogs.length) },
       breedName: breed.name,
       count: breed.count,
       judge: breed.judge,
-      has_results: breed.has_results || Boolean(breedDogs.length),
+      has_results: breed.has_results || hasRatedResults || Boolean(breedDogs.length),
+      hasRatedResults,
+      resultCount: progress.resultCount,
+      resultTotalCount: progress.totalCount,
+      resultUpdatedAt: progress.updatedAt,
+      resultUpdatedTime: progress.updatedTime,
+      resultProgressKnown: progress.known,
+      resultProgressLabel: progress.label,
+      sortIndex: order,
       dogs: breedMatch ? breedDogs : matchingDogs,
     }
+    order += 1
   }
 
   for (const dog of dogs) {
@@ -148,6 +197,7 @@ export function createShowBreedGroups({
     const breedDogs = dogsByBreed[key] || []
     const matchingDogs = q ? breedDogs.filter(item => dogMatchesShowSearch(item, q)) : breedDogs
     if (q && !matchingDogs.length) continue
+    const progress = breedResultProgress(breed, breedDogs)
     groups[key] = {
       key,
       breed: { ...breed, has_results: true },
@@ -155,11 +205,29 @@ export function createShowBreedGroups({
       count: breed.count,
       judge: breed.judge,
       has_results: true,
+      hasRatedResults: true,
+      resultCount: progress.resultCount,
+      resultTotalCount: progress.totalCount,
+      resultUpdatedAt: progress.updatedAt,
+      resultUpdatedTime: progress.updatedTime,
+      resultProgressKnown: progress.known,
+      resultProgressLabel: progress.label,
+      sortIndex: order,
       dogs: matchingDogs,
     }
+    order += 1
   }
 
-  return Object.values(groups)
+  const values = Object.values(groups)
+  if (resultsOnly) {
+    values.sort((a, b) => {
+      if (a.resultUpdatedTime !== b.resultUpdatedTime) {
+        return b.resultUpdatedTime - a.resultUpdatedTime
+      }
+      return a.sortIndex - b.sortIndex
+    })
+  }
+  return values
 }
 
 export function splitAwards(value) {

@@ -401,6 +401,83 @@ describe('createShowBreedGroups', () => {
     expect(groups.map(group => group.breedName)).toEqual(['Basenji', 'Akita'])
   })
 
+  it('uses live progress counts for results-only filtering and progress labels', () => {
+    const groups = createShowBreedGroups({
+      breeds: [
+        {
+          name: 'Basenji',
+          count: 26,
+          group: '5',
+          breed_id: '3',
+          has_results: true,
+          result_count: 5,
+          result_total_count: 26,
+          result_updated_at: 200,
+        },
+        {
+          name: 'Akita',
+          count: 12,
+          group: '5',
+          breed_id: '10',
+          has_results: true,
+          result_count: 0,
+          result_total_count: 12,
+          result_updated_at: 250,
+        },
+      ],
+      resultsOnly: true,
+    })
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0]).toMatchObject({
+      breedName: 'Basenji',
+      resultCount: 5,
+      resultTotalCount: 26,
+      resultProgressKnown: true,
+      resultProgressLabel: '5/26',
+    })
+  })
+
+  it('orders results-only live breeds by freshest result progress', () => {
+    const groups = createShowBreedGroups({
+      breeds: [
+        {
+          name: 'Older',
+          count: 10,
+          group: '5',
+          breed_id: '3',
+          has_results: true,
+          result_count: 4,
+          result_total_count: 10,
+          result_updated_at: 100,
+        },
+        {
+          name: 'Freshest',
+          count: 8,
+          group: '5',
+          breed_id: '4',
+          has_results: true,
+          result_count: 1,
+          result_total_count: 8,
+          result_updated_at: 300,
+        },
+        {
+          name: 'Middle',
+          count: 12,
+          group: '5',
+          breed_id: '5',
+          has_results: true,
+          result_count: 6,
+          result_total_count: 12,
+          result_updated_at: 200,
+        },
+      ],
+      resultsOnly: true,
+    })
+
+    expect(groups.map(group => group.breedName)).toEqual(['Freshest', 'Middle', 'Older'])
+  })
+
   it('can filter by dog details from the whole-show cache', () => {
     const groups = createShowBreedGroups({
       breeds,
