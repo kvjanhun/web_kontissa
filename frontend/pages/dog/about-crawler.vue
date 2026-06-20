@@ -83,14 +83,16 @@ useHead({
           hetkellistä hitautta sivuston muille käyttäjille. Pyyntöjä Showlinkin palvelimelle tehdäänkin
           enintään 3 rinnakkain, pitäen vähintään 0,4 sekunnin väli pyynnöille. Kun näyttely on
           kertaalleen haettu ja tallennettu erez.ac:n välimuistiin, tieto tarjoillaan /dog-sivun
-          käyttäjille erez.ac:n välimuistista eikä uusia pyyntöjä Showlinkin palveluun enää koidu.
+          käyttäjille erez.ac:n välimuistista. Käynnissä olevien näyttelyiden välimuistia tarkistetaan
+          kuitenkin uudelleen, jotta päivän aikana päivittyvät tulokset näkyvät sivulla.
         </p>
         <ul>
           <li>Kävijä haluaa välimuistista löytymättömän näyttelyn tulostiedot: Haku suoritetaan enintään
             yksi näyttely kerrallaan, yllä mainituin ryppäin.</li>
           <li>Automaattinen tuoreiden näyttelyiden välimuisti: Hakuja suoritetaan enintään 2 näyttelyn 
             tietoihin yhden ajon aikana; uusi ajo alkaa aikaisintaan 2 minuutin välein ja vain, jos
-            kukaan kävijä ei odota tulostietoja ennestään.</li>
+            kukaan kävijä ei odota tulostietoja ennestään. Käynnissä olevien näyttelyiden tulosvälimuisti
+            vanhenee oletuksena 2 minuutissa.</li>
           <li>Rotulistat: Enintään 6 näyttelyn tiedot haetaan noin 15 minuutin välein.</li>
           <li>Näyttelylista: Haetaan uudelleen aikaisintaan 30 minuutin välein.</li>
           <li>Tulevista näyttelyistä haetaan rotulistat. Tuloslistoja aletaan kysellä näyttelypäivänä
@@ -143,12 +145,12 @@ useHead({
           requests. They are not all fetched at once, because that could briefly slow the site down
           for other users. Requests to Showlink are therefore limited to at most 3 in parallel, with
           at least 0.4 seconds between request starts. Once a show has been fetched once and saved in
-          the erez.ac cache, /dog users receive the data from the erez.ac cache and no new requests
-          to Showlink are needed for that data.
+          the erez.ac cache, /dog users receive the data from the erez.ac cache. For currently ongoing
+          shows, the cache is checked again so results that arrive during the day can appear on the page.
         </p>
         <ul>
           <li>A visitor wants result data for a show that is not yet cached: The fetch is run for at most one show at a time, in the batches described above.</li>
-          <li>Automatic cache for recent shows: Data is fetched for at most 2 shows during one run; a new run starts no sooner than every 2 minutes and only if no visitor is already waiting for result data.</li>
+          <li>Automatic cache for recent shows: Data is fetched for at most 2 shows during one run; a new run starts no sooner than every 2 minutes and only if no visitor is already waiting for result data. Result caches for currently ongoing shows expire after 2 minutes by default.</li>
           <li>Breed lists: Data for at most 6 shows is fetched about every 15 minutes.</li>
           <li>Show list: Fetched again no sooner than every 30 minutes.</li>
           <li>For upcoming shows, breed lists are fetched. Result lists are first checked on the show day, starting at 6:00 in the morning.</li>

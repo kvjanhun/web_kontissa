@@ -19,17 +19,18 @@ from .shows import _get_show_list
 from .store import (
     _breed_result_cache, _claim_result_cache_job, _defer_result_cache_job,
     _indexed_show, _load_result_cache_doc, _load_result_jobs, _remove_result_cache_job, _result_job_due,
-    _save_index, _save_result_cache_doc, _set_result_job_running,
-    _show_all_results_cache, _show_detail_cache,
+    _queue_result_cache_job, _save_index, _save_result_cache_doc, _set_result_job_running,
+    _show_all_results_cache, _show_detail_cache, _show_index,
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _is_recent_show, _show_age_days, _utc_iso,
+    _is_recent_show, _show_age_days, _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
 
 SHOW_ALL_RESULTS_TTL = config.SHOW_ALL_RESULTS_TTL
+RESULT_CACHE_LIVE_TTL = config.RESULT_CACHE_LIVE_TTL
 RESULT_CACHE_ACTIVE_TTL = config.RESULT_CACHE_ACTIVE_TTL
 RESULT_CACHE_SETTLED_TTL = config.RESULT_CACHE_SETTLED_TTL
 RESULT_CACHE_SETTLED_AFTER_DAYS = config.RESULT_CACHE_SETTLED_AFTER_DAYS
@@ -51,6 +52,37 @@ def _empty_result_cache_needs_refresh(show_id, doc, now=None):
     availability_now = datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
     return _result_cache_doc_needs_result_refresh(show_id, doc, now=availability_now)
 
+def _availability_now(now):
+    return datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
+
+def _result_cache_ttl_for_show(show_id, now):
+    availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
+    if availability.get("show_state") == "live":
+        return RESULT_CACHE_LIVE_TTL
+
+    show_date = _show_date_for_id(show_id)
+    if show_date:
+        today = datetime.datetime.fromtimestamp(now).date()
+        age_days = (today - show_date).days
+        if age_days > RESULT_AUTO_WINDOW_DAYS:
+            return None
+        return RESULT_CACHE_ACTIVE_TTL if age_days <= RESULT_CACHE_SETTLED_AFTER_DAYS else RESULT_CACHE_SETTLED_TTL
+
+    return SHOW_ALL_RESULTS_TTL
+
+def _live_index_result_flags_need_refresh(show_id, indexed_show=None, now=None):
+    indexed_show = indexed_show or _indexed_show(show_id)
+    if not indexed_show or not indexed_show.get("breeds"):
+        return False
+
+    now = now or time.time()
+    availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
+    if availability.get("show_state") != "live":
+        return False
+
+    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    return not updated or (now - updated) >= RESULT_CACHE_LIVE_TTL
+
 def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if not _result_cache_doc_is_complete(doc):
         return False
@@ -66,16 +98,23 @@ def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if not _is_show_recent_by_id(show_id):
         return True
 
-    show_date = _show_date_for_id(show_id)
-    if show_date:
-        today = datetime.datetime.fromtimestamp(now).date()
-        age_days = (today - show_date).days
-        if age_days > RESULT_AUTO_WINDOW_DAYS:
-            return True
-        ttl = RESULT_CACHE_ACTIVE_TTL if age_days <= RESULT_CACHE_SETTLED_AFTER_DAYS else RESULT_CACHE_SETTLED_TTL
-        return (now - cached_at) < ttl
+    ttl = _result_cache_ttl_for_show(show_id, now)
+    if ttl is None:
+        return True
+    return (now - cached_at) < ttl
 
-    return (now - cached_at) < SHOW_ALL_RESULTS_TTL
+def _cached_all_results_doc(cached):
+    cached_data = cached.get("data") or {}
+    cache_meta = cached_data.get("cache") or {}
+    cached_at = cache_meta.get("cached_at") or cached.get("ts")
+    return {
+        "status": "complete",
+        "total_breeds": cache_meta.get("total_breeds"),
+        "completed_breeds": {},
+        "results": cached_data.get("results") or [],
+        "cached_at": cached_at,
+        "updated_at": cached_at,
+    }
 
 def _result_cache_due(show_id, now=None):
     doc = _load_result_cache_doc(show_id)
@@ -148,22 +187,19 @@ def _cached_all_results_response(show_id, allow_stale=False):
     cached = _show_all_results_cache.get(int(show_id))
     if cached and cached.get("data"):
         cached_data = cached["data"]
-        cached_doc = {
-            "status": "complete",
-            "total_breeds": (cached_data.get("cache") or {}).get("total_breeds"),
-            "completed_breeds": {},
-            "results": cached_data.get("results") or [],
-        }
+        cached_doc = _cached_all_results_doc(cached)
         if _empty_result_cache_needs_refresh(show_id, cached_doc, now=now):
             _show_all_results_cache.pop(int(show_id), None)
         else:
-            stale = _is_show_recent_by_id(show_id) and (now - (cached.get("ts") or 0)) >= SHOW_ALL_RESULTS_TTL
-            if not stale or allow_stale:
+            stale = not _result_cache_doc_is_fresh(show_id, cached_doc, now=now)
+            if stale:
+                _show_all_results_cache.pop(int(show_id), None)
+            else:
                 data = dict(cached_data)
                 if data.get("cache"):
                     data["cache"] = dict(data["cache"])
-                    data["cache"]["status"] = "stale" if stale else "complete"
-                    data["cache"]["stale"] = stale
+                    data["cache"]["status"] = "complete"
+                    data["cache"]["stale"] = False
                 return data
 
     doc = _load_result_cache_doc(show_id)
@@ -247,7 +283,11 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
 
 def _show_detail_for_result_cache(show_id):
     indexed_show = _indexed_show(show_id)
-    indexed_needs_result_refresh = _indexed_result_flags_need_refresh(show_id, indexed_show)
+    now = time.time()
+    indexed_needs_result_refresh = (
+        _indexed_result_flags_need_refresh(show_id, indexed_show)
+        or _live_index_result_flags_need_refresh(show_id, indexed_show, now=now)
+    )
     if indexed_show and indexed_show.get("breeds"):
         if not indexed_needs_result_refresh:
             breeds = _mark_single_probe_breed_result_available(show_id, indexed_show.get("breeds", []))
@@ -261,7 +301,7 @@ def _show_detail_for_result_cache(show_id):
     cached = _cached_show_detail(show_id, allow_stale=True)
     if cached and cached.get("breeds"):
         cached_breeds = cached.get("breeds") or []
-        if _result_breeds_with_results(cached_breeds) or not indexed_needs_result_refresh:
+        if not indexed_needs_result_refresh:
             detail = dict(cached)
             detail["breeds"] = _mark_single_probe_breed_result_available(show_id, cached_breeds)
             return detail
@@ -625,17 +665,26 @@ def _auto_result_cache_candidates(now):
         return candidates
 
     today = datetime.datetime.fromtimestamp(now).date()
+    now_dt = datetime.datetime.fromtimestamp(now)
     for show in shows_list:
         show_id = int(show["id"])
-        age_days = _show_age_days(show, today=today)
-        if age_days is not None:
-            if age_days < 0 or age_days > RESULT_AUTO_WINDOW_DAYS:
-                continue
-            recency_rank = age_days
-        elif _is_recent_show(show.get("month")):
-            recency_rank = RESULT_AUTO_WINDOW_DAYS + 1
-        else:
+        availability = _show_result_availability(show, now=now_dt)
+        if not availability.get("can_fetch", True):
             continue
+
+        if availability.get("show_state") == "live":
+            recency_rank = -1
+        else:
+            age_days = _show_age_days(show, today=today)
+            if age_days is None:
+                if _is_recent_show(show.get("month")):
+                    recency_rank = RESULT_AUTO_WINDOW_DAYS + 1
+                else:
+                    continue
+            elif age_days < 0 or age_days > RESULT_AUTO_WINDOW_DAYS:
+                continue
+            else:
+                recency_rank = age_days
 
         if not _result_cache_due(show_id, now=now):
             continue
@@ -662,6 +711,37 @@ def _auto_result_cache_candidates(now):
     for candidate in candidates:
         candidate.pop("rank", None)
     return candidates
+
+def _queue_live_result_cache_refreshes(shows, limit=2, immediate=True):
+    now = time.time()
+    queued = []
+    for show in shows or []:
+        if len(queued) >= max(0, int(limit or 0)):
+            break
+
+        try:
+            show_id = int(show.get("id"))
+        except (TypeError, ValueError, AttributeError):
+            continue
+
+        availability = _show_result_availability(show, now=_availability_now(now))
+        if availability.get("show_state") != "live" or not availability.get("can_fetch", True):
+            continue
+
+        if not _result_cache_due(show_id, now=now):
+            continue
+
+        job = _queue_result_cache_job(show_id, reason="live-list-refresh")
+        started = _start_result_cache_warmup(show_id, reason="live-list-refresh") if immediate else False
+        queued.append({
+            "show_id": show_id,
+            "started": started,
+            "job_state": job.get("state"),
+        })
+
+    if queued:
+        logger.info("dog_live_result_refresh_queued", count=len(queued), shows=queued)
+    return queued
 
 def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_recent=True, workers=RESULT_CRAWL_DEFAULT_WORKERS):
     """Warm whole-show result caches without doing that work in web requests."""

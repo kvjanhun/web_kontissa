@@ -293,6 +293,53 @@ def test_show_stats_ignore_empty_single_breed_specialty_cache(client):
     assert "result_count" not in stats
 
 
+def test_get_shows_queues_stale_live_result_refresh(monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    show = {
+        "id": 13771,
+        "date": "20.-21.06.",
+        "name": "Jyväskylä KV",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+    }
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "updated_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "breeds": [
+            { "name": "basenji", "count": 2066, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "source_url": dog_module._source_url(13771),
+        "started_at": now - 200,
+        "updated_at": now - 180,
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 106}},
+        "failed_breeds": {},
+        "results": [{"name": f"Dog {idx}", "breedName": "basenji"} for idx in range(106)],
+    })
+    monkeypatch.setattr(dog_module, "_get_show_list", lambda: [show])
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+
+    resp = client.get("/api/dog/shows")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["shows"][0]["stats"]["result_count"] == 106
+    jobs = dog_module._load_result_jobs()["jobs"]
+    assert jobs["13771"]["state"] == "queued"
+    assert jobs["13771"]["reason"] == "live-list-refresh"
+
+
 def test_show_result_availability_waits_until_show_morning():
     show = {"date": "20.06.", "month": "kesäkuu 2026"}
 
@@ -1104,6 +1151,121 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
     mock_get.assert_not_called()
 
 
+def test_live_result_cache_becomes_stale_after_two_minutes(monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+
+    fresh_doc = {
+        "status": "complete",
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL + 1,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "results": [{"name": "Fresh Dog"}],
+    }
+    stale_doc = dict(fresh_doc, cached_at=now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1)
+
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, fresh_doc, now=now) is True
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_doc, now=now) is False
+
+
+def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+    old_cached_at = now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1
+    _show_all_results_cache[13771] = {
+        "ts": old_cached_at,
+        "data": {
+            "show_id": 13771,
+            "title": "old memory cache",
+            "source_url": dog_module._source_url(13771),
+            "results": [{"name": "Old Memory Dog", "breedName": "basenji"}],
+            "cache": {
+                "status": "complete",
+                "stale": False,
+                "total_breeds": 1,
+                "cached_at": old_cached_at,
+            },
+        },
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "fresh disk cache",
+        "source_url": dog_module._source_url(13771),
+        "started_at": now - 20,
+        "updated_at": now - 10,
+        "cached_at": now - 10,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 2}},
+        "failed_breeds": {},
+        "results": [
+            {"name": "Fresh Disk Dog 1", "breedName": "basenji"},
+            {"name": "Fresh Disk Dog 2", "breedName": "basenji"},
+        ],
+    })
+
+    data = dog_result_cache._cached_all_results_response(13771, allow_stale=True)
+
+    assert [dog["name"] for dog in data["results"]] == ["Fresh Disk Dog 1", "Fresh Disk Dog 2"]
+    assert data["cache"]["stale"] is False
+
+
+def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    show = {
+        "id": 13771,
+        "date": "20.-21.06.",
+        "name": "Jyväskylä KV",
+        "month": "kesäkuu 2026",
+    }
+    monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: [show])
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "source_url": dog_module._source_url(13771),
+        "started_at": now - 200,
+        "updated_at": now - 180,
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "failed_breeds": {},
+        "results": [{"name": "Old Dog", "breedName": "basenji"}],
+    })
+
+    candidates = dog_result_cache._auto_result_cache_candidates(now)
+
+    assert [candidate["show_id"] for candidate in candidates] == [13771]
+
+
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_result_flags(mock_get, monkeypatch, client):
     dog_module._show_index["shows"]["14042"] = {
@@ -1367,6 +1529,63 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
     assert doc["total_breeds"] == 1
     assert doc["completed_breeds"]["5:3"]["result_count"] == 1
     assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_get, monkeypatch):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "updated_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
+            { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": False },
+        ],
+    }
+    live_detail_html = """
+    <div id="divOtsikko">
+        <h1>20.-21.06.2026 Jyväskylä KV</h1>
+    </div>
+    <table class="rotulistatable">
+        <tr class="rotuluettelo">
+            <td><a href="/nayttelyt/Tulokset?Id=13771&R=5&RO=3">basenji</a></td>
+            <td class="right">78</td>
+            <td class="right"><i class="fa fa-check"></i></td>
+        </tr>
+        <tr class="rotuluettelo">
+            <td><a href="/nayttelyt/Tulokset?Id=13771&R=5&RO=4">ibizanpodenco</a></td>
+            <td class="right">12</td>
+            <td class="right"><i class="fa fa-check"></i></td>
+        </tr>
+    </table>
+    """
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    detail_resp = MagicMock()
+    detail_resp.text = live_detail_html
+    detail_resp.status_code = 200
+    first_result_resp = MagicMock()
+    first_result_resp.text = SAMPLE_BREED_RESULTS_HTML
+    first_result_resp.status_code = 200
+    second_result_resp = MagicMock()
+    second_result_resp.text = SAMPLE_BREED_RESULTS_HTML
+    second_result_resp.status_code = 200
+    mock_get.side_effect = [detail_resp, first_result_resp, second_result_resp]
+
+    summary = dog_module.crawl_result_cache_for_show(13771, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert mock_get.call_count == 3
+    indexed_breeds = dog_module._show_index["shows"]["13771"]["breeds"]
+    assert [breed["has_results"] for breed in indexed_breeds] == [True, True]
+    doc = dog_module._load_result_cache_doc(13771)
+    assert doc["total_breeds"] == 2
+    assert set(doc["completed_breeds"]) == {"5:3", "5:4"}
 
 
 @patch("app.dog_show.showlink.requests.get")

@@ -59,7 +59,7 @@ Rate limits are intentionally lower than internal crawler throughput:
 ## Data Flow
 
 1. The browser loads `/dog` and calls `/api/dog/shows`.
-2. The show list is enriched from `dog_show_index.json` with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches.
+2. The show list is enriched from `dog_show_index.json` with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches. When a live show's result cache is stale, this endpoint queues a bounded server-side refresh so front-page polling can move the number forward.
 3. Opening a show calls `/api/dog/shows/<show_id>`.
 4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
 5. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
@@ -90,8 +90,9 @@ For recent/live shows, complete caches with zero result breeds are ignored and r
 - Show detail in-memory cache for recent or ongoing shows: 10 minutes.
 - Breed result in-memory cache for recent or ongoing shows: 10 minutes.
 - Showlink relative sections such as `Tänään` and `Huomenna` are treated as recent; the backend infers the year from the listed date so live-result availability still works.
+- Whole-show result live TTL: 2 minutes by default.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
-- Whole-show result active TTL: 6 hours by default.
+- Whole-show result active TTL for recent non-live shows: 6 hours by default.
 - Whole-show result settled TTL: 7 days by default.
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
@@ -114,7 +115,8 @@ Environment knobs:
 - `DOG_INDEX_DIR`: base directory for dog JSON state.
 - `DOG_RESULT_CACHE_DIR`: override whole-show result cache directory.
 - `DOG_RESULT_JOBS_PATH`: override result job queue path.
-- `DOG_RESULT_ACTIVE_TTL`: TTL for active recent whole-show caches, seconds.
+- `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
+- `DOG_RESULT_ACTIVE_TTL`: TTL for recent non-live whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
 - `DOG_RESULT_AUTO_WINDOW_DAYS`: how many past days automatic warming covers.
@@ -147,7 +149,7 @@ This means:
 - Every 30 seconds: repair up to 20 stale empty breed-index entries with 0.5 seconds between requests.
 - Every 30 seconds: process queued whole-show result jobs.
 - Every 15 minutes: update up to 6 show breed indexes with 2.0 seconds between show-detail requests.
-- Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active.
+- Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 
 The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.

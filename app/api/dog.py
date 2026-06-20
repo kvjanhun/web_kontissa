@@ -22,8 +22,8 @@ from app.dog_show.indexing import (
 from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
     _breed_results_from_all_results_cache, _cached_all_results_response,
-    _result_cache_progress, _start_result_cache_warmup, crawl_result_cache_for_show,
-    crawl_result_cache_once,
+    _queue_live_result_cache_refreshes, _result_cache_progress, _start_result_cache_warmup,
+    crawl_result_cache_for_show, crawl_result_cache_once,
 )
 from app.dog_show.search import search_shows_data
 from app.dog_show.showlink import _fetch_page, _source_url
@@ -63,6 +63,7 @@ def show_list():
     try:
         shows = _get_show_list()
         _load_index()
+        _queue_live_result_cache_refreshes(shows)
         return jsonify({
             "shows": _shows_with_cached_stats(shows),
             "index": _index_summary(total_show_count=len(shows)),
@@ -71,6 +72,7 @@ def show_list():
         logger.warning("showlink_fetch_failed", endpoint="shows", exc_info=True)
         if _show_list_cache["data"]:
             shows = _show_list_cache["data"]
+            _queue_live_result_cache_refreshes(shows)
             return jsonify({
                 "shows": _shows_with_cached_stats(shows),
                 "index": _index_summary(total_show_count=len(shows)),
