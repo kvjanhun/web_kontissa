@@ -571,7 +571,21 @@ export function useDogBrowser() {
   const groupedShows = computed(() => {
     const groups = {}
     for (const show of filteredShows.value) {
-      const month = show.month || 'Muu'
+      let month = show.month || 'Muu'
+      const lowerMonth = month.toLowerCase().trim()
+      if (lowerMonth === 'tänään' || lowerMonth === 'huomenna') {
+        const parsedDate = parseShowDate(show.date, month)
+        if (parsedDate) {
+          const finnishMonths = [
+            'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
+            'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu'
+          ]
+          const showMonthName = finnishMonths[parsedDate.getMonth()]
+          const showYear = parsedDate.getFullYear()
+          month = `${showMonthName} ${showYear}`
+          month = month.charAt(0).toUpperCase() + month.slice(1)
+        }
+      }
       if (!groups[month]) groups[month] = []
       groups[month].push(show)
     }
