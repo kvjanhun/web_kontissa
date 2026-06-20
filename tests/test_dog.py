@@ -1229,6 +1229,111 @@ def test_live_result_cache_becomes_stale_after_two_minutes(monkeypatch, client):
     assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_doc, now=now) is False
 
 
+def test_live_result_cache_stops_short_ttl_after_bis_grace(monkeypatch, client):
+    now = dog_module.datetime.datetime(2026, 6, 20, 18, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.06.2026 Jyväskylä KV",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+
+    base_doc = {
+        "status": "complete",
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "results": [{"name": "BIS Dog", "awards": "SA, ROP, BIS-1"}],
+    }
+    still_settling = dict(
+        base_doc,
+        bis_detected_at=now - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS + 1,
+    )
+    finished = dict(
+        base_doc,
+        bis_detected_at=now - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
+    )
+
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, still_settling, now=now) is False
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, finished, now=now) is True
+
+
+def test_live_show_stats_stop_after_bis_grace(client):
+    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.06.2026 Jyväskylä KV",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "status": "complete",
+        "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "bis_detected_at": noon - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "results": [{"name": "BIS Dog", "awards": "SA, ROP, BIS-1"}],
+    })
+
+    stats = dog_module._show_stats_from_index(
+        13771,
+        show={"id": 13771, "date": "20.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 20),
+    )
+
+    assert stats["show_state"] == "past"
+    assert stats["is_live"] is False
+    assert stats["live_finished_by"] == "bis"
+    assert "result_count" not in stats
+
+
+def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
+    final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
+    now = final_due_at + 300
+    show = {
+        "id": 13771,
+        "date": "20.06.",
+        "name": "Jyväskylä KV",
+        "month": "kesäkuu 2026",
+    }
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.06.2026 Jyväskylä KV",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: [show])
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+
+    stale_before_midnight = {
+        "status": "complete",
+        "cached_at": final_due_at - 60,
+        "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "results": [{"name": "Old Dog", "breedName": "basenji"}],
+    }
+    refreshed_after_midnight = dict(stale_before_midnight, cached_at=final_due_at + 60)
+
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_before_midnight, now=now) is False
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, refreshed_after_midnight, now=now) is True
+
+    dog_module._save_result_cache_doc(13771, stale_before_midnight)
+    assert [candidate["show_id"] for candidate in dog_result_cache._auto_result_cache_candidates(now)] == [13771]
+
+    dog_module._save_result_cache_doc(13771, refreshed_after_midnight)
+    assert dog_result_cache._auto_result_cache_candidates(now) == []
+
+    two_days_later = dog_module.datetime.datetime(2026, 6, 22, 0, 5).timestamp()
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_before_midnight, now=two_days_later) is True
+
+
 def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
     dog_module._show_index["shows"]["13771"] = {

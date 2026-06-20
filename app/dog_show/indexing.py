@@ -11,8 +11,8 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _show_age_days, _show_date_state, _show_result_availability,
-    _utc_iso,
+    _parse_show_date, _result_doc_live_bis_grace_finished, _show_age_days,
+    _show_date_state, _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -74,6 +74,9 @@ def _stats_now_for_today(today):
         return None
     return datetime.datetime.combine(today, datetime.time(hour=12))
 
+def _stats_timestamp_for_today(today):
+    return _stats_now_for_today(today).timestamp() if today else time.time()
+
 def _result_count_from_cache_doc(show_id, entry_count=None, today=None):
     doc = _load_result_cache_doc(show_id)
     if not doc:
@@ -120,6 +123,14 @@ def _show_stats_from_index(show_id, show=None, today=None):
 
     show_item = _show_item_for_stats(show_id, show=show)
     show_state = _show_date_state(show_item, today=today)
+    live_finished_by_bis = False
+    if show_state == "live":
+        live_finished_by_bis = _result_doc_live_bis_grace_finished(
+            _load_result_cache_doc(show_id),
+            _stats_timestamp_for_today(today),
+        )
+        if live_finished_by_bis:
+            show_state = "past"
     result_breeds_for_cache = _result_breeds_for_cache(
         show_id,
         breeds,
@@ -153,6 +164,8 @@ def _show_stats_from_index(show_id, show=None, today=None):
         "updated_at": updated or None,
         "updated_at_iso": _utc_iso(updated),
     }
+    if live_finished_by_bis:
+        stats["live_finished_by"] = "bis"
     if show_state == "live":
         result_count = _result_count_from_cache_doc(
             show_id,

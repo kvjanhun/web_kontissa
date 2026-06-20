@@ -1,7 +1,7 @@
 import datetime
 import re
 
-from .config import FINNISH_MONTHS, RESULT_SHOW_MORNING_HOUR
+from .config import FINNISH_MONTHS, RESULT_CACHE_BIS_FINAL_GRACE_SECONDS, RESULT_SHOW_MORNING_HOUR
 
 RELATIVE_RECENT_LABELS = {"tänään", "huomenna", "today", "tomorrow"}
 
@@ -63,6 +63,29 @@ def _clean_all_result_item(result):
 
 def _clean_all_results(results):
     return [_clean_all_result_item(result) for result in (results or [])]
+
+def _split_award_tokens(value):
+    return [item.strip().upper() for item in str(value or "").split(",") if item.strip()]
+
+def _result_doc_has_main_bis(doc):
+    if not isinstance(doc, dict):
+        return False
+    return any(
+        "BIS-1" in _split_award_tokens(result.get("awards"))
+        for result in doc.get("results") or []
+    )
+
+def _result_doc_live_bis_grace_finished(doc, now):
+    if not isinstance(doc, dict):
+        return False
+
+    detected_at = doc.get("bis_detected_at")
+    if not detected_at and _result_doc_has_main_bis(doc):
+        detected_at = doc.get("cached_at") or doc.get("updated_at")
+    if not detected_at:
+        return False
+
+    return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
 
 def _month_year_from_label(month_str):
     if not month_str:

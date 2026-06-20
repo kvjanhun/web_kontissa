@@ -57,6 +57,11 @@ def _results_not_ready_response(show_id, availability):
         "availability": availability,
     }
 
+def _attach_show_detail_stats(show_id, data):
+    stats = _show_stats_from_index(show_id)
+    if stats:
+        data["stats"] = stats
+
 
 @dog_bp.route("/api/dog/shows")
 @limiter.limit("30/minute")
@@ -96,6 +101,7 @@ def show_detail(show_id):
             updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data["breeds"])
             progress_updated = _enrich_breeds_with_result_progress(show_id, data["breeds"])
             _queue_live_result_cache_refresh(show_id)
+            _attach_show_detail_stats(show_id, data)
             if updated_from_index or updated_from_results or progress_updated:
                 existing_cache = _show_detail_cache.get(show_id) or {}
                 _show_detail_cache[show_id] = {
@@ -108,6 +114,7 @@ def show_detail(show_id):
         if indexed:
             _enrich_breeds_with_result_progress(show_id, indexed.get("breeds", []))
             _queue_live_result_cache_refresh(show_id)
+            _attach_show_detail_stats(show_id, indexed)
             _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
             return jsonify(indexed)
 
@@ -130,6 +137,7 @@ def show_detail(show_id):
             logger.warning("dog_detail_index_persist_failed", show_id=show_id, error=str(e))
 
         _show_detail_cache[show_id] = {"data": data, "ts": fetched_at}
+        _attach_show_detail_stats(show_id, data)
         return jsonify(data)
     except requests.RequestException as exc:
         logger.warning("showlink_fetch_failed", endpoint="show_detail", show_id=show_id, exc_info=True)

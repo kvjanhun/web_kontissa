@@ -92,9 +92,11 @@ For recent/live shows, complete caches with zero result breeds are ignored and r
 - Show detail in-memory cache for recent or ongoing shows: 10 minutes.
 - Breed result in-memory cache for recent or ongoing shows: 10 minutes.
 - Showlink relative sections such as `Tänään` and `Huomenna` are treated as recent; the backend infers the year from the listed date so live-result availability still works.
-- Whole-show result live TTL: 2 minutes by default.
+- Whole-show result live TTL: 2 minutes by default while a show is still actively filling in.
+- Main `BIS-1` in cached awards starts a 30-minute live settling window by default. After that, the show stops using the 2-minute live TTL even if the calendar date has not changed.
+- On the first calendar day after a show's final listed date, a cache last written before midnight is treated as stale once so the next crawler pass performs a final post-show check.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
-- Whole-show result active TTL for recent non-live shows: 6 hours by default.
+- Whole-show result active TTL for recent non-live shows: replaced by the single final post-show check once a show date is known.
 - Whole-show result settled TTL: 7 days by default.
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
@@ -118,7 +120,8 @@ Environment knobs:
 - `DOG_RESULT_CACHE_DIR`: override whole-show result cache directory.
 - `DOG_RESULT_JOBS_PATH`: override result job queue path.
 - `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
-- `DOG_RESULT_ACTIVE_TTL`: TTL for recent non-live whole-show caches, seconds.
+- `DOG_RESULT_BIS_FINAL_GRACE_SECONDS`: seconds to keep live polling after main BIS appears in cached awards; defaults to `1800`.
+- `DOG_RESULT_ACTIVE_TTL`: legacy recent-show TTL setting; dated past shows now use the single final post-show check plus settled TTL.
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
 - `DOG_RESULT_AUTO_WINDOW_DAYS`: how many past days automatic warming covers.

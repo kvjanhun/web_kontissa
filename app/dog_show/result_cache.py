@@ -24,7 +24,8 @@ from .store import (
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _is_recent_show, _show_age_days, _show_result_availability, _utc_iso,
+    _is_recent_show, _result_doc_has_main_bis, _result_doc_live_bis_grace_finished,
+    _show_age_days, _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -40,6 +41,7 @@ RESULT_RETRY_AFTER_SECONDS = config.RESULT_RETRY_AFTER_SECONDS
 RESULT_CRAWL_DEFAULT_DELAY = config.RESULT_CRAWL_DEFAULT_DELAY
 RESULT_CRAWL_DEFAULT_WORKERS = config.RESULT_CRAWL_DEFAULT_WORKERS
 RESULT_IMMEDIATE_WARMUP = config.RESULT_IMMEDIATE_WARMUP_DEFAULT
+RESULT_CACHE_BIS_FINAL_GRACE_SECONDS = config.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
 
 _immediate_warmups = set()
 _immediate_warmups_lock = threading.Lock()
@@ -55,18 +57,54 @@ def _empty_result_cache_needs_refresh(show_id, doc, now=None):
 def _availability_now(now):
     return datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
 
-def _result_cache_ttl_for_show(show_id, now):
+def _mark_live_bis_state(doc, now):
+    if not isinstance(doc, dict) or not _result_doc_has_main_bis(doc):
+        return
+
+    detected_at = doc.get("bis_detected_at") or now
+    doc["bis_detected_at"] = detected_at
+    doc["bis_detected_at_iso"] = _utc_iso(detected_at)
+    grace_until = detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+    doc["live_result_grace_until"] = grace_until
+    doc["live_result_grace_until_iso"] = _utc_iso(grace_until)
+
+def _post_show_final_due_at(show_id, now):
+    show_date = _show_date_for_id(show_id)
+    if not show_date:
+        return None
+
+    now_dt = _availability_now(now)
+    today = now_dt.date()
+    if today != show_date + datetime.timedelta(days=1):
+        return None
+
+    final_due = datetime.datetime.combine(show_date + datetime.timedelta(days=1), datetime.time.min)
+    return final_due.timestamp()
+
+def _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
+    final_due_at = _post_show_final_due_at(show_id, now)
+    if not final_due_at:
+        return False
+
+    cached_at = (doc or {}).get("cached_at") or (doc or {}).get("updated_at") or 0
+    return cached_at < final_due_at
+
+def _result_cache_ttl_for_show(show_id, now, doc=None):
     availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
     if availability.get("show_state") == "live":
+        if _result_doc_live_bis_grace_finished(doc, now):
+            return None
         return RESULT_CACHE_LIVE_TTL
 
     show_date = _show_date_for_id(show_id)
     if show_date:
+        if _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
+            return 0
         today = datetime.datetime.fromtimestamp(now).date()
         age_days = (today - show_date).days
         if age_days > RESULT_AUTO_WINDOW_DAYS:
             return None
-        return RESULT_CACHE_ACTIVE_TTL if age_days <= RESULT_CACHE_SETTLED_AFTER_DAYS else RESULT_CACHE_SETTLED_TTL
+        return RESULT_CACHE_SETTLED_TTL
 
     return SHOW_ALL_RESULTS_TTL
 
@@ -98,7 +136,7 @@ def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if not _is_show_recent_by_id(show_id):
         return True
 
-    ttl = _result_cache_ttl_for_show(show_id, now)
+    ttl = _result_cache_ttl_for_show(show_id, now, doc=doc)
     if ttl is None:
         return True
     return (now - cached_at) < ttl
@@ -336,6 +374,10 @@ def _all_results_doc_base(show_id, source, existing=None):
         "completed_breeds": existing.get("completed_breeds") or {},
         "failed_breeds": existing.get("failed_breeds") or {},
         "results": existing.get("results") or [],
+        "bis_detected_at": existing.get("bis_detected_at"),
+        "bis_detected_at_iso": existing.get("bis_detected_at_iso"),
+        "live_result_grace_until": existing.get("live_result_grace_until"),
+        "live_result_grace_until_iso": existing.get("live_result_grace_until_iso"),
     }
 
 def _breed_result_cache_key(show_id, group, breed_id):
@@ -632,6 +674,15 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         and not force
     )
     doc = _all_results_doc_base(show_id, source, existing=existing if resumable else None)
+    if isinstance(existing, dict):
+        for key in (
+            "bis_detected_at",
+            "bis_detected_at_iso",
+            "live_result_grace_until",
+            "live_result_grace_until_iso",
+        ):
+            if existing.get(key):
+                doc[key] = existing.get(key)
     if not preserve_existing_complete:
         _save_result_cache_doc(show_id, doc)
 
@@ -691,6 +742,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         return failure
 
     cached_at = time.time()
+    _mark_live_bis_state(doc, cached_at)
     doc["status"] = "complete"
     doc["cached_at"] = cached_at
     doc["updated_at"] = cached_at

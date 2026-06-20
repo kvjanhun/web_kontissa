@@ -171,8 +171,16 @@ export function useDogBrowser() {
   const allDogsAvailability = computed(() => (
     getShowResultAvailability(selectedShow.value || showDetail.value)
   ))
+  const selectedShowStats = computed(() => (
+    selectedShow.value?.stats || showDetail.value?.stats || null
+  ))
   const resultBreedFilterAvailable = computed(() => (
-    Boolean(selectedShow.value?.stats?.is_live || allDogsAvailability.value?.phase === 'show_day')
+    Boolean(selectedShowStats.value?.is_live || allDogsAvailability.value?.phase === 'show_day')
+  ))
+  const liveDetailPollingAvailable = computed(() => (
+    selectedShowStats.value
+      ? Boolean(selectedShowStats.value.is_live)
+      : allDogsAvailability.value?.phase === 'show_day'
   ))
 
   function shouldPollLiveShowDetail() {
@@ -180,7 +188,7 @@ export function useDogBrowser() {
       import.meta.client &&
       currentView.value === 'detail' &&
       selectedShow.value?.id &&
-      resultBreedFilterAvailable.value
+      liveDetailPollingAvailable.value
     )
   }
 
@@ -605,6 +613,7 @@ export function useDogBrowser() {
     currentView,
     () => selectedShow.value?.id,
     resultBreedFilterAvailable,
+    liveDetailPollingAvailable,
   ], () => {
     scheduleLiveShowDetailPoll()
   })
