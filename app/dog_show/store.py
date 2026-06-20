@@ -23,6 +23,11 @@ _show_all_results_cache = {}
 _show_index = {"shows": {}, "last_updated": 0}
 _show_index_mtime = 0
 
+def _temp_json_path(path):
+    directory = os.path.dirname(path)
+    filename = os.path.basename(path)
+    return os.path.join(directory, f".{filename}.{os.getpid()}.tmp")
+
 def _normalize_show_index_judges():
     changed = False
     for show in _show_index.get("shows", {}).values():
@@ -78,7 +83,7 @@ def _load_index(force=False):
 def _save_index():
     global _show_index_mtime
 
-    tmp_path = f"{INDEX_PATH}.{os.getpid()}.tmp"
+    tmp_path = _temp_json_path(INDEX_PATH)
     try:
         os.makedirs(INDEX_DIR, exist_ok=True)
         with open(tmp_path, "w", encoding="utf-8") as f:
@@ -94,7 +99,7 @@ def _save_index():
             pass
 
 def _atomic_write_json(path, data):
-    tmp_path = f"{path}.{os.getpid()}.tmp"
+    tmp_path = _temp_json_path(path)
     try:
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(tmp_path, "w", encoding="utf-8") as f:
