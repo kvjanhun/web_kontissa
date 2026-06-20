@@ -392,6 +392,10 @@ def test_show_result_availability_waits_until_show_morning():
         show,
         now=dog_module.datetime.datetime(2026, 6, 20, 6, 0),
     )
+    evening = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 20, 21, 0),
+    )
 
     assert future["can_fetch"] is False
     assert future["reason"] == "future_show"
@@ -400,6 +404,36 @@ def test_show_result_availability_waits_until_show_morning():
     assert early_morning["reason"] == "show_morning"
     assert show_day["can_fetch"] is True
     assert show_day["reason"] == "show_day"
+    assert evening["can_fetch"] is False
+    assert evening["reason"] == "show_night"
+    assert evening["show_state"] == "live"
+
+
+def test_show_result_availability_pauses_between_show_days():
+    """A multi-day live show goes quiet overnight (21:00–06:00) between days."""
+    show = {"date": "20.-21.06.", "month": "kesäkuu 2026"}
+
+    night = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 20, 23, 30),
+    )
+    next_morning_early = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 21, 5, 0),
+    )
+    next_day = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 21, 9, 0),
+    )
+
+    assert night["can_fetch"] is False
+    assert night["reason"] == "show_night"
+    assert night["show_state"] == "live"
+    assert next_morning_early["can_fetch"] is False
+    assert next_morning_early["reason"] == "show_morning"
+    assert next_morning_early["show_state"] == "live"
+    assert next_day["can_fetch"] is True
+    assert next_day["reason"] == "show_day"
 
 def test_show_result_availability_handles_showlink_today_section():
     show = {"date": "20.-21.06.", "month": "Tänään"}

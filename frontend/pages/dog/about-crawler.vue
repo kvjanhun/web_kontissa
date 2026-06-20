@@ -98,6 +98,9 @@ useHead({
           <li>Tulevista näyttelyistä haetaan rotulistat. Tuloslistoja aletaan kysellä näyttelypäivänä
             klo 6:00 aamulla alkaen.
           </li>
+          <li>Käynnissä olevien näyttelyiden tuloksia ei haeta yöaikaan (klo 21–6). Monipäiväisen
+            näyttelyn tuloksia ei siis turhaan kysellä Showlinkistä öiden yli; aiemmin haetut tulokset
+            näkyvät silti sivulla.</li>
         </ul>
 
         <h3>Kuka on vastuussa?</h3>
@@ -154,6 +157,7 @@ useHead({
           <li>Breed lists: Data for at most 6 shows is fetched about every 15 minutes.</li>
           <li>Show list: Fetched again no sooner than every 30 minutes.</li>
           <li>For upcoming shows, breed lists are fetched. Result lists are first checked on the show day, starting at 6:00 in the morning.</li>
+          <li>Results for ongoing shows are not checked overnight (21:00–06:00). A multi-day show is therefore not polled against Showlink between show days; results fetched earlier still stay visible on the page.</li>
         </ul>
 
         <h3>Who is responsible?</h3>

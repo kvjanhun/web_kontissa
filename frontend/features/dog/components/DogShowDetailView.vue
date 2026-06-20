@@ -5,7 +5,7 @@ import DogResultCard from './DogResultCard.vue'
 import DogShowTools from './DogShowTools.vue'
 import DogStateBlock from './DogStateBlock.vue'
 
-defineProps({
+const props = defineProps({
   showDetail: {
     type: Object,
     default: null,
@@ -78,6 +78,10 @@ defineProps({
     type: String,
     default: '',
   },
+  availableShowGrades: {
+    type: Array,
+    default: () => [],
+  },
   availableShowClasses: {
     type: Array,
     default: () => [],
@@ -125,6 +129,14 @@ defineEmits([
 function awardCritiqueKey(group, dog) {
   return `show-award-${group.key}-${dog.breedGroup || dog.breedName || ''}-${dog.number || dog.name}`
 }
+
+const shownDogCount = computed(() => {
+  if (!props.allDogsLoaded) return null
+  if (props.dogAwardFilter && props.showAwardResultGroups.length) {
+    return props.showAwardResultGroups.reduce((total, group) => total + (group.dogs?.length || 0), 0)
+  }
+  return props.showBreedGroups.reduce((total, group) => total + (group.dogs?.length || 0), 0)
+})
 </script>
 
 <template>
@@ -160,6 +172,7 @@ function awardCritiqueKey(group, dog) {
         :all-dogs-progress-text="allDogsProgressText"
         :all-dogs-availability="allDogsAvailability"
         :show-search-placeholder="showSearchPlaceholder"
+        :available-show-grades="availableShowGrades"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
         @update:breedSearchQuery="$emit('update:breedSearchQuery', $event)"
@@ -170,6 +183,12 @@ function awardCritiqueKey(group, dog) {
         @start-show-wide="$emit('start-show-wide')"
         @retry-all-dogs="$emit('retry-all-dogs')"
       />
+
+      <div v-if="shownDogCount !== null" class="dog-results-meta-row-header">
+        <div class="dog-results-meta-left">
+          Löytyi <span class="dog-highlight-text">{{ shownDogCount }}</span> {{ shownDogCount === 1 ? 'koira' : 'koiraa' }}
+        </div>
+      </div>
 
       <div
         v-if="allDogsLoaded && dogAwardFilter && showAwardResultGroups.length"

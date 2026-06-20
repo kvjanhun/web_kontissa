@@ -43,6 +43,10 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  availableGrades: {
+    type: Array,
+    default: () => [],
+  },
   availableClasses: {
     type: Array,
     default: () => [],
@@ -167,6 +171,7 @@ function toggleAllVisible() {
         :grade-filter="dogGradeFilter"
         :class-filter="dogClassFilter"
         :award-filter="dogAwardFilter"
+        :grade-options="availableGrades"
         :available-classes="availableClasses"
         :available-awards="availableAwards"
         @update:searchQuery="$emit('update:dogSearchQuery', $event)"

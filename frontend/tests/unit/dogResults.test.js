@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableAwardsFromResults,
+  availableGradesFromResults,
   awardMatchesFilter,
   buildDogQuery,
   createShowBreedGroups,
@@ -10,6 +11,7 @@ import {
   getShowResultAvailability,
   gradeMatchesFilter,
   groupResultsByAwardFilter,
+  isOvernightResultWindow,
   parseShowDateRange,
   showStatItems,
   showStatsLabel,
@@ -29,6 +31,27 @@ describe('gradeMatchesFilter', () => {
 
     expect(gradeMatchesFilter('POISSA', 'poissa')).toBe(true)
     expect(gradeMatchesFilter('EVA', 'poissa')).toBe(false)
+  })
+})
+
+describe('availableGradesFromResults', () => {
+  it('returns only the grades present, keeping HYL/EVA/POISSA distinct and "all" first', () => {
+    const options = availableGradesFromResults([
+      { grade: 'ERI' },
+      { grade: 'EH' },
+      { grade: 'HYL' },
+      { grade: '' },
+    ])
+    expect(options.map(option => option.value)).toEqual(['', 'eri', 'eh', 'hyl'])
+  })
+
+  it('retains the currently selected grade even when no result has it', () => {
+    const options = availableGradesFromResults([{ grade: 'ERI' }], 'poissa')
+    expect(options.map(option => option.value)).toEqual(['', 'eri', 'poissa'])
+  })
+
+  it('returns just the "all" option for empty results', () => {
+    expect(availableGradesFromResults([]).map(option => option.value)).toEqual([''])
   })
 })
 
@@ -261,6 +284,27 @@ describe('showStatItems and showStatsLabel', () => {
       },
     ])
     expect(showStatsLabel(show)).toBe(`3 rotua, ${entryCount} ilmoittautunutta`)
+  })
+})
+
+describe('isOvernightResultWindow', () => {
+  const at = (hour) => new Date(2026, 5, 20, hour, 0, 0)
+
+  it('is true before 06:00 and from 21:00 onward (default window)', () => {
+    expect(isOvernightResultWindow(at(5))).toBe(true)
+    expect(isOvernightResultWindow(at(23))).toBe(true)
+    expect(isOvernightResultWindow(at(21))).toBe(true)
+  })
+
+  it('is false during the day', () => {
+    expect(isOvernightResultWindow(at(6))).toBe(false)
+    expect(isOvernightResultWindow(at(12))).toBe(false)
+    expect(isOvernightResultWindow(at(20))).toBe(false)
+  })
+
+  it('honours custom hours', () => {
+    expect(isOvernightResultWindow(at(19), 7, 19)).toBe(true)
+    expect(isOvernightResultWindow(at(18), 7, 19)).toBe(false)
   })
 })
 

@@ -1,8 +1,9 @@
 <script setup>
+import { computed } from 'vue'
 import DogSearchClearButton from './DogSearchClearButton.vue'
 import { DOG_GRADE_OPTIONS } from '../dogResults.js'
 
-defineProps({
+const props = defineProps({
   breedSearchQuery: {
     type: String,
     default: '',
@@ -55,6 +56,10 @@ defineProps({
     type: String,
     default: '',
   },
+  availableShowGrades: {
+    type: Array,
+    default: () => [],
+  },
   availableShowClasses: {
     type: Array,
     default: () => [],
@@ -74,6 +79,10 @@ defineEmits([
   'start-show-wide',
   'retry-all-dogs',
 ])
+
+const gradeOptions = computed(() => (
+  props.availableShowGrades?.length ? props.availableShowGrades : DOG_GRADE_OPTIONS
+))
 </script>
 
 <template>
@@ -138,7 +147,7 @@ defineEmits([
           class="dog-filter-select"
           @change="$emit('update:dogGradeFilter', $event.target.value)"
         >
-          <option v-for="option in DOG_GRADE_OPTIONS" :key="option.value" :value="option.value">
+          <option v-for="option in gradeOptions" :key="option.value" :value="option.value">
             {{ option.label }}
           </option>
         </select>

@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import DogBreedResultsView from './components/DogBreedResultsView.vue'
 import DogShowDetailView from './components/DogShowDetailView.vue'
 import DogShowListView from './components/DogShowListView.vue'
@@ -41,6 +41,7 @@ const {
   expandedCritiques,
   showSearchPlaceholder,
   showBreedGroups,
+  availableShowGrades,
   availableShowClasses,
   availableShowAwards,
   showAwardResultGroups,
@@ -51,6 +52,7 @@ const {
   selectedShowSourceUrl,
   selectedBreedSourceUrl,
   indexWarming,
+  availableGrades,
   availableClasses,
   availableAwards,
   resultsByGenderAndClass,
@@ -78,6 +80,13 @@ const pageTitle = computed(() => {
   if (currentView.value === 'results') return breedResults.value?.breed || selectedBreed.value?.name || ''
   return 'Näyttelytulokset'
 })
+
+// Reflect the open show/breed in the document title so browser tabs and shared
+// deep links (?show=…&breed=…) are meaningful instead of always generic.
+watch(pageTitle, (title) => {
+  if (!import.meta.client) return
+  document.title = title ? `${title} | erez.ac` : 'Näyttelytulokset | erez.ac'
+}, { immediate: true })
 </script>
 
 <template>
@@ -133,6 +142,7 @@ const pageTitle = computed(() => {
         :all-dogs-availability="allDogsAvailability"
         :result-breed-filter-available="resultBreedFilterAvailable"
         :show-search-placeholder="showSearchPlaceholder"
+        :available-show-grades="availableShowGrades"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
         :show-breed-groups="showBreedGroups"
@@ -160,6 +170,7 @@ const pageTitle = computed(() => {
         :results-error="resultsError"
         :selected-breed="selectedBreed"
         :selected-breed-source-url="selectedBreedSourceUrl"
+        :available-grades="availableGrades"
         :available-classes="availableClasses"
         :available-awards="availableAwards"
         :results-by-gender-and-class="resultsByGenderAndClass"

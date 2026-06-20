@@ -3,6 +3,7 @@ import { useRoute, useRouter } from '#app'
 import {
   availableAwardsFromResults,
   availableClassesFromResults,
+  availableGradesFromResults,
   buildDogQuery,
   createShowBreedGroups,
   dogMatchesShowFilters,
@@ -18,6 +19,7 @@ import {
   groupResultsByGenderAndClass,
   hasShowStats,
   isNumericString,
+  isOvernightResultWindow,
   isThisWeekLeft,
   parseShowDate,
   sameId,
@@ -29,6 +31,9 @@ import {
 } from './dogResults.js'
 
 const LIVE_DETAIL_REFRESH_SECONDS = 120
+// During overnight quiet hours we don't fetch, but keep a slow clock heartbeat
+// so live polling resumes by itself in the morning if the page is left open.
+const NIGHT_RECHECK_SECONDS = 900
 
 export function useDogBrowser() {
   const route = useRoute()
@@ -57,6 +62,7 @@ export function useDogBrowser() {
   const searchError = ref('')
 
   const breedSearchQuery = ref('')
+  const debouncedBreedSearch = ref('')
   const resultBreedsOnly = ref(false)
   const dogSearchQuery = ref('')
   const dogGradeFilter = ref('')
@@ -74,6 +80,7 @@ export function useDogBrowser() {
   const expandedBreedGroups = ref(new Set())
 
   let searchTimer = null
+  let breedSearchTimer = null
   let searchRequestId = 0
   let indexPollTimer = null
   let allDogsPollTimer = null
@@ -152,6 +159,8 @@ export function useDogBrowser() {
     expandedCritiques.value = new Set()
     expandedBreedGroups.value = new Set()
     breedSearchQuery.value = ''
+    clearTimeout(breedSearchTimer)
+    debouncedBreedSearch.value = ''
     resultBreedsOnly.value = false
     dogSearchQuery.value = ''
     dogGradeFilter.value = ''
@@ -165,6 +174,19 @@ export function useDogBrowser() {
     allDogsProgress.value = null
     clearLiveDetailPoll()
   }
+
+  // Keep the breed/dog search input responsive while debouncing the expensive
+  // whole-show regroup/filter that depends on it.
+  watch(breedSearchQuery, (value) => {
+    clearTimeout(breedSearchTimer)
+    if (!value.trim()) {
+      debouncedBreedSearch.value = value
+      return
+    }
+    breedSearchTimer = setTimeout(() => {
+      debouncedBreedSearch.value = value
+    }, 200)
+  })
 
   const allDogsProgressPercent = computed(() => getAllDogsProgressPercent(allDogsProgress.value))
   const allDogsProgressText = computed(() => getAllDogsProgressText(allDogsProgress.value))
@@ -208,6 +230,13 @@ export function useDogBrowser() {
       return
     }
 
+    if (isOvernightResultWindow()) {
+      // Nothing live updates overnight; skip the backend fetch and just keep a
+      // slow clock heartbeat so polling resumes automatically in the morning.
+      scheduleLiveShowDetailPoll(NIGHT_RECHECK_SECONDS)
+      return
+    }
+
     try {
       const data = await $fetch(`/api/dog/shows/${showId}`)
       if (!selectedShow.value?.id || !sameId(selectedShow.value.id, showId)) return
@@ -239,7 +268,7 @@ export function useDogBrowser() {
 
   const showWideFiltersActive = computed(() => (
     allDogsLoaded.value && Boolean(
-      breedSearchQuery.value.trim() ||
+      debouncedBreedSearch.value.trim() ||
       resultBreedsOnly.value ||
       dogGradeFilter.value ||
       dogClassFilter.value ||
@@ -250,7 +279,7 @@ export function useDogBrowser() {
   const showBreedGroups = computed(() => createShowBreedGroups({
     breeds: showDetail.value?.breeds || [],
     dogs: allDogsAfterShowFilters.value,
-    query: breedSearchQuery.value,
+    query: debouncedBreedSearch.value,
     allDogsLoaded: allDogsLoaded.value,
     resultsOnly: resultBreedsOnly.value,
     allowUncheckedResults: liveDetailPollingAvailable.value,
@@ -261,6 +290,9 @@ export function useDogBrowser() {
     },
   }))
 
+  const availableShowGrades = computed(() => (
+    availableGradesFromResults(allDogsResults.value || [], dogGradeFilter.value)
+  ))
   const availableShowClasses = computed(() => availableClassesFromResults(allDogsResults.value || []))
   const availableShowAwards = computed(() => availableAwardsFromResults(allDogsResults.value || []))
   const showAwardResultGroups = computed(() => groupResultsByAwardFilter(
@@ -275,6 +307,13 @@ export function useDogBrowser() {
     if (sessionId !== allDogsSessionId) return
     if ((allDogsLoaded.value && !poll) || (allDogsLoading.value && !poll)) return
     if (!allDogsAvailability.value.canLoad) return
+    if (poll && allDogsLoaded.value && isOvernightResultWindow()) {
+      // Overnight live-refresh poll for an already-loaded cache: skip the fetch,
+      // keep a slow heartbeat so the periodic refresh resumes in the morning.
+      // Warming polls (cache not yet loaded) and one-off loads are unaffected.
+      scheduleAllDogsPoll(NIGHT_RECHECK_SECONDS)
+      return
+    }
     clearAllDogsPoll()
     allDogsLoading.value = !allDogsLoaded.value
     allDogsError.value = ''
@@ -341,6 +380,10 @@ export function useDogBrowser() {
   }
 
   async function refreshIndexStats() {
+    // Overnight, live shows aren't producing results, so skip the periodic list
+    // refresh unless we're still polling to reflect index-build progress. The
+    // interval keeps ticking cheaply and resumes fetching in the morning.
+    if (!indexWarming.value && isOvernightResultWindow()) return
     try {
       const data = await $fetch('/api/dog/shows')
       shows.value = standardizeShows(data.shows || shows.value)
@@ -664,6 +707,9 @@ export function useDogBrowser() {
     award: dogAwardFilter.value,
   }))
 
+  const availableGrades = computed(() => (
+    availableGradesFromResults(breedResults.value?.results || [], dogGradeFilter.value)
+  ))
   const availableClasses = computed(() => availableClassesFromResults(breedResults.value?.results || []))
   const availableAwards = computed(() => availableAwardsFromResults(breedResults.value?.results || []))
   const resultsByGenderAndClass = computed(() => groupResultsByGenderAndClass(filteredDogResults.value))
@@ -766,6 +812,7 @@ export function useDogBrowser() {
 
   onUnmounted(() => {
     clearTimeout(searchTimer)
+    clearTimeout(breedSearchTimer)
     if (indexPollTimer) clearInterval(indexPollTimer)
     allDogsSessionId += 1
     clearAllDogsPoll()
@@ -806,6 +853,7 @@ export function useDogBrowser() {
     expandedCritiques,
     showSearchPlaceholder,
     showBreedGroups,
+    availableShowGrades,
     availableShowClasses,
     availableShowAwards,
     showAwardResultGroups,
@@ -818,6 +866,7 @@ export function useDogBrowser() {
     selectedBreedSourceUrl,
     indexWarming,
     filteredDogResults,
+    availableGrades,
     availableClasses,
     availableAwards,
     resultsByGenderAndClass,

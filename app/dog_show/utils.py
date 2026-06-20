@@ -1,9 +1,31 @@
 import datetime
 import re
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from .config import FINNISH_MONTHS, RESULT_CACHE_BIS_FINAL_GRACE_SECONDS, RESULT_SHOW_MORNING_HOUR
+from .config import (
+    FINNISH_MONTHS, RESULT_CACHE_BIS_FINAL_GRACE_SECONDS, RESULT_LOCAL_TIMEZONE,
+    RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
+)
 
 RELATIVE_RECENT_LABELS = {"tänään", "huomenna", "today", "tomorrow"}
+
+try:
+    _LOCAL_TZ = ZoneInfo(RESULT_LOCAL_TIMEZONE)
+except (ZoneInfoNotFoundError, ValueError):
+    _LOCAL_TZ = None
+
+
+def _local_now():
+    """Current Finnish wall-clock time as a naive datetime.
+
+    Show dates are Finnish local dates and the result-fetch windows
+    (06:00 morning, 21:00 evening) are Finnish local hours. The container
+    runs in UTC, so derive local time explicitly rather than trusting the
+    process timezone. Falls back to the process clock if tzdata is missing.
+    """
+    if _LOCAL_TZ is None:
+        return datetime.datetime.now()
+    return datetime.datetime.now(_LOCAL_TZ).replace(tzinfo=None)
 
 def _is_recent_show(month_str):
     """Check if the show month is the current or previous month."""
@@ -227,9 +249,14 @@ def _show_age_days(show, today=None):
 def _local_iso(dt):
     return dt.isoformat(timespec="seconds") if dt else None
 
-def _show_result_availability(show, now=None, morning_hour=RESULT_SHOW_MORNING_HOUR):
+def _show_result_availability(
+    show,
+    now=None,
+    morning_hour=RESULT_SHOW_MORNING_HOUR,
+    evening_hour=RESULT_SHOW_EVENING_HOUR,
+):
     """Decide whether result pages are worth checking for a show."""
-    now = now or datetime.datetime.now()
+    now = now or _local_now()
     if isinstance(now, datetime.date) and not isinstance(now, datetime.datetime):
         now = datetime.datetime.combine(now, datetime.time())
 
@@ -241,6 +268,7 @@ def _show_result_availability(show, now=None, morning_hour=RESULT_SHOW_MORNING_H
             "show_state": "unknown",
             "reason": "unknown_date",
             "morning_hour": morning_hour,
+            "evening_hour": evening_hour,
         }
 
     available_from = datetime.datetime.combine(start_date, datetime.time(hour=morning_hour))
@@ -250,6 +278,7 @@ def _show_result_availability(show, now=None, morning_hour=RESULT_SHOW_MORNING_H
         "end_date": end_date.isoformat(),
         "available_from_iso": _local_iso(available_from),
         "morning_hour": morning_hour,
+        "evening_hour": evening_hour,
     }
 
     if today < start_date:
@@ -260,15 +289,25 @@ def _show_result_availability(show, now=None, morning_hour=RESULT_SHOW_MORNING_H
             "reason": "future_show",
         }
 
-    if today == start_date and now < available_from:
-        return {
-            **base,
-            "can_fetch": False,
-            "show_state": "live",
-            "reason": "show_morning",
-        }
-
+    # Live date range. Results are only worth checking during the day: not
+    # before the morning hour and not after the evening hour. This holds on
+    # every day of a multi-day show, so a live show goes quiet overnight
+    # (e.g. 21:00–06:00) instead of polling Showlink between show days.
     if start_date <= today <= end_date:
+        if now.hour < morning_hour:
+            return {
+                **base,
+                "can_fetch": False,
+                "show_state": "live",
+                "reason": "show_morning",
+            }
+        if now.hour >= evening_hour:
+            return {
+                **base,
+                "can_fetch": False,
+                "show_state": "live",
+                "reason": "show_night",
+            }
         return {
             **base,
             "can_fetch": True,

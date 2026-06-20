@@ -94,6 +94,7 @@ For recent/live shows, complete caches with zero result breeds are ignored and r
 - Breed result in-memory cache for recent or ongoing shows: 10 minutes.
 - Showlink relative sections such as `Tänään` and `Huomenna` are treated as recent; the backend infers the year from the listed date so live-result availability still works.
 - Whole-show result live TTL: 2 minutes by default while a show is still actively filling in.
+- Overnight quiet hours: a live show is not checked against Showlink between `DOG_RESULT_SHOW_EVENING_HOUR` (21:00) and `DOG_RESULT_SHOW_MORNING_HOUR` (06:00) local time, on every day of a multi-day show. Previously-fetched results stay visible; the cache is simply served stale until the morning. Show date and these hours are evaluated in `DOG_RESULT_TIMEZONE` (Europe/Helsinki), not the UTC container clock.
 - Main `BIS-1` in cached awards starts a 30-minute live settling window by default. After that, the show stops using the 2-minute live TTL even if the calendar date has not changed.
 - If a live cache has at least as many result rows as the indexed entry count, the same 30-minute settling window starts from that entry-completion point. This catches specialty and smaller shows whose cached breed rows may not include a main `BIS-1`.
 - On the first calendar day after a show's final listed date, a cache last written before midnight is treated as stale once so the next crawler pass performs a final post-show check.
@@ -130,7 +131,9 @@ Environment knobs:
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
 - `DOG_RESULT_AUTO_WINDOW_DAYS`: how many past days automatic warming covers.
-- `DOG_RESULT_SHOW_MORNING_HOUR`: local hour when missing result pages may first be checked on the first show date; defaults to `6`.
+- `DOG_RESULT_SHOW_MORNING_HOUR`: local hour before which result pages are not checked on a show day; defaults to `6`.
+- `DOG_RESULT_SHOW_EVENING_HOUR`: local hour after which live result pages are no longer checked on a show day; defaults to `21`. Together with the morning hour this is the overnight quiet window for live shows.
+- `DOG_RESULT_TIMEZONE`: IANA timezone used to evaluate show dates and the morning/evening result windows; defaults to `Europe/Helsinki`. The crawler/web containers run in UTC, so this is resolved explicitly via `tzdata` rather than the process clock.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
 

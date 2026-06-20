@@ -572,6 +572,18 @@ export function availableClassesFromResults(results = []) {
   })
 }
 
+export function availableGradesFromResults(results = [], keepValue = '') {
+  const present = new Set()
+  for (const dog of results) {
+    if (!normalizeGrade(dog.grade)) continue
+    for (const option of DOG_GRADE_OPTIONS) {
+      if (option.value && gradeMatchesFilter(dog.grade, option.value)) present.add(option.value)
+    }
+  }
+  if (keepValue) present.add(keepValue)
+  return DOG_GRADE_OPTIONS.filter(option => option.value === '' || present.has(option.value))
+}
+
 export function availableAwardsFromResults(results = []) {
   const awardsSet = new Set()
   results.forEach(result => {
@@ -826,6 +838,21 @@ function endOfDay(date) {
   const copy = new Date(date)
   copy.setHours(23, 59, 59, 999)
   return copy
+}
+
+export const RESULT_MORNING_HOUR = 6
+export const RESULT_EVENING_HOUR = 21
+
+// True during the overnight quiet window (default 21:00–06:00 local) when a
+// live show is not producing results, so the frontend can pause periodic
+// live polling. Mirrors the backend fetch gate in app/dog_show/utils.py.
+export function isOvernightResultWindow(
+  now = new Date(),
+  morningHour = RESULT_MORNING_HOUR,
+  eveningHour = RESULT_EVENING_HOUR,
+) {
+  const hour = now.getHours()
+  return hour < morningHour || hour >= eveningHour
 }
 
 export function getShowResultAvailability(show, now = new Date(), morningHour = 6) {

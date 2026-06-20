@@ -45,6 +45,7 @@ def _results_not_ready_response(show_id, availability):
     reason_messages = {
         "future_show": "Tuloksia ei haeta vielä ennen näyttelypäivän aamua.",
         "show_morning": "Tuloksia ei haeta vielä ennen näyttelypäivän klo 6:ta.",
+        "show_night": "Tuloksia ei päivitetä yöaikaan (klo 21–6). Aiemmin haetut tulokset näkyvät yhä.",
     }
     return {
         "show_id": int(show_id),
