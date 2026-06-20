@@ -253,6 +253,7 @@ export function useDogBrowser() {
     query: breedSearchQuery.value,
     allDogsLoaded: allDogsLoaded.value,
     resultsOnly: resultBreedsOnly.value,
+    allowUncheckedResults: liveDetailPollingAvailable.value,
     filters: {
       grade: dogGradeFilter.value,
       className: dogClassFilter.value,
@@ -272,10 +273,10 @@ export function useDogBrowser() {
     const showId = selectedShow.value?.id
     if (!showId) return
     if (sessionId !== allDogsSessionId) return
-    if (allDogsLoaded.value || (allDogsLoading.value && !poll)) return
+    if ((allDogsLoaded.value && !poll) || (allDogsLoading.value && !poll)) return
     if (!allDogsAvailability.value.canLoad) return
     clearAllDogsPoll()
-    allDogsLoading.value = true
+    allDogsLoading.value = !allDogsLoaded.value
     allDogsError.value = ''
     let keepLoading = false
     try {
@@ -291,6 +292,9 @@ export function useDogBrowser() {
       allDogsResults.value = data.results || []
       allDogsProgress.value = data.cache || null
       allDogsLoaded.value = true
+      if (data.cache?.stale && liveDetailPollingAvailable.value) {
+        scheduleAllDogsPoll(data.retry_after || LIVE_DETAIL_REFRESH_SECONDS)
+      }
     } catch (error) {
       if (sessionId === allDogsSessionId) {
         allDogsError.value = error?.data?.message || 'Tulosten hakeminen epäonnistui.'
@@ -403,7 +407,7 @@ export function useDogBrowser() {
   }
 
   async function fetchBreedResults(breed, options = {}) {
-    if (!breed.has_results) return
+    if (!breed.has_results && !breed.can_fetch_results) return
     const { updateRoute = false, syncToken = null } = options
     if (syncToken !== null && syncToken !== routeSyncToken) return
     selectedBreed.value = breed
@@ -474,7 +478,7 @@ export function useDogBrowser() {
 
   async function onSelectSearchResult(result) {
     if (!result?.show?.id) return
-    if (result.breed && result.breed.has_results) {
+    if (result.breed && (result.breed.has_results || result.show?.stats?.is_live)) {
       return pushDogQuery({
         show: result.show.id,
         group: result.breed.group,
@@ -500,7 +504,7 @@ export function useDogBrowser() {
   }
 
   function openBreed(breed) {
-    if (!breed?.has_results || !selectedShow.value?.id) return
+    if ((!breed?.has_results && !breed?.can_fetch_results) || !selectedShow.value?.id) return
     pushDogQuery({
       show: selectedShow.value.id,
       group: breed.group,

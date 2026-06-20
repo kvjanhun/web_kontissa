@@ -190,14 +190,14 @@ def _set_result_job_running(show_id):
     _save_result_jobs(jobs_doc)
     return job
 
-def _claim_result_cache_job(show_id, reason="user-immediate"):
+def _claim_result_cache_job(show_id, reason="user-immediate", stale_seconds=None):
     now = time.time()
     jobs_doc = _load_result_jobs()
     jobs = jobs_doc.setdefault("jobs", {})
     sid = str(int(show_id))
     job = jobs.get(sid, {"show_id": int(show_id), "created_at": now, "attempts": 0})
 
-    if job.get("state") == "running" and not _result_job_due(job, now=now):
+    if job.get("state") == "running" and not _result_job_due(job, now=now, stale_seconds=stale_seconds):
         return None
 
     job["state"] = "running"
@@ -212,6 +212,23 @@ def _claim_result_cache_job(show_id, reason="user-immediate"):
     jobs_doc["updated_at"] = now
     _save_result_jobs(jobs_doc)
     return job
+
+def _heartbeat_result_cache_job(show_id, min_interval=15):
+    now = time.time()
+    jobs_doc = _load_result_jobs()
+    jobs = jobs_doc.setdefault("jobs", {})
+    sid = str(int(show_id))
+    job = jobs.get(sid)
+    if not job or job.get("state") != "running":
+        return False
+
+    if (now - (job.get("updated_at") or 0)) < max(0, int(min_interval or 0)):
+        return False
+
+    job["updated_at"] = now
+    jobs_doc["updated_at"] = now
+    _save_result_jobs(jobs_doc)
+    return True
 
 def _remove_result_cache_job(show_id):
     jobs_doc = _load_result_jobs()
@@ -242,11 +259,12 @@ def _defer_result_cache_job(show_id, error):
     _save_result_jobs(jobs_doc)
     return job
 
-def _result_job_due(job, now=None):
+def _result_job_due(job, now=None, stale_seconds=None):
     now = now or time.time()
+    stale_seconds = RESULT_JOB_STALE_SECONDS if stale_seconds is None else max(1, int(stale_seconds))
     if job.get("state") == "running":
         updated_at = job.get("updated_at") or 0
-        if (now - updated_at) < RESULT_JOB_STALE_SECONDS:
+        if (now - updated_at) < stale_seconds:
             return False
     return (job.get("next_attempt_at") or 0) <= now
 

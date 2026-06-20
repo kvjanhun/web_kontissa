@@ -12,14 +12,16 @@ from .indexing import (
     _result_cache_doc_needs_result_refresh,
     _result_breeds_for_cache, _result_breeds_from_index, _result_breeds_with_results,
     _show_date_for_id, _show_result_availability_for_id, _update_index_breed_judge,
+    _update_index_breed_result_flag,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
     _breed_result_cache, _claim_result_cache_job, _defer_result_cache_job,
-    _indexed_show, _load_result_cache_doc, _load_result_jobs, _remove_result_cache_job, _result_job_due,
-    _queue_result_cache_job, _save_index, _save_result_cache_doc, _set_result_job_running,
+    _heartbeat_result_cache_job, _indexed_show, _load_result_cache_doc, _load_result_jobs,
+    _remove_result_cache_job, _result_job_due, _queue_result_cache_job, _save_index,
+    _save_result_cache_doc, _set_result_job_running,
     _show_all_results_cache, _show_detail_cache, _show_index,
 )
 from .utils import (
@@ -40,6 +42,8 @@ RESULT_CACHE_VERSION = config.RESULT_CACHE_VERSION
 RESULT_RETRY_AFTER_SECONDS = config.RESULT_RETRY_AFTER_SECONDS
 RESULT_CRAWL_DEFAULT_DELAY = config.RESULT_CRAWL_DEFAULT_DELAY
 RESULT_CRAWL_DEFAULT_WORKERS = config.RESULT_CRAWL_DEFAULT_WORKERS
+RESULT_LIVE_PROBE_BREED_LIMIT = config.RESULT_LIVE_PROBE_BREED_LIMIT
+RESULT_LIVE_JOB_STALE_SECONDS = config.RESULT_LIVE_JOB_STALE_SECONDS
 RESULT_IMMEDIATE_WARMUP = config.RESULT_IMMEDIATE_WARMUP_DEFAULT
 RESULT_CACHE_BIS_FINAL_GRACE_SECONDS = config.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
 
@@ -120,6 +124,12 @@ def _live_index_result_flags_need_refresh(show_id, indexed_show=None, now=None):
 
     updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
     return not updated or (now - updated) >= RESULT_CACHE_LIVE_TTL
+
+def _result_job_stale_seconds_for_show(show_id, now=None):
+    availability = _show_result_availability_for_id(show_id, now=_availability_now(now or time.time()))
+    if availability.get("show_state") == "live" and availability.get("can_fetch", True):
+        return RESULT_LIVE_JOB_STALE_SECONDS
+    return None
 
 def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if not _result_cache_doc_is_complete(doc):
@@ -378,6 +388,9 @@ def _all_results_doc_base(show_id, source, existing=None):
         "bis_detected_at_iso": existing.get("bis_detected_at_iso"),
         "live_result_grace_until": existing.get("live_result_grace_until"),
         "live_result_grace_until_iso": existing.get("live_result_grace_until_iso"),
+        "live_probe_cursor": existing.get("live_probe_cursor", 0),
+        "live_probe_breed_count": existing.get("live_probe_breed_count"),
+        "live_probe_breed_limit": existing.get("live_probe_breed_limit"),
     }
 
 def _breed_result_cache_key(show_id, group, breed_id):
@@ -411,6 +424,58 @@ def _map_breed_results_to_all_results(show_id, breed, breed_data):
 
 def _breed_cache_key_from_breed(breed):
     return f"{breed.get('group', '')}:{breed.get('breed_id', '')}"
+
+def _live_probe_cursor(doc):
+    try:
+        return max(0, int((doc or {}).get("live_probe_cursor") or 0))
+    except (TypeError, ValueError):
+        return 0
+
+def _live_unchecked_probe_breeds(breeds, selected_breeds, doc, limit=None):
+    if limit is None:
+        limit = RESULT_LIVE_PROBE_BREED_LIMIT
+    limit = max(0, int(limit or 0))
+    if limit <= 0:
+        return []
+
+    selected_keys = {_breed_cache_key_from_breed(breed) for breed in selected_breeds or []}
+    candidates = []
+    seen = set(selected_keys)
+    for breed in breeds or []:
+        if not breed.get("group") or not breed.get("breed_id") or breed.get("has_results"):
+            continue
+
+        key = _breed_cache_key_from_breed(breed)
+        if key in seen:
+            continue
+
+        seen.add(key)
+        candidates.append(breed)
+
+    doc["live_probe_breed_count"] = len(candidates)
+    doc["live_probe_breed_limit"] = limit
+    if not candidates:
+        doc["live_probe_cursor"] = 0
+        return []
+
+    cursor = _live_probe_cursor(doc) % len(candidates)
+    selected = []
+    for offset in range(min(limit, len(candidates))):
+        selected.append(candidates[(cursor + offset) % len(candidates)])
+
+    doc["live_probe_cursor"] = (cursor + len(selected)) % len(candidates)
+    doc["live_probe_selected_breeds"] = [_breed_cache_key_from_breed(breed) for breed in selected]
+    return selected
+
+def _result_breeds_for_live_cache(show_id, breeds, doc, availability, now=None):
+    selected = _result_breeds_for_cache(show_id, breeds, now=_availability_now(now) if now else None)
+    if availability.get("show_state") != "live" or not availability.get("can_fetch", True):
+        return selected
+
+    probes = _live_unchecked_probe_breeds(breeds, selected, doc)
+    if not probes:
+        return selected
+    return selected + probes
 
 def _safe_int(value):
     try:
@@ -562,10 +627,14 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
         "ts": fetched_at,
     }
 
+    result_count = len(mapped_results)
+    if result_count:
+        breed["has_results"] = True
+
     doc.setdefault("results", []).extend(mapped_results)
     doc.setdefault("completed_breeds", {})[item["breed_key"]] = {
         "name": breed.get("name", ""),
-        "result_count": len(mapped_results),
+        "result_count": result_count,
         "judge": judge,
         "updated_at": fetched_at,
         "updated_at_iso": _utc_iso(fetched_at),
@@ -573,7 +642,13 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
     doc["updated_at"] = fetched_at
     _save_result_doc_progress(show_id, doc, preserve_existing_complete)
+    _heartbeat_result_cache_job(show_id)
+    updated_index = False
+    if result_count and _update_index_breed_result_flag(show_id, group, breed_id):
+        updated_index = True
     if judge and _update_index_breed_judge(show_id, group, breed_id, judge):
+        updated_index = True
+    if updated_index:
         _save_index()
 
 def _crawl_missing_breed_results(show_id, pending_breeds, doc, delay, workers, preserve_existing_complete):
@@ -680,6 +755,9 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "bis_detected_at_iso",
             "live_result_grace_until",
             "live_result_grace_until_iso",
+            "live_probe_cursor",
+            "live_probe_breed_count",
+            "live_probe_breed_limit",
         ):
             if existing.get(key):
                 doc[key] = existing.get(key)
@@ -702,7 +780,13 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "progress": _result_cache_progress(show_id, doc=doc),
         }
 
-    breeds_with_results = _result_breeds_for_cache(show_id, show_detail_data.get("breeds", []))
+    breeds_with_results = _result_breeds_for_live_cache(
+        show_id,
+        show_detail_data.get("breeds", []),
+        doc,
+        availability,
+        now=now,
+    )
     doc["title"] = show_detail_data.get("title", "")
     doc["source_url"] = show_detail_data.get("source_url") or _source_url(show_id)
     doc["total_breeds"] = len(breeds_with_results)
@@ -781,7 +865,11 @@ def _queued_result_cache_candidates(now):
             stale_complete_jobs.append(show_id)
             continue
 
-        if _result_job_due(job, now=now):
+        if _result_job_due(
+            job,
+            now=now,
+            stale_seconds=_result_job_stale_seconds_for_show(show_id, now=now),
+        ):
             candidates.append({"show_id": show_id, "source": "queued", "job": job})
 
     for show_id in stale_complete_jobs:
@@ -1028,7 +1116,11 @@ def _start_result_cache_warmup(show_id, reason="user-immediate"):
         logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="no_slot")
         return False
 
-    claimed = _claim_result_cache_job(show_id, reason=reason)
+    claimed = _claim_result_cache_job(
+        show_id,
+        reason=reason,
+        stale_seconds=_result_job_stale_seconds_for_show(show_id),
+    )
     if not claimed:
         _finish_immediate_warmup(show_id)
         logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="job_running")

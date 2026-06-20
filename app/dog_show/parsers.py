@@ -166,7 +166,7 @@ def _parse_breed_results(soup, show_id):
 
     # Breed name: extract from the first breed header on the page
     breed = ""
-    breed_header = soup.select_one("tr.ropotsikko td span.left")
+    breed_header = soup.select_one("tr.ropotsikko td span.left, tr.ropotsikko td div.floatleft")
     if breed_header:
         breed = breed_header.get_text(strip=True)
 

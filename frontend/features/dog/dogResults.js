@@ -135,6 +135,7 @@ export function createShowBreedGroups({
   query = '',
   allDogsLoaded = false,
   resultsOnly = false,
+  allowUncheckedResults = false,
   filters = {},
 } = {}) {
   const q = query.toLowerCase().trim()
@@ -170,13 +171,21 @@ export function createShowBreedGroups({
       }
     }
 
+    const hasOpenableResults = Boolean(
+      breed.has_results || hasRatedResults || breedDogs.length || allowUncheckedResults
+    )
     groups[key] = {
       key,
-      breed: { ...breed, has_results: breed.has_results || hasRatedResults || Boolean(breedDogs.length) },
+      breed: {
+        ...breed,
+        has_results: breed.has_results || hasRatedResults || Boolean(breedDogs.length),
+        can_fetch_results: hasOpenableResults,
+      },
       breedName: breed.name,
       count: breed.count,
       judge: breed.judge,
       has_results: breed.has_results || hasRatedResults || Boolean(breedDogs.length),
+      canOpenResults: hasOpenableResults,
       hasRatedResults,
       resultCount: progress.resultCount,
       resultTotalCount: progress.totalCount,
@@ -200,11 +209,12 @@ export function createShowBreedGroups({
     const progress = breedResultProgress(breed, breedDogs)
     groups[key] = {
       key,
-      breed: { ...breed, has_results: true },
+      breed: { ...breed, has_results: true, can_fetch_results: true },
       breedName: dog.breedName || breed.name,
       count: breed.count,
       judge: breed.judge,
       has_results: true,
+      canOpenResults: true,
       hasRatedResults: true,
       resultCount: progress.resultCount,
       resultTotalCount: progress.totalCount,

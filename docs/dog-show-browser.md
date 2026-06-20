@@ -70,8 +70,9 @@ Rate limits are intentionally lower than internal crawler throughput:
 10. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
 11. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
 12. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
-13. The crawler service also processes queued jobs and proactively warms recent shows.
-14. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
+13. Live whole-show result refreshes also probe a bounded rotating set of unchecked breeds, because a direct breed result page can contain rows before its group-list checkmark appears. When a probe finds rows, the breed is marked `has_results` in `dog_show_index.json`.
+14. The crawler service also processes queued jobs and proactively warms recent shows.
+15. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
 ## Persistent Files
 
@@ -109,6 +110,7 @@ Supported show-detail shapes:
 
 - Specialty pages where the landing page already contains `table.rotulistatable`.
 - Single-breed specialty pages where `table.rotulistatable` has no result checkmark but the direct breed URL can already contain results.
+- Live all-breed pages where a breed-list checkmark lags behind the direct breed result URL.
 - General all-breed pages where the landing page links to numeric FCI groups (`R=1` ... `R=10`).
 - Specialty pages where the landing page is BIS-focused and the real breed list is under `R=R` / `Rotujen tulokset`.
 
@@ -121,6 +123,8 @@ Environment knobs:
 - `DOG_RESULT_JOBS_PATH`: override result job queue path.
 - `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
 - `DOG_RESULT_BIS_FINAL_GRACE_SECONDS`: seconds to keep live polling after main BIS appears in cached awards; defaults to `1800`.
+- `DOG_RESULT_LIVE_PROBE_BREED_LIMIT`: max unchecked breeds to probe during one live whole-show refresh; defaults to `64`.
+- `DOG_RESULT_LIVE_JOB_STALE_SECONDS`: seconds before a non-heartbeating live result job can be claimed again; defaults to `DOG_RESULT_LIVE_TTL`.
 - `DOG_RESULT_ACTIVE_TTL`: legacy recent-show TTL setting; dated past shows now use the single final post-show check plus settled TTL.
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
@@ -156,6 +160,7 @@ This means:
 - Every 15 minutes: update up to 6 show breed indexes with 2.0 seconds between show-detail requests.
 - Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
+- During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
 
 The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.
 
@@ -185,6 +190,7 @@ Important UI behavior:
 - Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; past and upcoming show rows show only the full signup count.
 - The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
 - On live show detail pages, `Tuloksia saaneet` is on by default. Breed rows with cached progress show `n/N` judged dogs and, when the toggle is active, breeds with the freshest result progress sort first.
+- If the toggle is turned off during a live show, unchecked breeds remain openable so a direct breed page can be tried even before Showlink's group-list checkmark catches up.
 - Whole-show filters run only against the persisted `/all-results` cache. Before show-day 06:00, the UI keeps the breed list searchable and explains that whole-show results are not checked yet.
 - On the show date after 06:00, the UI allows checking whole-show data but warns that classes and results can fill in gradually as the day progresses.
 - While `/all-results` is warming, the page shows an animated progress card and polls the API.

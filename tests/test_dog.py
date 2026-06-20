@@ -119,6 +119,43 @@ SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML = """
 </table>
 """
 
+SAMPLE_BREED_RESULTS_FLOATLEFT_HTML = """
+<div id="divOtsikko">
+    <h1>20.-21.06.2026 Jyväskylä KV</h1>
+</div>
+<table class="roptulostaulukko">
+    <tr class="ropotsikko">
+        <td colspan="2">
+            <div class="floatleft">sileäkarvainen noutaja</div>
+            <div class="floatright">
+                <span><span class="tuomariotsikko">Tuomari </span>Pietro Marino</span>
+            </div>
+        </td>
+    </tr>
+    <tr class="roptulos">
+        <td>CACIB uros</td>
+        <td>Calzeat Causin Heads To Turn, Om. Nyberg Tiia</td>
+    </tr>
+</table>
+<table class="roduntulokset">
+    <tr class="sukupuoli">
+        <td colspan="7">Urokset</td>
+    </tr>
+    <tr class="luokka">
+        <td colspan="7"><span class="left">Avoin luokka</span></td>
+    </tr>
+    <tr class="tulos">
+        <td>776</td>
+        <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=SE10567%2F2024">Almanza Blast From The Past</a></td>
+        <td>ERI</td>
+        <td>1</td>
+        <td>PU3</td>
+        <td>SA</td>
+        <td></td>
+    </tr>
+</table>
+"""
+
 @pytest.fixture(autouse=True)
 def clear_caches(monkeypatch, tmp_path):
     monkeypatch.setattr(dog_store, "INDEX_DIR", str(tmp_path))
@@ -638,6 +675,63 @@ def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, clie
     mock_get.assert_not_called()
 
 
+def test_persist_show_detail_preserves_cached_result_flags(client):
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 26,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": False,
+            },
+        ],
+    }
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "source_url": dog_module._source_url(13771),
+        "started_at": 1,
+        "updated_at": 2,
+        "cached_at": 2,
+        "total_breeds": 1,
+        "completed_breeds": {
+            "8:124": {
+                "name": "sileäkarvainen noutaja",
+                "result_count": 18,
+                "judge": "Pietro Marino",
+            },
+        },
+        "failed_breeds": {},
+        "results": [],
+    })
+
+    dog_indexing._persist_show_detail_to_index(13771, {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "source_url": dog_module._source_url(13771),
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 26,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": False,
+            },
+        ],
+    }, 3)
+
+    breed = dog_module._show_index["shows"]["13771"]["breeds"][0]
+    assert breed["has_results"] is True
+    assert breed["judge"] == "Pietro Marino"
+
+
 @patch("app.dog_show.showlink.requests.get")
 def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     _show_detail_cache[13992] = {
@@ -1023,6 +1117,37 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     assert data["breed"] == "sileäkarvainen noutaja"
     assert data["judge"] == "Tarja Kolkka"
     assert dog_module._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {
+                "name": "sileäkarvainen noutaja",
+                "count": 26,
+                "group": "8",
+                "breed_id": "124",
+                "has_results": False,
+            },
+        ],
+    }
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows/13771/results?group=8&breed=124")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breed"] == "sileäkarvainen noutaja"
+    assert data["judge"] == "Pietro Marino"
+    assert data["results"][0]["name"] == "Almanza Blast From The Past"
+    assert dog_module._show_index["shows"]["13771"]["breeds"][0]["has_results"] is True
 
 
 @patch("app.dog_show.showlink.requests.get")
@@ -1668,6 +1793,7 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
         "_show_result_availability_for_id",
         lambda show_id, now=None: {"can_fetch": True, "show_state": "live"},
     )
+    monkeypatch.setattr(dog_result_cache, "RESULT_LIVE_PROBE_BREED_LIMIT", 0)
     monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
 
     detail_resp = MagicMock()
@@ -1744,6 +1870,54 @@ def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_
     doc = dog_module._load_result_cache_doc(13771)
     assert doc["total_breeds"] == 2
     assert set(doc["completed_breeds"]) == {"5:3", "5:4"}
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "updated_at": now,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
+            { "name": "sileäkarvainen noutaja", "count": 26, "group": "8", "breed_id": "124", "has_results": False },
+            { "name": "barbet", "count": 7, "group": "8", "breed_id": "293", "has_results": False },
+        ],
+    }
+    monkeypatch.setattr(
+        dog_result_cache,
+        "_show_result_availability_for_id",
+        lambda show_id, now=None: {"can_fetch": True, "show_state": "live", "reason": "show_day"},
+    )
+    monkeypatch.setattr(dog_result_cache, "RESULT_LIVE_PROBE_BREED_LIMIT", 1)
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    first_result_resp = MagicMock()
+    first_result_resp.text = SAMPLE_BREED_RESULTS_HTML
+    first_result_resp.status_code = 200
+    probed_result_resp = MagicMock()
+    probed_result_resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
+    probed_result_resp.status_code = 200
+    mock_get.side_effect = [first_result_resp, probed_result_resp]
+
+    summary = dog_module.crawl_result_cache_for_show(13771, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    requested_urls = [call.args[0] for call in mock_get.call_args_list]
+    assert requested_urls[0].endswith("Id=13771&R=5&RO=3")
+    assert requested_urls[1].endswith("Id=13771&R=8&RO=124")
+    indexed_breeds = dog_module._show_index["shows"]["13771"]["breeds"]
+    assert [breed["has_results"] for breed in indexed_breeds] == [True, True, False]
+    doc = dog_module._load_result_cache_doc(13771)
+    assert doc["total_breeds"] == 2
+    assert doc["completed_breeds"]["8:124"]["result_count"] == 1
+    assert doc["completed_breeds"]["8:124"]["judge"] == "Pietro Marino"
+    assert doc["live_probe_cursor"] == 1
 
 
 @patch("app.dog_show.showlink.requests.get")

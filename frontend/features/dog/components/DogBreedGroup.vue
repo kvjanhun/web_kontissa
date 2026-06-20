@@ -30,8 +30,8 @@ function critiqueKey(dog) {
 <template>
   <div class="dog-breed-group-section">
     <button
-      :class="['dog-breed-group-header-btn', !group.has_results && !group.dogs.length && 'dog-breed-row-disabled']"
-      :disabled="!group.has_results && !group.dogs.length"
+      :class="['dog-breed-group-header-btn', !group.canOpenResults && !group.dogs.length && 'dog-breed-row-disabled']"
+      :disabled="!group.canOpenResults && !group.dogs.length"
       @click="$emit('group-click', group)"
     >
       <span class="dog-breed-group-main">
@@ -86,7 +86,7 @@ function critiqueKey(dog) {
           <polyline points="208 96 128 176 48 96" />
         </svg>
         <svg
-          v-else-if="group.has_results"
+          v-else-if="group.canOpenResults"
           class="dog-arrow-sm"
           xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"
         >

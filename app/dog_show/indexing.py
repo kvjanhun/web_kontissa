@@ -259,9 +259,27 @@ def _update_index_breed_judge(show_id, group, breed_id, judge):
 
     for breed in show_data.get("breeds", []) or []:
         if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
-            if _clean_judge_name(breed.get("judge")) == judge:
+            current = breed.get("judge")
+            if _clean_judge_name(current) == judge:
+                if current != judge:
+                    breed["judge"] = judge
+                    return True
                 return False
             breed["judge"] = judge
+            return True
+    return False
+
+def _update_index_breed_result_flag(show_id, group, breed_id):
+    _load_index()
+    show_data = _show_index.get("shows", {}).get(str(int(show_id)))
+    if not show_data:
+        return False
+
+    for breed in show_data.get("breeds", []) or []:
+        if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
+            if breed.get("has_results") is True:
+                return False
+            breed["has_results"] = True
             return True
     return False
 
@@ -330,6 +348,73 @@ def _enrich_breeds_with_cached_result_judges(show_id, breeds):
         logger.warning("dog_detail_cached_judge_enrich_failed", show_id=show_id, error=str(e))
         return False
 
+def _cached_result_breed_state(show_id):
+    doc = _load_result_cache_doc(show_id)
+    if not doc:
+        return {}
+
+    state = {}
+    for key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict) or ":" not in str(key):
+            continue
+        group, breed_id = str(key).split(":", 1)
+        try:
+            result_count = int(breed_data.get("result_count") or 0)
+        except (TypeError, ValueError):
+            result_count = 0
+        state[(group, breed_id)] = {
+            "has_results": result_count > 0,
+            "judge": _clean_judge_name(breed_data.get("judge")),
+        }
+
+    for result in doc.get("results") or []:
+        key = _breed_identity_from_result(result)
+        if not key:
+            continue
+        breed_obj = _clean_breed_data(result.get("breedObj") or {})
+        item = state.setdefault(key, {})
+        item["has_results"] = True
+        if breed_obj.get("judge"):
+            item["judge"] = breed_obj.get("judge")
+    return state
+
+def _merge_persisted_result_state_into_breeds(show_id, breeds):
+    state = {}
+    existing = _show_index.get("shows", {}).get(str(int(show_id))) or {}
+    for breed in existing.get("breeds", []) or []:
+        group = breed.get("group")
+        breed_id = breed.get("breed_id")
+        if not group or not breed_id:
+            continue
+        key = (str(group), str(breed_id))
+        state[key] = {
+            "has_results": breed.get("has_results") is True,
+            "judge": _clean_judge_name(breed.get("judge")),
+        }
+
+    for key, cached_state in _cached_result_breed_state(show_id).items():
+        item = state.setdefault(key, {})
+        if cached_state.get("has_results"):
+            item["has_results"] = True
+        if cached_state.get("judge"):
+            item["judge"] = cached_state.get("judge")
+
+    if not state:
+        return breeds
+
+    merged = []
+    for breed in breeds or []:
+        item = dict(breed)
+        key = (str(item.get("group")), str(item.get("breed_id")))
+        persisted = state.get(key)
+        if persisted:
+            if persisted.get("has_results"):
+                item["has_results"] = True
+            if persisted.get("judge"):
+                item["judge"] = persisted.get("judge")
+        merged.append(item)
+    return merged
+
 def _persist_show_detail_to_index(show_id, detail, updated_at):
     breeds = detail.get("breeds") or []
     if not breeds:
@@ -347,7 +432,10 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
             "date": list_item.get("date") or existing.get("date", ""),
             "month": list_item.get("month") or existing.get("month", ""),
         },
-        detail,
+        {
+            **detail,
+            "breeds": _merge_persisted_result_state_into_breeds(show_id, breeds),
+        },
         updated_at,
     )
     _show_index["last_updated"] = updated_at

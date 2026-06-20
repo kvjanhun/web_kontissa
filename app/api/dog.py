@@ -17,7 +17,7 @@ from app.dog_show.indexing import (
     _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
     _mark_single_probe_breed_result_available, _show_detail_from_index,
     _show_result_availability_for_id, _show_stats_from_index, _shows_with_cached_stats,
-    _update_index_breed_judge,
+    _update_index_breed_judge, _update_index_breed_result_flag,
 )
 from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
@@ -197,13 +197,12 @@ def breed_results(show_id):
             _load_index()
             sid_str = str(show_id)
             if sid_str in _show_index["shows"]:
+                judge = _clean_judge_name(data.get("judge"))
                 updated_index = False
-                for b_data in _show_index["shows"][sid_str].get("breeds", []):
-                    if str(b_data.get("group")) == str(group) and str(b_data.get("breed_id")) == str(breed):
-                        judge = _clean_judge_name(data.get("judge"))
-                        if b_data.get("judge") != judge:
-                            b_data["judge"] = judge
-                            updated_index = True
+                if data.get("results") and _update_index_breed_result_flag(show_id, group, breed):
+                    updated_index = True
+                if judge and _update_index_breed_judge(show_id, group, breed, judge):
+                    updated_index = True
                 if updated_index:
                     _save_index()
         except Exception as e:
