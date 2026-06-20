@@ -95,6 +95,7 @@ For recent/live shows, complete caches with zero result breeds are ignored and r
 - Showlink relative sections such as `Tänään` and `Huomenna` are treated as recent; the backend infers the year from the listed date so live-result availability still works.
 - Whole-show result live TTL: 2 minutes by default while a show is still actively filling in.
 - Main `BIS-1` in cached awards starts a 30-minute live settling window by default. After that, the show stops using the 2-minute live TTL even if the calendar date has not changed.
+- If a live cache has at least as many result rows as the indexed entry count, the same 30-minute settling window starts from that entry-completion point. This catches specialty and smaller shows whose cached breed rows may not include a main `BIS-1`.
 - On the first calendar day after a show's final listed date, a cache last written before midnight is treated as stale once so the next crawler pass performs a final post-show check.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
 - Whole-show result active TTL for recent non-live shows: replaced by the single final post-show check once a show date is known.

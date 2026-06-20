@@ -11,7 +11,8 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _result_doc_live_bis_grace_finished, _show_age_days,
+    _parse_show_date, _result_doc_live_bis_grace_finished,
+    _result_doc_live_entry_completion_grace_finished, _show_age_days,
     _show_date_state, _show_result_availability, _utc_iso,
 )
 
@@ -121,15 +122,28 @@ def _show_stats_from_index(show_id, show=None, today=None):
     entry_count_known = False
     result_breed_count = 0
 
+    for breed in breeds:
+        try:
+            entry_count += int(breed.get("count"))
+            entry_count_known = True
+        except (TypeError, ValueError):
+            continue
+
     show_item = _show_item_for_stats(show_id, show=show)
     show_state = _show_date_state(show_item, today=today)
-    live_finished_by_bis = False
+    live_finished_by = None
     if show_state == "live":
-        live_finished_by_bis = _result_doc_live_bis_grace_finished(
-            _load_result_cache_doc(show_id),
-            _stats_timestamp_for_today(today),
-        )
-        if live_finished_by_bis:
+        result_doc = _load_result_cache_doc(show_id)
+        stats_timestamp = _stats_timestamp_for_today(today)
+        if _result_doc_live_bis_grace_finished(result_doc, stats_timestamp):
+            live_finished_by = "bis"
+        elif _result_doc_live_entry_completion_grace_finished(
+            result_doc,
+            stats_timestamp,
+            entry_count=entry_count if entry_count_known else None,
+        ):
+            live_finished_by = "entries"
+        if live_finished_by:
             show_state = "past"
     result_breeds_for_cache = _result_breeds_for_cache(
         show_id,
@@ -147,12 +161,6 @@ def _show_stats_from_index(show_id, show=None, today=None):
         elif (str(breed.get("group")), str(breed.get("breed_id"))) in result_breed_keys:
             result_breed_count += 1
 
-        try:
-            entry_count += int(breed.get("count"))
-            entry_count_known = True
-        except (TypeError, ValueError):
-            continue
-
     updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
     stats = {
         "indexed": True,
@@ -164,8 +172,8 @@ def _show_stats_from_index(show_id, show=None, today=None):
         "updated_at": updated or None,
         "updated_at_iso": _utc_iso(updated),
     }
-    if live_finished_by_bis:
-        stats["live_finished_by"] = "bis"
+    if live_finished_by:
+        stats["live_finished_by"] = live_finished_by
     if show_state == "live":
         result_count = _result_count_from_cache_doc(
             show_id,

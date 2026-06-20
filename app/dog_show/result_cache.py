@@ -27,7 +27,8 @@ from .store import (
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
     _is_recent_show, _result_doc_has_main_bis, _result_doc_live_bis_grace_finished,
-    _show_age_days, _show_result_availability, _utc_iso,
+    _result_doc_live_entry_completion_grace_finished, _show_age_days,
+    _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -72,6 +73,57 @@ def _mark_live_bis_state(doc, now):
     doc["live_result_grace_until"] = grace_until
     doc["live_result_grace_until_iso"] = _utc_iso(grace_until)
 
+def _entry_count_from_breeds(breeds):
+    entry_count = 0
+    entry_count_known = False
+    for breed in breeds or []:
+        try:
+            entry_count += int(breed.get("count"))
+            entry_count_known = True
+        except (TypeError, ValueError):
+            continue
+    return entry_count if entry_count_known else None
+
+def _clear_live_entry_completion_state(doc):
+    for key in (
+        "live_result_entry_count",
+        "live_result_entry_completion_at",
+        "live_result_entry_completion_at_iso",
+        "live_result_entry_grace_until",
+        "live_result_entry_grace_until_iso",
+    ):
+        doc.pop(key, None)
+
+def _mark_live_entry_completion_state(doc, entry_count, now, existing=None):
+    if not isinstance(doc, dict) or not isinstance(entry_count, int) or entry_count <= 0:
+        return
+
+    result_count = len(doc.get("results") or [])
+    if result_count < entry_count:
+        _clear_live_entry_completion_state(doc)
+        return
+
+    detected_at = doc.get("live_result_entry_completion_at")
+    if not detected_at and isinstance(existing, dict):
+        try:
+            existing_result_count = len(existing.get("results") or [])
+        except TypeError:
+            existing_result_count = 0
+        if existing_result_count >= entry_count:
+            detected_at = (
+                existing.get("live_result_entry_completion_at")
+                or existing.get("cached_at")
+                or existing.get("updated_at")
+            )
+
+    detected_at = detected_at or now
+    grace_until = detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+    doc["live_result_entry_count"] = entry_count
+    doc["live_result_entry_completion_at"] = detected_at
+    doc["live_result_entry_completion_at_iso"] = _utc_iso(detected_at)
+    doc["live_result_entry_grace_until"] = grace_until
+    doc["live_result_entry_grace_until_iso"] = _utc_iso(grace_until)
+
 def _post_show_final_due_at(show_id, now):
     show_date = _show_date_for_id(show_id)
     if not show_date:
@@ -96,7 +148,11 @@ def _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
 def _result_cache_ttl_for_show(show_id, now, doc=None):
     availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
     if availability.get("show_state") == "live":
-        if _result_doc_live_bis_grace_finished(doc, now):
+        entry_count = _entry_count_from_breeds(_result_breeds_from_index(show_id))
+        if (
+            _result_doc_live_bis_grace_finished(doc, now)
+            or _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=entry_count)
+        ):
             return None
         return RESULT_CACHE_LIVE_TTL
 
@@ -388,6 +444,11 @@ def _all_results_doc_base(show_id, source, existing=None):
         "bis_detected_at_iso": existing.get("bis_detected_at_iso"),
         "live_result_grace_until": existing.get("live_result_grace_until"),
         "live_result_grace_until_iso": existing.get("live_result_grace_until_iso"),
+        "live_result_entry_count": existing.get("live_result_entry_count"),
+        "live_result_entry_completion_at": existing.get("live_result_entry_completion_at"),
+        "live_result_entry_completion_at_iso": existing.get("live_result_entry_completion_at_iso"),
+        "live_result_entry_grace_until": existing.get("live_result_entry_grace_until"),
+        "live_result_entry_grace_until_iso": existing.get("live_result_entry_grace_until_iso"),
         "live_probe_cursor": existing.get("live_probe_cursor", 0),
         "live_probe_breed_count": existing.get("live_probe_breed_count"),
         "live_probe_breed_limit": existing.get("live_probe_breed_limit"),
@@ -755,6 +816,11 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "bis_detected_at_iso",
             "live_result_grace_until",
             "live_result_grace_until_iso",
+            "live_result_entry_count",
+            "live_result_entry_completion_at",
+            "live_result_entry_completion_at_iso",
+            "live_result_entry_grace_until",
+            "live_result_entry_grace_until_iso",
             "live_probe_cursor",
             "live_probe_breed_count",
             "live_probe_breed_limit",
@@ -826,6 +892,12 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         return failure
 
     cached_at = time.time()
+    _mark_live_entry_completion_state(
+        doc,
+        _entry_count_from_breeds(show_detail_data.get("breeds", [])),
+        cached_at,
+        existing=existing,
+    )
     _mark_live_bis_state(doc, cached_at)
     doc["status"] = "complete"
     doc["cached_at"] = cached_at

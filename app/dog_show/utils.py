@@ -87,6 +87,23 @@ def _result_doc_live_bis_grace_finished(doc, now):
 
     return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
 
+def _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=None):
+    if not isinstance(doc, dict):
+        return False
+
+    detected_at = doc.get("live_result_entry_completion_at")
+    if not detected_at and isinstance(entry_count, int) and entry_count > 0:
+        try:
+            result_count = len(doc.get("results") or [])
+        except TypeError:
+            result_count = 0
+        if result_count >= entry_count:
+            detected_at = doc.get("cached_at") or doc.get("updated_at")
+    if not detected_at:
+        return False
+
+    return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+
 def _month_year_from_label(month_str):
     if not month_str:
         return None, None

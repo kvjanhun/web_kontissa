@@ -1417,6 +1417,37 @@ def test_live_show_stats_stop_after_bis_grace(client):
     assert "result_count" not in stats
 
 
+def test_live_show_stats_stop_after_entry_completion_grace(client):
+    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    dog_module._show_index["shows"]["14079"] = {
+        "title": "20.06.2026 Bostoninterrieri",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            { "name": "bostoninterrieri", "count": 26, "group": "9", "breed_id": "296", "has_results": True },
+        ],
+    }
+    dog_module._save_result_cache_doc(14079, {
+        "status": "complete",
+        "cached_at": noon - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
+        "total_breeds": 1,
+        "completed_breeds": {"9:296": {"name": "bostoninterrieri", "result_count": 26}},
+        "results": [{"name": f"Boston {idx}", "breedName": "bostoninterrieri"} for idx in range(26)],
+    })
+
+    stats = dog_module._show_stats_from_index(
+        14079,
+        show={"id": 14079, "date": "20.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 20),
+    )
+
+    assert stats["show_state"] == "past"
+    assert stats["is_live"] is False
+    assert stats["live_finished_by"] == "entries"
+    assert "result_count" not in stats
+    assert dog_result_cache._result_cache_doc_is_fresh(14079, dog_module._load_result_cache_doc(14079), now=noon) is True
+
+
 def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
     final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
     now = final_due_at + 300
