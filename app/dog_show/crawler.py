@@ -131,3 +131,46 @@ def crawl_empty_index_once(limit=20, delay=0.5):
     summary["empty_candidates"] = len(candidates)
     logger.info("dog_crawler_empty_index_pass_complete", **summary)
     return summary
+
+import threading
+
+_background_indexing_lock = threading.Lock()
+_background_indexed_shows = set()
+
+def queue_background_indexing(shows):
+    """Start a background thread to crawl detail pages for shows not in index or with empty breeds."""
+    _load_index()
+    to_index = []
+    for show in shows or []:
+        sid = str(show["id"])
+        if sid in _background_indexed_shows:
+            continue
+
+        indexed_show = _show_index["shows"].get(sid)
+        is_missing = not indexed_show
+        is_empty = indexed_show and not indexed_show.get("breeds") and not indexed_show.get("empty_breed_list_confirmed")
+
+        if is_missing or is_empty:
+            to_index.append(show)
+
+    if not to_index:
+        return
+
+    def run_indexing():
+        for show in to_index:
+            sid = str(show["id"])
+            with _background_indexing_lock:
+                if sid in _background_indexed_shows:
+                    continue
+                _background_indexed_shows.add(sid)
+
+            try:
+                _update_index_show(show)
+            except Exception as e:
+                logger.warning("dog_background_indexing_failed", show_id=sid, error=str(e))
+                with _background_indexing_lock:
+                    _background_indexed_shows.discard(sid)
+            time.sleep(1.0) # Be polite to Showlink
+
+    thread = threading.Thread(target=run_indexing, name="dog-bg-indexer", daemon=True)
+    thread.start()

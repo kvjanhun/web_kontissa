@@ -3,7 +3,7 @@ import time
 
 import structlog
 
-from .config import SHOW_DETAIL_TTL
+from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS
 from .store import (
     _indexed_show, _load_index, _load_result_cache_doc, _save_index, _show_detail_cache,
     _show_index, _show_list_cache,
@@ -162,13 +162,18 @@ def _show_stats_from_index(show_id, show=None, today=None):
             result_breed_count += 1
 
     updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    availability = _show_result_availability(
+        show_item,
+        now=_stats_now_for_today(today) if today else None,
+    )
+    is_live = show_state == "live" and availability.get("can_fetch", True)
     stats = {
         "indexed": True,
         "breed_count": len(breeds),
         "entry_count": entry_count if entry_count_known else None,
         "result_breed_count": result_breed_count,
         "show_state": show_state,
-        "is_live": show_state == "live",
+        "is_live": is_live,
         "updated_at": updated or None,
         "updated_at_iso": _utc_iso(updated),
     }
@@ -423,6 +428,36 @@ def _merge_persisted_result_state_into_breeds(show_id, breeds):
         merged.append(item)
     return merged
 
+import re
+
+def _parse_show_meta_from_title(title):
+    if not title:
+        return {}
+    # Matches ranges like 20.-21.06.2026 or 31.05.-01.06.2026
+    match = re.match(r"^(\d{1,2}(?:\.\d{1,2})?\.?\s*-\s*\d{1,2}\.(\d{1,2})\.(\d{4}))\s+(.+)$", title.strip())
+    if not match:
+        # Matches single date like 21.06.2026
+        match = re.match(r"^(\d{1,2}\.(\d{1,2})\.(\d{4}))\s+(.+)$", title.strip())
+        
+    if match:
+        full_date_str, month_str, year_str, name = match.groups()
+        date_part = full_date_str.replace(f".{year_str}", "")
+        if not date_part.endswith("."):
+            date_part += "."
+            
+        month_idx = int(month_str) - 1
+        if 0 <= month_idx < 12:
+            month = f"{FINNISH_MONTHS[month_idx]} {year_str}"
+        else:
+            month = ""
+            
+        return {
+            "name": name.strip(),
+            "date": date_part,
+            "month": month
+        }
+    return {}
+
 def _persist_show_detail_to_index(show_id, detail, updated_at):
     breeds = detail.get("breeds") or []
     if not breeds:
@@ -432,13 +467,14 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
     sid = str(int(show_id))
     existing = _show_index.get("shows", {}).get(sid) or {}
     list_item = _show_list_item_for_id(show_id) or {}
+    meta = _parse_show_meta_from_title(detail.get("title", ""))
 
     _show_index.setdefault("shows", {})[sid] = _index_entry_from_detail(
         show_id,
         {
-            "name": list_item.get("name") or existing.get("name") or detail.get("title", ""),
-            "date": list_item.get("date") or existing.get("date", ""),
-            "month": list_item.get("month") or existing.get("month", ""),
+            "name": list_item.get("name") or existing.get("name") or meta.get("name") or detail.get("title", ""),
+            "date": list_item.get("date") or existing.get("date") or meta.get("date") or "",
+            "month": list_item.get("month") or existing.get("month") or meta.get("month") or "",
         },
         {
             **detail,
@@ -540,9 +576,9 @@ def _show_month_for_id(show_id):
     if indexed_show:
         return indexed_show.get("month", "")
 
-    for show in _show_list_cache.get("data") or []:
-        if str(show.get("id")) == sid:
-            return show.get("month", "")
+    list_item = _show_list_item_for_id(show_id)
+    if list_item:
+        return list_item.get("month", "")
 
     return ""
 

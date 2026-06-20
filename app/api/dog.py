@@ -11,7 +11,7 @@ from app.dog_show.config import (
     BASE_URL, BREED_RESULT_TTL, REQUEST_HEADERS, REQUEST_TIMEOUT, RESULT_CACHE_VERSION,
     RESULT_RETRY_AFTER_SECONDS, SHOW_DETAIL_TTL, SHOW_LIST_TTL,
 )
-from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once
+from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once, queue_background_indexing
 from app.dog_show.indexing import (
     _cached_show_detail, _enrich_breeds_with_cached_result_judges,
     _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
@@ -70,6 +70,7 @@ def show_list():
         shows = _get_show_list()
         _load_index()
         _queue_live_result_cache_refreshes(shows)
+        queue_background_indexing(shows)
         return jsonify({
             "shows": _shows_with_cached_stats(shows),
             "index": _index_summary(total_show_count=len(shows)),

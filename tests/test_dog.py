@@ -2239,3 +2239,62 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     assert data["results"][0]["judge_match_count"] == 1
     assert data["results"][0]["match"] == "judge"
     assert dog_module._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
+
+
+def test_parse_show_meta_from_title():
+    from app.dog_show.indexing import _parse_show_meta_from_title
+    # Single date
+    meta1 = _parse_show_meta_from_title("21.06.2026 Amerikancockerspanieli")
+    assert meta1 == {
+        "name": "Amerikancockerspanieli",
+        "date": "21.06.",
+        "month": "kesäkuu 2026"
+    }
+
+    # Same-month range
+    meta2 = _parse_show_meta_from_title("20.-21.06.2026 Jyväskylä KV")
+    assert meta2 == {
+        "name": "Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026"
+    }
+
+    # Cross-month range
+    meta3 = _parse_show_meta_from_title("31.05.-01.06.2026 Specialty Show")
+    assert meta3 == {
+        "name": "Specialty Show",
+        "date": "31.05.-01.06.",
+        "month": "kesäkuu 2026"
+    }
+
+    # Invalid title
+    assert _parse_show_meta_from_title("Invalid Title Format") == {}
+
+
+def test_show_stats_is_live_only_when_results_fetchable(client):
+    dog_module._show_index["shows"]["14021"] = {
+        "title": "21.06.2026 Amerikancockerspanieli",
+        "name": "Amerikancockerspanieli",
+        "date": "21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "amerikancockerspanieli", "count": 21, "group": "8", "breed_id": "117"},
+        ],
+    }
+
+    with patch("app.dog_show.indexing._show_result_availability") as mock_avail:
+        mock_avail.return_value = {"can_fetch": False}
+        stats = dog_indexing._show_stats_from_index(
+            14021,
+            today=dog_module.datetime.date(2026, 6, 21)
+        )
+        assert stats["is_live"] is False
+
+    with patch("app.dog_show.indexing._show_result_availability") as mock_avail:
+        mock_avail.return_value = {"can_fetch": True}
+        stats = dog_indexing._show_stats_from_index(
+            14021,
+            today=dog_module.datetime.date(2026, 6, 21)
+        )
+        assert stats["is_live"] is True
+
