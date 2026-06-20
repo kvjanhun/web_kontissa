@@ -7,9 +7,11 @@ import structlog
 
 from . import config
 from .indexing import (
-    _cached_show_detail, _is_show_recent_by_id,
-    _result_breeds_from_index, _result_breeds_with_results, _show_date_for_id,
-    _show_result_availability_for_id, _update_index_breed_judge,
+    _cached_show_detail, _indexed_result_flags_need_refresh, _is_show_recent_by_id,
+    _mark_single_probe_breed_result_available, _persist_show_detail_to_index,
+    _result_cache_doc_needs_result_refresh,
+    _result_breeds_for_cache, _result_breeds_from_index, _result_breeds_with_results,
+    _show_date_for_id, _show_result_availability_for_id, _update_index_breed_judge,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
@@ -21,7 +23,7 @@ from .store import (
     _show_all_results_cache, _show_detail_cache,
 )
 from .utils import (
-    _clean_all_results, _clean_breed_data, _clean_breed_list, _clean_judge_name,
+    _clean_all_results, _clean_breed_data, _clean_judge_name,
     _is_recent_show, _show_age_days, _utc_iso,
 )
 
@@ -45,8 +47,15 @@ _immediate_warmup_slots = threading.BoundedSemaphore(max(1, config.RESULT_IMMEDI
 def _result_cache_doc_is_complete(doc):
     return bool(doc and doc.get("status") == "complete")
 
+def _empty_result_cache_needs_refresh(show_id, doc, now=None):
+    availability_now = datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
+    return _result_cache_doc_needs_result_refresh(show_id, doc, now=availability_now)
+
 def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if not _result_cache_doc_is_complete(doc):
+        return False
+
+    if _empty_result_cache_needs_refresh(show_id, doc, now=now):
         return False
 
     cached_at = doc.get("cached_at") or doc.get("updated_at") or 0
@@ -82,7 +91,7 @@ def _result_cache_progress(show_id, doc=None, job=None):
     failed_breeds = doc.get("failed_breeds") or {}
     total_breeds = doc.get("total_breeds")
     if total_breeds is None:
-        total_breeds = len(_result_breeds_with_results(_result_breeds_from_index(show_id)))
+        total_breeds = len(_result_breeds_for_cache(show_id, _result_breeds_from_index(show_id)))
         if total_breeds == 0:
             total_breeds = None
 
@@ -138,17 +147,30 @@ def _cached_all_results_response(show_id, allow_stale=False):
 
     cached = _show_all_results_cache.get(int(show_id))
     if cached and cached.get("data"):
-        stale = _is_show_recent_by_id(show_id) and (now - (cached.get("ts") or 0)) >= SHOW_ALL_RESULTS_TTL
-        if not stale or allow_stale:
-            data = dict(cached["data"])
-            if data.get("cache"):
-                data["cache"] = dict(data["cache"])
-                data["cache"]["status"] = "stale" if stale else "complete"
-                data["cache"]["stale"] = stale
-            return data
+        cached_data = cached["data"]
+        cached_doc = {
+            "status": "complete",
+            "total_breeds": (cached_data.get("cache") or {}).get("total_breeds"),
+            "completed_breeds": {},
+            "results": cached_data.get("results") or [],
+        }
+        if _empty_result_cache_needs_refresh(show_id, cached_doc, now=now):
+            _show_all_results_cache.pop(int(show_id), None)
+        else:
+            stale = _is_show_recent_by_id(show_id) and (now - (cached.get("ts") or 0)) >= SHOW_ALL_RESULTS_TTL
+            if not stale or allow_stale:
+                data = dict(cached_data)
+                if data.get("cache"):
+                    data["cache"] = dict(data["cache"])
+                    data["cache"]["status"] = "stale" if stale else "complete"
+                    data["cache"]["stale"] = stale
+                return data
 
     doc = _load_result_cache_doc(show_id)
     if not _result_cache_doc_is_complete(doc):
+        return None
+
+    if _empty_result_cache_needs_refresh(show_id, doc, now=now):
         return None
 
     stale = not _result_cache_doc_is_fresh(show_id, doc, now=now)
@@ -225,23 +247,35 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
 
 def _show_detail_for_result_cache(show_id):
     indexed_show = _indexed_show(show_id)
+    indexed_needs_result_refresh = _indexed_result_flags_need_refresh(show_id, indexed_show)
     if indexed_show and indexed_show.get("breeds"):
-        return {
-            "id": int(show_id),
-            "title": indexed_show.get("title") or indexed_show.get("name", ""),
-            "source_url": indexed_show.get("source_url") or _source_url(show_id),
-            "breeds": _clean_breed_list(indexed_show.get("breeds", [])),
-        }
+        if not indexed_needs_result_refresh:
+            breeds = _mark_single_probe_breed_result_available(show_id, indexed_show.get("breeds", []))
+            return {
+                "id": int(show_id),
+                "title": indexed_show.get("title") or indexed_show.get("name", ""),
+                "source_url": indexed_show.get("source_url") or _source_url(show_id),
+                "breeds": breeds,
+            }
 
     cached = _cached_show_detail(show_id, allow_stale=True)
     if cached and cached.get("breeds"):
-        return cached
+        cached_breeds = cached.get("breeds") or []
+        if _result_breeds_with_results(cached_breeds) or not indexed_needs_result_refresh:
+            detail = dict(cached)
+            detail["breeds"] = _mark_single_probe_breed_result_available(show_id, cached_breeds)
+            return detail
 
     soup = _fetch_page(_source_url(show_id))
     detail = _parse_show_detail(soup, show_id)
     fetched_at = time.time()
     detail["fetched_at"] = fetched_at
     detail["fetched_at_iso"] = _utc_iso(fetched_at)
+    detail["breeds"] = _mark_single_probe_breed_result_available(show_id, detail.get("breeds", []))
+    try:
+        _persist_show_detail_to_index(show_id, detail, fetched_at)
+    except Exception as exc:
+        logger.warning("dog_result_cache_detail_index_persist_failed", show_id=show_id, error=str(exc))
     _show_detail_cache[int(show_id)] = {"data": detail, "ts": fetched_at}
     return detail
 
@@ -491,7 +525,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "progress": _result_cache_progress(show_id, doc=doc),
         }
 
-    breeds_with_results = _result_breeds_with_results(show_detail_data.get("breeds", []))
+    breeds_with_results = _result_breeds_for_cache(show_id, show_detail_data.get("breeds", []))
     doc["title"] = show_detail_data.get("title", "")
     doc["source_url"] = show_detail_data.get("source_url") or _source_url(show_id)
     doc["total_breeds"] = len(breeds_with_results)
@@ -608,7 +642,11 @@ def _auto_result_cache_candidates(now):
 
         indexed_show = _indexed_show(show_id)
         indexed_breeds = indexed_show.get("breeds", []) if indexed_show else []
-        if indexed_breeds and not _result_breeds_with_results(indexed_breeds):
+        if (
+            indexed_breeds
+            and not _result_breeds_for_cache(show_id, indexed_breeds)
+            and not _indexed_result_flags_need_refresh(show_id, indexed_show)
+        ):
             continue
 
         doc = _load_result_cache_doc(show_id)

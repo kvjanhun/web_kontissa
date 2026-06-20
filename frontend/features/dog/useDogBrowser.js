@@ -55,6 +55,7 @@ export function useDogBrowser() {
   const searchError = ref('')
 
   const breedSearchQuery = ref('')
+  const resultBreedsOnly = ref(false)
   const dogSearchQuery = ref('')
   const dogGradeFilter = ref('')
   const dogClassFilter = ref('')
@@ -141,6 +142,7 @@ export function useDogBrowser() {
     expandedCritiques.value = new Set()
     expandedBreedGroups.value = new Set()
     breedSearchQuery.value = ''
+    resultBreedsOnly.value = false
     dogSearchQuery.value = ''
     dogGradeFilter.value = ''
     dogClassFilter.value = ''
@@ -157,6 +159,9 @@ export function useDogBrowser() {
   const allDogsProgressText = computed(() => getAllDogsProgressText(allDogsProgress.value))
   const allDogsAvailability = computed(() => (
     getShowResultAvailability(selectedShow.value || showDetail.value)
+  ))
+  const resultBreedFilterAvailable = computed(() => (
+    Boolean(selectedShow.value?.stats?.is_live || allDogsAvailability.value?.phase === 'show_day')
   ))
 
   const showSearchPlaceholder = computed(() => (
@@ -178,6 +183,7 @@ export function useDogBrowser() {
   const showWideFiltersActive = computed(() => (
     allDogsLoaded.value && Boolean(
       breedSearchQuery.value.trim() ||
+      resultBreedsOnly.value ||
       dogGradeFilter.value ||
       dogClassFilter.value ||
       dogAwardFilter.value
@@ -189,6 +195,7 @@ export function useDogBrowser() {
     dogs: allDogsAfterShowFilters.value,
     query: breedSearchQuery.value,
     allDogsLoaded: allDogsLoaded.value,
+    resultsOnly: resultBreedsOnly.value,
     filters: {
       grade: dogGradeFilter.value,
       className: dogClassFilter.value,
@@ -500,7 +507,7 @@ export function useDogBrowser() {
   ))
 
   const breedEmptyText = computed(() => (
-    breedSearchQuery.value.trim() || dogGradeFilter.value || dogClassFilter.value || dogAwardFilter.value
+    breedSearchQuery.value.trim() || resultBreedsOnly.value || dogGradeFilter.value || dogClassFilter.value || dogAwardFilter.value
       ? 'Ei rotuja tai tuloksia valituilla rajauksilla.'
       : 'Ei rotuja.'
   ))
@@ -531,6 +538,10 @@ export function useDogBrowser() {
     firstQueryValue(route.query.group) || '',
     firstQueryValue(route.query.breed) || '',
   ].join('|'))
+
+  watch(resultBreedFilterAvailable, (available) => {
+    if (!available) resultBreedsOnly.value = false
+  })
 
   const filteredDogResults = computed(() => filterDogResults(breedResults.value?.results || [], {
     search: dogSearchQuery.value,
@@ -664,6 +675,8 @@ export function useDogBrowser() {
     searchLoading,
     searchError,
     breedSearchQuery,
+    resultBreedsOnly,
+    resultBreedFilterAvailable,
     dogSearchQuery,
     dogGradeFilter,
     dogClassFilter,

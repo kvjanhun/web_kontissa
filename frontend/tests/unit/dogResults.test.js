@@ -316,6 +316,14 @@ describe('createShowBreedGroups', () => {
       has_results: true,
       judge: 'Paula Steele',
     },
+    {
+      name: 'Akita',
+      count: 1,
+      group: '5',
+      breed_id: '10',
+      has_results: false,
+      judge: 'Tarja Kolkka',
+    },
   ]
 
   const dogs = [
@@ -369,6 +377,28 @@ describe('createShowBreedGroups', () => {
       has_results: true,
       dogs: [dogs[1]],
     })
+  })
+
+  it('can show only breeds with available results', () => {
+    const groups = createShowBreedGroups({
+      breeds,
+      dogs: [],
+      resultsOnly: true,
+    })
+
+    expect(groups).toHaveLength(1)
+    expect(groups[0].breedName).toBe('Basenji')
+  })
+
+  it('keeps cache-only result breeds when filtering to available results', () => {
+    const groups = createShowBreedGroups({
+      breeds,
+      dogs,
+      allDogsLoaded: true,
+      resultsOnly: true,
+    })
+
+    expect(groups.map(group => group.breedName)).toEqual(['Basenji', 'Akita'])
   })
 
   it('can filter by dog details from the whole-show cache', () => {

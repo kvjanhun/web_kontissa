@@ -67,8 +67,9 @@ Rate limits are intentionally lower than internal crawler throughput:
 7. Opening the whole-show filter calls `/api/dog/shows/<show_id>/all-results`.
 8. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
 9. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
-10. The crawler service also processes queued jobs and proactively warms recent shows.
-11. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
+10. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
+11. The crawler service also processes queued jobs and proactively warms recent shows.
+12. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
 ## Persistent Files
 
@@ -81,12 +82,14 @@ All dog crawler state is JSON under `DOG_INDEX_DIR`. In Docker this is `/app/dat
 These files are not SQLite tables. Litestream currently replicates `/data/site.db` only, so these JSON files are persistent on disk but not covered by the Litestream database backup policy.
 
 Do not delete `app/data` or the whole `dog_result_cache` directory casually. To repair one bad result cache, remove only `app/data/dog_result_cache/<show_id>.json`; the next read or crawler pass will rebuild it.
+For recent/live shows, complete caches with zero result breeds are ignored and rebuilt when the index is stale or now shows result-enabled breeds.
 
 ## Freshness Policy
 
 - Show list in-memory cache: 30 minutes.
 - Show detail in-memory cache for recent or ongoing shows: 10 minutes.
 - Breed result in-memory cache for recent or ongoing shows: 10 minutes.
+- Showlink relative sections such as `Tänään` and `Huomenna` are treated as recent; the backend infers the year from the listed date so live-result availability still works.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
 - Whole-show result active TTL: 6 hours by default.
 - Whole-show result settled TTL: 7 days by default.
@@ -100,6 +103,7 @@ Do not delete `app/data` or the whole `dog_result_cache` directory casually. To 
 Supported show-detail shapes:
 
 - Specialty pages where the landing page already contains `table.rotulistatable`.
+- Single-breed specialty pages where `table.rotulistatable` has no result checkmark but the direct breed URL can already contain results.
 - General all-breed pages where the landing page links to numeric FCI groups (`R=1` ... `R=10`).
 - Specialty pages where the landing page is BIS-focused and the real breed list is under `R=R` / `Rotujen tulokset`.
 

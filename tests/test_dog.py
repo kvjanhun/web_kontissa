@@ -5,10 +5,11 @@ import requests
 from app.api.dog import _show_list_cache, _show_detail_cache, _breed_result_cache, _show_all_results_cache
 from app.api import dog as dog_module
 from app.dog_show import crawler as dog_crawler
+from app.dog_show import indexing as dog_indexing
 from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import showlink as dog_showlink
 from app.dog_show import store as dog_store
-from app.dog_show.utils import _show_result_availability
+from app.dog_show.utils import _is_recent_show, _show_result_availability
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -248,6 +249,50 @@ def test_show_stats_include_live_result_progress(client):
     assert "result_count" not in uncached_live_stats
 
 
+def test_show_stats_ignore_empty_single_breed_specialty_cache(client):
+    dog_module._show_index["shows"]["14079"] = {
+        "title": "20.06.2026 Bostoninterrieri",
+        "name": "Bostoninterrieri",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14079),
+        "breeds": [
+            {
+                "name": "bostoninterrieri",
+                "count": 26,
+                "group": "9",
+                "breed_id": "296",
+                "has_results": False,
+            },
+        ],
+    }
+    dog_module._save_result_cache_doc(14079, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 14079,
+        "status": "complete",
+        "title": "20.06.2026 Bostoninterrieri",
+        "source_url": dog_module._source_url(14079),
+        "started_at": 1000,
+        "updated_at": 1001,
+        "cached_at": 1001,
+        "total_breeds": 0,
+        "completed_breeds": {},
+        "failed_breeds": {},
+        "results": [],
+    })
+
+    stats = dog_module._show_stats_from_index(
+        14079,
+        show={"id": 14079, "date": "20.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 20),
+    )
+
+    assert stats["is_live"] is True
+    assert stats["entry_count"] == 26
+    assert stats["result_breed_count"] == 1
+    assert "result_count" not in stats
+
+
 def test_show_result_availability_waits_until_show_morning():
     show = {"date": "20.06.", "month": "kesäkuu 2026"}
 
@@ -271,6 +316,20 @@ def test_show_result_availability_waits_until_show_morning():
     assert early_morning["reason"] == "show_morning"
     assert show_day["can_fetch"] is True
     assert show_day["reason"] == "show_day"
+
+def test_show_result_availability_handles_showlink_today_section():
+    show = {"date": "20.-21.06.", "month": "Tänään"}
+
+    availability = _show_result_availability(
+        show,
+        now=dog_module.datetime.datetime(2026, 6, 20, 12, 0),
+    )
+
+    assert _is_recent_show("Tänään") is True
+    assert availability["can_fetch"] is True
+    assert availability["show_state"] == "live"
+    assert availability["start_date"] == "2026-06-20"
+    assert availability["end_date"] == "2026-06-21"
 
 
 @patch("app.dog_show.showlink.requests.get")
@@ -370,6 +429,67 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
     assert data["breeds"][0]["name"] == "basenji"
     assert data["breeds"][0]["judge"] == "Paula Steele"
     assert data["cache"]["status"] == "indexed"
+    mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get, monkeypatch, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14042),
+        "updated_at": 1,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
+        ],
+    }
+    monkeypatch.setattr(dog_indexing, "_is_show_recent_by_id", lambda show_id: True)
+    monkeypatch.setattr(
+        dog_indexing,
+        "_show_result_availability_for_id",
+        lambda show_id, now=None: {"can_fetch": True, "show_state": "live"},
+    )
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    resp = client.get("/api/dog/shows/14042")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breeds"][0]["has_results"] is True
+    assert dog_module._show_index["shows"]["14042"]["breeds"][0]["has_results"] is True
+    mock_get.assert_called_once()
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, client):
+    dog_module._show_index["shows"]["14079"] = {
+        "title": "20.06.2000 Bostoninterrieri",
+        "name": "Bostoninterrieri",
+        "date": "20.06.",
+        "month": "kesäkuu 2000",
+        "source_url": dog_module._source_url(14079),
+        "updated_at": 1781952360,
+        "breeds": [
+            {
+                "name": "bostoninterrieri",
+                "count": 26,
+                "group": "9",
+                "breed_id": "296",
+                "has_results": False,
+            },
+        ],
+    }
+
+    resp = client.get("/api/dog/shows/14079")
+
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["breeds"][0]["has_results"] is True
     mock_get.assert_not_called()
 
 
@@ -985,6 +1105,96 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
 
 
 @patch("app.dog_show.showlink.requests.get")
+def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_result_flags(mock_get, monkeypatch, client):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14042),
+        "updated_at": 1,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
+        ],
+    }
+    dog_module._save_result_cache_doc(14042, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 14042,
+        "status": "complete",
+        "title": "14.06.2026 Basenji",
+        "source_url": dog_module._source_url(14042),
+        "started_at": 1000,
+        "updated_at": 1001,
+        "cached_at": 1001,
+        "total_breeds": 0,
+        "completed_breeds": {},
+        "failed_breeds": {},
+        "results": [],
+    })
+    monkeypatch.setattr(
+        dog_module,
+        "_show_result_availability_for_id",
+        lambda show_id, now=None: {"can_fetch": True, "show_state": "live"},
+    )
+    monkeypatch.setattr(
+        dog_result_cache,
+        "_indexed_result_flags_need_refresh",
+        lambda show_id, indexed_show=None, now=None: True,
+    )
+
+    resp = client.get("/api/dog/shows/14042/all-results")
+
+    assert resp.status_code == 202
+    data = resp.get_json()
+    assert data["status"] == "warming"
+    assert data["progress"]["state"] == "queued"
+    mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, client):
+    dog_module._show_index["shows"]["14079"] = {
+        "title": "20.06.2000 Bostoninterrieri",
+        "name": "Bostoninterrieri",
+        "date": "20.06.",
+        "month": "kesäkuu 2000",
+        "source_url": dog_module._source_url(14079),
+        "updated_at": 1000,
+        "breeds": [
+            {
+                "name": "bostoninterrieri",
+                "count": 26,
+                "group": "9",
+                "breed_id": "296",
+                "has_results": False,
+            },
+        ],
+    }
+    dog_module._save_result_cache_doc(14079, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 14079,
+        "status": "complete",
+        "title": "20.06.2000 Bostoninterrieri",
+        "source_url": dog_module._source_url(14079),
+        "started_at": 1000,
+        "updated_at": 1001,
+        "cached_at": 1001,
+        "total_breeds": 0,
+        "completed_breeds": {},
+        "failed_breeds": {},
+        "results": [],
+    })
+
+    resp = client.get("/api/dog/shows/14079/all-results")
+
+    assert resp.status_code == 202
+    data = resp.get_json()
+    assert data["status"] == "warming"
+    assert data["progress"]["state"] == "queued"
+    mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
 def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
     dog_module._show_index["shows"]["14042"] = {
         "title": "14.06.2000 Basenji",
@@ -1117,6 +1327,85 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
     assert resp.status_code == 200
     assert resp.get_json()["results"][0]["grade"] == "KP"
     mock_get.assert_not_called()
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results(mock_get, monkeypatch):
+    dog_module._show_index["shows"]["14042"] = {
+        "title": "14.06.2026 Basenji",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14042),
+        "updated_at": 1,
+        "breeds": [
+            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache, "_indexed_result_flags_need_refresh", lambda show_id, indexed_show=None, now=None: True)
+    monkeypatch.setattr(
+        dog_result_cache,
+        "_show_result_availability_for_id",
+        lambda show_id, now=None: {"can_fetch": True, "show_state": "live"},
+    )
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    detail_resp = MagicMock()
+    detail_resp.text = SAMPLE_SHOW_DETAIL_HTML
+    detail_resp.status_code = 200
+    result_resp = MagicMock()
+    result_resp.text = SAMPLE_BREED_RESULTS_HTML
+    result_resp.status_code = 200
+    mock_get.side_effect = [detail_resp, result_resp]
+
+    summary = dog_module.crawl_result_cache_for_show(14042, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert mock_get.call_count == 2
+    assert dog_module._show_index["shows"]["14042"]["breeds"][0]["has_results"] is True
+    doc = dog_module._load_result_cache_doc(14042)
+    assert doc["total_breeds"] == 1
+    assert doc["completed_breeds"]["5:3"]["result_count"] == 1
+    assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(mock_get, monkeypatch):
+    dog_module._show_index["shows"]["14079"] = {
+        "title": "20.06.2000 Bostoninterrieri",
+        "name": "Bostoninterrieri",
+        "date": "20.06.",
+        "month": "kesäkuu 2000",
+        "source_url": dog_module._source_url(14079),
+        "updated_at": 1000,
+        "breeds": [
+            {
+                "name": "bostoninterrieri",
+                "count": 26,
+                "group": "9",
+                "breed_id": "296",
+                "has_results": False,
+            },
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_BREED_RESULTS_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    summary = dog_module.crawl_result_cache_for_show(14079, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert mock_get.call_count == 1
+    assert "Id=14079" in mock_get.call_args.args[0]
+    assert "R=9" in mock_get.call_args.args[0]
+    assert "RO=296" in mock_get.call_args.args[0]
+    doc = dog_module._load_result_cache_doc(14079)
+    assert doc["total_breeds"] == 1
+    assert doc["completed_breeds"]["9:296"]["result_count"] == 1
+    assert doc["results"][0]["breedName"] == "bostoninterrieri"
+    assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
 
 
 @patch("app.dog_show.showlink.requests.get")

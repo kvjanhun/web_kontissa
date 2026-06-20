@@ -30,6 +30,14 @@ defineProps({
     type: String,
     default: '',
   },
+  resultBreedsOnly: {
+    type: Boolean,
+    default: false,
+  },
+  resultBreedFilterAvailable: {
+    type: Boolean,
+    default: false,
+  },
   dogGradeFilter: {
     type: String,
     default: '',
@@ -103,6 +111,7 @@ defineProps({
 defineEmits([
   'retry-detail',
   'update:breedSearchQuery',
+  'update:resultBreedsOnly',
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
@@ -139,6 +148,8 @@ function awardCritiqueKey(group, dog) {
     <div v-else-if="showDetail">
       <DogShowTools
         :breed-search-query="breedSearchQuery"
+        :result-breeds-only="resultBreedsOnly"
+        :result-breed-filter-available="resultBreedFilterAvailable"
         :dog-grade-filter="dogGradeFilter"
         :dog-class-filter="dogClassFilter"
         :dog-award-filter="dogAwardFilter"
@@ -152,6 +163,7 @@ function awardCritiqueKey(group, dog) {
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
         @update:breedSearchQuery="$emit('update:breedSearchQuery', $event)"
+        @update:resultBreedsOnly="$emit('update:resultBreedsOnly', $event)"
         @update:dogGradeFilter="$emit('update:dogGradeFilter', $event)"
         @update:dogClassFilter="$emit('update:dogClassFilter', $event)"
         @update:dogAwardFilter="$emit('update:dogAwardFilter', $event)"

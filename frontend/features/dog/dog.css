@@ -898,8 +898,26 @@
   .dog-results-filter-grid.dog-show-tools-grid {
     grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
   }
+  .dog-results-filter-grid.dog-show-tools-grid-live {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+    column-gap: 1.25rem;
+    row-gap: 1.15rem;
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-tools-search {
+    grid-column: span 7;
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-live .dog-results-only-col {
+    grid-column: span 5;
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-tools-action,
+  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-progress-inline {
+    grid-column: 1 / -1;
+  }
   .dog-results-filter-grid.dog-show-tools-grid-loading {
     grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-loading.dog-show-tools-grid-live {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
   }
   .dog-results-filter-grid.dog-show-tools-grid-loaded {
     grid-template-columns:
@@ -908,9 +926,93 @@
       minmax(0, 0.8fr)
       minmax(0, 0.85fr);
   }
+  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live {
+    grid-template-columns: repeat(12, minmax(0, 1fr));
+  }
+  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-grade-filter,
+  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-class-filter,
+  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-award-filter {
+    grid-column: span 4;
+  }
 }
 .dog-breed-search {
   margin-bottom: 0;
+}
+.dog-show-tools-grid-live .dog-show-tools-action .dog-show-wide-toggle {
+  max-width: 26rem;
+}
+.dog-show-tools-grid-live .dog-show-wide-note {
+  max-width: 42rem;
+}
+.dog-results-only-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-height: 44px;
+  padding: 0 0.75rem;
+  background: var(--dog-control-bg);
+  border: 1px solid var(--dog-border-strong);
+  border-radius: var(--dog-radius-md);
+  color: var(--dog-text);
+  font-size: 0.84rem;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.dog-results-only-toggle:hover {
+  background: color-mix(in srgb, var(--dog-accent-2) 8%, var(--dog-surface));
+  border-color: var(--dog-accent-2);
+}
+.dog-results-only-toggle input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 1;
+}
+.dog-results-only-switch {
+  position: relative;
+  width: 2.1rem;
+  height: 1.15rem;
+  flex-shrink: 0;
+  pointer-events: none;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--dog-text-muted) 26%, var(--dog-control-bg));
+  border: 1px solid color-mix(in srgb, var(--dog-border-strong) 80%, transparent);
+  transition: background 0.15s, border-color 0.15s;
+}
+.dog-results-only-switch span {
+  position: absolute;
+  top: 50%;
+  left: 0.15rem;
+  width: 0.78rem;
+  height: 0.78rem;
+  border-radius: 999px;
+  background: var(--dog-surface);
+  box-shadow: 0 1px 3px color-mix(in srgb, var(--dog-text) 25%, transparent);
+  transform: translateY(-50%);
+  transition: left 0.15s, background 0.15s;
+}
+.dog-results-only-toggle input:checked + .dog-results-only-switch {
+  background: color-mix(in srgb, var(--dog-accent-2) 70%, var(--dog-accent));
+  border-color: var(--dog-accent-2);
+}
+.dog-results-only-toggle input:checked + .dog-results-only-switch span {
+  left: 1.05rem;
+  background: white;
+}
+.dog-results-only-toggle input:focus-visible + .dog-results-only-switch {
+  outline: 2px solid var(--dog-accent-2);
+  outline-offset: 2px;
+}
+.dog-results-only-text {
+  white-space: nowrap;
+  min-width: 0;
+  pointer-events: none;
 }
 .dog-show-wide-toggle {
   display: inline-flex;

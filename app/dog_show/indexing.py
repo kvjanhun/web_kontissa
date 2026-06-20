@@ -1,3 +1,4 @@
+import datetime
 import time
 
 import structlog
@@ -42,9 +43,44 @@ def _show_result_availability_for_id(show_id, now=None):
         now=now,
     )
 
-def _result_count_from_cache_doc(show_id, entry_count=None):
+def _result_cache_doc_is_empty_result_cache(doc):
+    if not doc or doc.get("status") != "complete":
+        return False
+
+    try:
+        total_breeds = int(doc.get("total_breeds") or 0)
+    except (TypeError, ValueError):
+        total_breeds = 0
+
+    return (
+        total_breeds == 0
+        and not doc.get("results")
+        and not doc.get("completed_breeds")
+    )
+
+def _result_cache_doc_needs_result_refresh(show_id, doc, now=None):
+    if not _result_cache_doc_is_empty_result_cache(doc):
+        return False
+
+    indexed_show = _indexed_show(show_id)
+    indexed_breeds = indexed_show.get("breeds", []) if indexed_show else []
+    return (
+        bool(_result_breeds_for_cache(show_id, indexed_breeds, now=now))
+        or _indexed_result_flags_need_refresh(show_id, indexed_show, now=now)
+    )
+
+def _stats_now_for_today(today):
+    if not today:
+        return None
+    return datetime.datetime.combine(today, datetime.time(hour=12))
+
+def _result_count_from_cache_doc(show_id, entry_count=None, today=None):
     doc = _load_result_cache_doc(show_id)
     if not doc:
+        return None
+
+    now = _stats_now_for_today(today)
+    if _result_cache_doc_needs_result_refresh(show_id, doc, now=now):
         return None
 
     try:
@@ -82,8 +118,22 @@ def _show_stats_from_index(show_id, show=None, today=None):
     entry_count_known = False
     result_breed_count = 0
 
+    show_item = _show_item_for_stats(show_id, show=show)
+    show_state = _show_date_state(show_item, today=today)
+    result_breeds_for_cache = _result_breeds_for_cache(
+        show_id,
+        breeds,
+        now=_stats_now_for_today(today),
+    ) if show_state == "live" else _result_breeds_with_results(breeds)
+    result_breed_keys = {
+        (str(breed.get("group")), str(breed.get("breed_id")))
+        for breed in result_breeds_for_cache
+    }
+
     for breed in breeds:
         if breed.get("has_results"):
+            result_breed_count += 1
+        elif (str(breed.get("group")), str(breed.get("breed_id"))) in result_breed_keys:
             result_breed_count += 1
 
         try:
@@ -93,7 +143,6 @@ def _show_stats_from_index(show_id, show=None, today=None):
             continue
 
     updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
-    show_state = _show_date_state(_show_item_for_stats(show_id, show=show), today=today)
     stats = {
         "indexed": True,
         "breed_count": len(breeds),
@@ -108,6 +157,7 @@ def _show_stats_from_index(show_id, show=None, today=None):
         result_count = _result_count_from_cache_doc(
             show_id,
             entry_count=entry_count if entry_count_known else None,
+            today=today,
         )
         if result_count is not None:
             stats["result_count"] = result_count
@@ -317,6 +367,62 @@ def _result_breeds_with_results(breeds):
         if breed.get("has_results") and breed.get("group") and breed.get("breed_id")
     ]
 
+def _single_breed_result_probe_candidates(show_id, breeds, now=None):
+    candidates = [
+        breed for breed in _clean_breed_list(breeds)
+        if breed.get("group") and breed.get("breed_id")
+    ]
+    if len(candidates) != 1:
+        return []
+
+    availability = _show_result_availability_for_id(show_id, now=now)
+    if not availability.get("can_fetch", True):
+        return []
+    return candidates
+
+def _result_breeds_for_cache(show_id, breeds, now=None):
+    result_breeds = _result_breeds_with_results(breeds)
+    if result_breeds:
+        return result_breeds
+    return _single_breed_result_probe_candidates(show_id, breeds, now=now)
+
+def _mark_single_probe_breed_result_available(show_id, breeds, now=None):
+    cleaned = _clean_breed_list(breeds)
+    if _result_breeds_with_results(cleaned):
+        return cleaned
+
+    candidates = _single_breed_result_probe_candidates(show_id, cleaned, now=now)
+    if not candidates:
+        return cleaned
+
+    candidate = candidates[0]
+    for breed in cleaned:
+        if (
+            str(breed.get("group")) == str(candidate.get("group"))
+            and str(breed.get("breed_id")) == str(candidate.get("breed_id"))
+        ):
+            breed["has_results"] = True
+    return cleaned
+
+def _indexed_result_flags_need_refresh(show_id, indexed_show=None, now=None):
+    indexed_show = indexed_show or _indexed_show(show_id)
+    if not indexed_show:
+        return False
+
+    breeds = indexed_show.get("breeds") or []
+    if not breeds or _result_breeds_with_results(breeds):
+        return False
+
+    if not _is_show_recent_by_id(show_id):
+        return False
+
+    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    if updated and (time.time() - updated) < SHOW_DETAIL_TTL:
+        return False
+
+    availability = _show_result_availability_for_id(show_id, now=now)
+    return availability.get("can_fetch", True)
+
 def _show_month_for_id(show_id):
     _load_index()
 
@@ -351,13 +457,16 @@ def _cached_show_detail(show_id, allow_stale=False):
 
     return None
 
-def _show_detail_from_index(show_id):
+def _show_detail_from_index(show_id, refresh_stale_result_flags=False):
     indexed_show = _indexed_show(show_id)
     if not indexed_show or not indexed_show.get("breeds"):
         return None
 
+    if refresh_stale_result_flags and _indexed_result_flags_need_refresh(show_id, indexed_show):
+        return None
+
     updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()
-    breeds = _clean_breed_list(indexed_show.get("breeds", []))
+    breeds = _mark_single_probe_breed_result_available(show_id, indexed_show.get("breeds", []))
     _enrich_breeds_with_cached_result_judges(show_id, breeds)
     return {
         "id": int(show_id),

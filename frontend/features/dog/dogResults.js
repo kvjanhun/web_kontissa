@@ -100,6 +100,7 @@ export function createShowBreedGroups({
   dogs = [],
   query = '',
   allDogsLoaded = false,
+  resultsOnly = false,
   filters = {},
 } = {}) {
   const q = query.toLowerCase().trim()
@@ -115,6 +116,7 @@ export function createShowBreedGroups({
   for (const breed of breeds) {
     const key = breedGroupKey(breed)
     const breedDogs = dogsByBreed[key] || []
+    if (resultsOnly && !breed.has_results && !breedDogs.length) continue
     const breedMatch = breedMatchesSearch(breed, q)
     const matchingDogs = q ? breedDogs.filter(dog => dogMatchesShowSearch(dog, q)) : breedDogs
     const hasResultFilters = Boolean(filters.grade || filters.className || filters.award)
@@ -130,11 +132,11 @@ export function createShowBreedGroups({
 
     groups[key] = {
       key,
-      breed,
+      breed: { ...breed, has_results: breed.has_results || Boolean(breedDogs.length) },
       breedName: breed.name,
       count: breed.count,
       judge: breed.judge,
-      has_results: breed.has_results,
+      has_results: breed.has_results || Boolean(breedDogs.length),
       dogs: breedMatch ? breedDogs : matchingDogs,
     }
   }

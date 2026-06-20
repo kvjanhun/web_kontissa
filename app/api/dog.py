@@ -15,8 +15,9 @@ from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once
 from app.dog_show.indexing import (
     _cached_show_detail, _enrich_breeds_with_cached_result_judges,
     _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
-    _show_detail_from_index, _show_result_availability_for_id, _show_stats_from_index,
-    _shows_with_cached_stats, _update_index_breed_judge,
+    _mark_single_probe_breed_result_available, _show_detail_from_index,
+    _show_result_availability_for_id, _show_stats_from_index, _shows_with_cached_stats,
+    _update_index_breed_judge,
 )
 from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
@@ -33,7 +34,7 @@ from app.dog_show.store import (
     _remove_result_cache_job, _save_index, _save_result_cache_doc, _save_result_jobs,
     _show_all_results_cache, _show_detail_cache, _show_index, _show_list_cache,
 )
-from app.dog_show.utils import _clean_breed_list, _clean_judge_name, _utc_iso
+from app.dog_show.utils import _clean_judge_name, _utc_iso
 
 logger = structlog.get_logger(__name__)
 
@@ -87,7 +88,7 @@ def show_detail(show_id):
         cached = _cached_show_detail(show_id)
         if cached:
             data = dict(cached)
-            data["breeds"] = _clean_breed_list(data.get("breeds", []))
+            data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
             updated_from_index = _enrich_breeds_with_index_judges(show_id, data["breeds"])
             updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data["breeds"])
             if updated_from_index or updated_from_results:
@@ -98,7 +99,7 @@ def show_detail(show_id):
                 }
             return jsonify(data)
 
-        indexed = _show_detail_from_index(show_id)
+        indexed = _show_detail_from_index(show_id, refresh_stale_result_flags=True)
         if indexed:
             _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
             return jsonify(indexed)
@@ -109,6 +110,7 @@ def show_detail(show_id):
         fetched_at = time.time()
         data["fetched_at"] = fetched_at
         data["fetched_at_iso"] = _utc_iso(fetched_at)
+        data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
 
         _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
         _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))

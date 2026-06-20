@@ -112,6 +112,14 @@ test.describe('Dog Show Browser', () => {
               name: 'Basenji',
               month: 'kesäkuu 2026',
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+              stats: {
+                indexed: true,
+                breed_count: 2,
+                entry_count: 4,
+                result_breed_count: 1,
+                is_live: true,
+                show_state: 'live',
+              },
             },
           ],
           index: {
@@ -138,6 +146,14 @@ test.describe('Dog Show Browser', () => {
               breed_id: '123',
               has_results: true,
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042&R=6&RO=123',
+            },
+            {
+              name: 'Akita',
+              count: 1,
+              group: '5',
+              breed_id: '10',
+              has_results: false,
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042&R=5&RO=10',
             },
           ],
           source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
@@ -183,6 +199,14 @@ test.describe('Dog Show Browser', () => {
     await expect(page.locator('.dog-back-link span').filter({ hasText: 'Näyttelyt' })).toBeVisible()
     await expect(page.locator('.dog-top-title')).toHaveCSS('text-overflow', 'ellipsis')
     await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
+    await expect(page.getByText('Akita')).toBeVisible()
+    const resultBreedsOnly = page.getByRole('checkbox', { name: 'Tuloksia saaneet' })
+    await expect(resultBreedsOnly).toBeVisible()
+    await resultBreedsOnly.check()
+    await expect(page.getByText('Akita')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Basenji 3 koiraa/ })).toBeVisible()
+    await resultBreedsOnly.uncheck()
+    await expect(page.getByText('Akita')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toBeVisible()
 
     await page.getByRole('button', { name: /Basenji 3 koiraa/ }).click()

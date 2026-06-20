@@ -7,6 +7,14 @@ defineProps({
     type: String,
     default: '',
   },
+  resultBreedsOnly: {
+    type: Boolean,
+    default: false,
+  },
+  resultBreedFilterAvailable: {
+    type: Boolean,
+    default: false,
+  },
   dogGradeFilter: {
     type: String,
     default: '',
@@ -59,6 +67,7 @@ defineProps({
 
 defineEmits([
   'update:breedSearchQuery',
+  'update:resultBreedsOnly',
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
@@ -75,6 +84,7 @@ defineEmits([
         'dog-show-tools-grid',
         allDogsLoaded && 'dog-show-tools-grid-loaded',
         allDogsLoading && 'dog-show-tools-grid-loading',
+        resultBreedFilterAvailable && 'dog-show-tools-grid-live',
       ]"
     >
       <div class="dog-filter-col dog-show-tools-search">
@@ -106,7 +116,22 @@ defineEmits([
         </div>
       </div>
 
-      <div v-if="allDogsLoaded" class="dog-filter-col">
+      <div v-if="resultBreedFilterAvailable" class="dog-filter-col dog-results-only-col">
+        <label class="dog-filter-label">Rotulista</label>
+        <label class="dog-results-only-toggle">
+          <input
+            type="checkbox"
+            :checked="resultBreedsOnly"
+            @change="$emit('update:resultBreedsOnly', $event.target.checked)"
+          />
+          <span class="dog-results-only-switch" aria-hidden="true">
+            <span />
+          </span>
+          <span class="dog-results-only-text">Tuloksia saaneet</span>
+        </label>
+      </div>
+
+      <div v-if="allDogsLoaded" class="dog-filter-col dog-show-grade-filter">
         <label class="dog-filter-label">Laatuarvostelu</label>
         <select
           :value="dogGradeFilter"
@@ -119,7 +144,7 @@ defineEmits([
         </select>
       </div>
 
-      <div v-if="allDogsLoaded && availableShowClasses.length" class="dog-filter-col">
+      <div v-if="allDogsLoaded && availableShowClasses.length" class="dog-filter-col dog-show-class-filter">
         <label class="dog-filter-label">Luokka</label>
         <select
           :value="dogClassFilter"
@@ -133,7 +158,7 @@ defineEmits([
         </select>
       </div>
 
-      <div v-if="allDogsLoaded && availableShowAwards.length" class="dog-filter-col">
+      <div v-if="allDogsLoaded && availableShowAwards.length" class="dog-filter-col dog-show-award-filter">
         <label class="dog-filter-label">Palkinto</label>
         <select
           :value="dogAwardFilter"

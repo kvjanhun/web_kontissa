@@ -25,6 +25,8 @@ const {
   searchLoading,
   searchError,
   breedSearchQuery,
+  resultBreedsOnly,
+  resultBreedFilterAvailable,
   dogSearchQuery,
   dogGradeFilter,
   dogClassFilter,
@@ -113,6 +115,7 @@ const pageTitle = computed(() => {
         v-else-if="currentView === 'detail'"
         key="detail"
         v-model:breed-search-query="breedSearchQuery"
+        v-model:result-breeds-only="resultBreedsOnly"
         v-model:dog-grade-filter="dogGradeFilter"
         v-model:dog-class-filter="dogClassFilter"
         v-model:dog-award-filter="dogAwardFilter"
@@ -127,6 +130,7 @@ const pageTitle = computed(() => {
         :all-dogs-progress-percent="allDogsProgressPercent"
         :all-dogs-progress-text="allDogsProgressText"
         :all-dogs-availability="allDogsAvailability"
+        :result-breed-filter-available="resultBreedFilterAvailable"
         :show-search-placeholder="showSearchPlaceholder"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
