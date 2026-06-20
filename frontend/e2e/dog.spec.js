@@ -490,7 +490,7 @@ test.describe('Dog Show Browser', () => {
     })
 
     await page.goto('/dog')
-    await page.getByRole('button', { name: /kesäkuu 2999/ }).click()
+    await page.getByRole('button', { name: /kesäkuu 2999/i }).click()
     await page.getByRole('button', { name: /Future Basenji Show/ }).click()
 
     await expect(page.getByText('Tuloksia ei haeta vielä')).toBeVisible()

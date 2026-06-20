@@ -315,10 +315,35 @@ export function useDogBrowser() {
     loadAllShowResults({ sessionId: allDogsSessionId })
   }
 
+  function standardizeShows(showsList) {
+    if (!Array.isArray(showsList)) return []
+    return showsList.map(show => {
+      let month = show.month || 'Muu'
+      const lowerMonth = month.toLowerCase().trim()
+      if (lowerMonth === 'tänään' || lowerMonth === 'huomenna') {
+        const parsedDate = parseShowDate(show.date, month)
+        if (parsedDate) {
+          const finnishMonths = [
+            'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
+            'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu'
+          ]
+          const showMonthName = finnishMonths[parsedDate.getMonth()]
+          const showYear = parsedDate.getFullYear()
+          month = `${showMonthName} ${showYear}`
+        }
+      }
+      month = month.trim()
+      if (month) {
+        show.month = month.charAt(0).toUpperCase() + month.slice(1)
+      }
+      return show
+    })
+  }
+
   async function refreshIndexStats() {
     try {
       const data = await $fetch('/api/dog/shows')
-      shows.value = data.shows || shows.value
+      shows.value = standardizeShows(data.shows || shows.value)
       indexStats.value = data.index || indexStats.value
       if (!showListShouldPoll.value && indexPollTimer) {
         clearInterval(indexPollTimer)
@@ -339,7 +364,7 @@ export function useDogBrowser() {
     showsError.value = ''
     try {
       const data = await $fetch('/api/dog/shows')
-      shows.value = data.shows || []
+      shows.value = standardizeShows(data.shows || [])
       indexStats.value = data.index || null
 
       const monthsToCollapse = new Set()
@@ -571,21 +596,7 @@ export function useDogBrowser() {
   const groupedShows = computed(() => {
     const groups = {}
     for (const show of filteredShows.value) {
-      let month = show.month || 'Muu'
-      const lowerMonth = month.toLowerCase().trim()
-      if (lowerMonth === 'tänään' || lowerMonth === 'huomenna') {
-        const parsedDate = parseShowDate(show.date, month)
-        if (parsedDate) {
-          const finnishMonths = [
-            'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
-            'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu'
-          ]
-          const showMonthName = finnishMonths[parsedDate.getMonth()]
-          const showYear = parsedDate.getFullYear()
-          month = `${showMonthName} ${showYear}`
-          month = month.charAt(0).toUpperCase() + month.slice(1)
-        }
-      }
+      const month = show.month || 'Muu'
       if (!groups[month]) groups[month] = []
       groups[month].push(show)
     }
