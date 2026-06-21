@@ -39,6 +39,15 @@ INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
 RESULT_CACHE_DIR = os.environ.get("DOG_RESULT_CACHE_DIR", os.path.join(INDEX_DIR, "dog_result_cache"))
 RESULT_JOBS_PATH = os.environ.get("DOG_RESULT_JOBS_PATH", os.path.join(INDEX_DIR, "dog_result_jobs.json"))
 
+# Dog data lives in its own SQLite database (the /dog-only persistent store),
+# separate from the main site.db and not replicated to Litestream. A full
+# SQLAlchemy URL can be supplied via DOG_DATABASE_URI; otherwise it defaults to
+# dog.db inside DOG_INDEX_DIR (the shared ./app/data bind mount in Docker).
+DOG_DATABASE_URI = os.environ.get(
+    "DOG_DATABASE_URI",
+    "sqlite:///" + os.path.abspath(os.path.join(INDEX_DIR, "dog.db")),
+)
+
 FINNISH_MONTHS = [
     "tammikuu", "helmikuu", "maaliskuu", "huhtikuu", "toukokuu", "kesäkuu",
     "heinäkuu", "elokuu", "syyskuu", "lokakuu", "marraskuu", "joulukuu"

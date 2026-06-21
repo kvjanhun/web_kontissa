@@ -63,6 +63,20 @@ def _clean_judge_name(value):
     text = " ".join(str(value).split())
     return re.sub(r"^tuomari\s*", "", text, flags=re.IGNORECASE).strip()
 
+def _parse_reg_id(reg_url):
+    """Extract the dog registration number from a jalostus.kennelliitto.fi link.
+
+    e.g. '.../frmKoira.aspx?RekNo=FI44694%2F25' -> 'FI44694/25'. This reg id is
+    the cross-show anchor for a dog; it must survive URL-encoding of the slash.
+    """
+    if not reg_url:
+        return ""
+    match = re.search(r"[?&]RekNo=([^&#]+)", str(reg_url), flags=re.IGNORECASE)
+    if not match:
+        return ""
+    from urllib.parse import unquote
+    return unquote(match.group(1)).strip()
+
 def _clean_breed_data(breed):
     item = dict(breed or {})
     if "judge" in item:
