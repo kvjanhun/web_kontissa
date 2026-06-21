@@ -1167,11 +1167,10 @@
   overflow: hidden;
 }
 .dog-award-card {
-  display: grid;
-  grid-template-columns: 9rem 1fr;
+  display: flex;
   align-items: center;
-  gap: 1.25rem;
-  padding: 0.65rem 1rem;
+  gap: 0.75rem;
+  padding: 0.6rem 0.95rem;
   background: transparent;
   border: none;
   border-bottom: 1px solid var(--dog-border);
@@ -1184,6 +1183,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
   font-size: 0.72rem;
   font-weight: 700;
   color: var(--dog-accent-2);
@@ -1192,27 +1192,20 @@
   background: rgba(190, 24, 93, 0.08);
   border: 1px solid rgba(190, 24, 93, 0.2);
   border-radius: var(--dog-radius-sm);
-  padding: 0.2rem 0.5rem;
-  text-align: center;
-  width: 100%;
-  max-width: 8rem;
-  box-sizing: border-box;
-  min-height: 26px;
+  padding: 0.2rem 0.55rem;
+  min-height: 24px;
 }
 .dog-award-text {
-  font-size: 0.88rem;
+  font-size: 0.9rem;
   color: var(--dog-text);
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1.4;
+  min-width: 0;
 }
 @media (max-width: 640px) {
   .dog-award-card {
-    grid-template-columns: 1fr;
-    gap: 0.35rem;
-    padding: 0.6rem 0.85rem;
-  }
-  .dog-award-type {
-    width: fit-content;
+    gap: 0.6rem;
+    padding: 0.55rem 0.85rem;
   }
 }
 
