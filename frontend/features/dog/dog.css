@@ -762,10 +762,27 @@
   flex: 1;
   min-width: 0;
 }
+/* Plain show rows (list + featured) stack name over stats, mirroring the
+   two-line result card. Search rows keep .dog-show-body inline because they
+   nest it inside .dog-search-result-info with their own meta row below. */
+.dog-show-row > .dog-show-body {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0.3rem;
+}
+.dog-show-row > .dog-show-body .dog-show-name {
+  flex: 0 0 auto;
+  width: 100%;
+}
+.dog-show-row > .dog-show-body .dog-show-stats {
+  justify-content: flex-start;
+}
 .dog-show-name {
   flex: 1;
   min-width: 0;
   color: var(--dog-text);
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
 }
@@ -1809,34 +1826,6 @@
   }
   .dog-title {
     font-size: 2rem;
-  }
-  .dog-breed-group-main {
-    flex-direction: row;
-    align-items: center;
-    gap: 1.5rem;
-  }
-  .dog-breed-group-title {
-    flex: 1.8 1 0%;
-    min-width: 0;
-  }
-  .dog-breed-group-meta {
-    flex: 3 1 0%;
-    display: flex;
-    flex-wrap: nowrap;
-    align-items: center;
-    gap: 1.5rem;
-    min-width: 0;
-  }
-  .dog-breed-group-count {
-    flex: 0 0 5.5rem;
-    white-space: nowrap;
-  }
-  .dog-breed-group-judge {
-    flex: 1 1 0%;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
   }
 }
 
