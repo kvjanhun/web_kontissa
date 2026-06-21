@@ -26,7 +26,8 @@ from .store import (
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _is_recent_show, _result_doc_has_main_bis, _result_doc_live_bis_grace_finished,
+    _is_recent_show, _result_doc_has_main_bis, _result_doc_has_show_finals,
+    _result_doc_live_bis_grace_finished,
     _result_doc_live_entry_completion_grace_finished, _show_age_days,
     _show_result_availability, _utc_iso,
 )
@@ -145,14 +146,38 @@ def _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
     cached_at = (doc or {}).get("cached_at") or (doc or {}).get("updated_at") or 0
     return cached_at < final_due_at
 
+def _show_expects_main_bis(show_id, doc=None):
+    """Whether the show is expected to crown a main Best in Show.
+
+    True for all-breed shows (indexed breeds spanning multiple FCI groups) or
+    any cache that already records show-wide finals (group/junior/veteran BIS).
+    Used to keep the cache live through the finals instead of settling the
+    moment every breed ring has finished."""
+    if _result_doc_has_show_finals(doc):
+        return True
+    indexed = _indexed_show(show_id) or {}
+    groups = set()
+    for breed in indexed.get("breeds") or []:
+        group = str(breed.get("group") or "").strip()
+        if group.isdigit():
+            groups.add(group)
+            if len(groups) >= 2:
+                return True
+    return False
+
 def _result_cache_ttl_for_show(show_id, now, doc=None):
     availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
     if availability.get("show_state") == "live":
         entry_count = _entry_count_from_breeds(_result_breeds_from_index(show_id))
-        if (
-            _result_doc_live_bis_grace_finished(doc, now)
-            or _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=entry_count)
-        ):
+        if _result_doc_live_bis_grace_finished(doc, now):
+            return None
+        if _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=entry_count):
+            # Every breed ring is judged, but all-breed shows decide the group
+            # finals and main Best in Show afterwards. Keep polling until BIS-1
+            # is captured instead of freezing the cache right before the finals
+            # publish RYP/BIS placements onto the winners' breed rows.
+            if not _result_doc_has_main_bis(doc) and _show_expects_main_bis(show_id, doc):
+                return RESULT_CACHE_LIVE_TTL
             return None
         return RESULT_CACHE_LIVE_TTL
 

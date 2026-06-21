@@ -97,6 +97,19 @@ def _result_doc_has_main_bis(doc):
         for result in doc.get("results") or []
     )
 
+def _result_doc_has_show_finals(doc):
+    """True when the cache already records show-wide finals placements: group
+    (RYP), junior (BIS JUN), or veteran (BIS VET) Best in Show. Such shows crown
+    a main Best in Show after the breed rings finish, so the whole-show cache
+    must not settle on breed completion alone."""
+    if not isinstance(doc, dict):
+        return False
+    for result in doc.get("results") or []:
+        for token in _split_award_tokens(result.get("awards")):
+            if token.startswith(("BIS JUN", "BIS VET", "BIS PEN", "RYP")):
+                return True
+    return False
+
 def _result_doc_live_bis_grace_finished(doc, now):
     if not isinstance(doc, dict):
         return False

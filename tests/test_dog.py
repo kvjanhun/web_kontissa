@@ -1482,6 +1482,67 @@ def test_live_show_stats_stop_after_entry_completion_grace(client):
     assert dog_result_cache._result_cache_doc_is_fresh(14079, dog_module._load_result_cache_doc(14079), now=noon) is True
 
 
+def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
+    """All-breed shows decide group finals + Best in Show after every breed ring
+    is judged, so entry completion must not settle the cache before BIS-1."""
+    noon = dog_module.datetime.datetime(2026, 6, 20, 14, 0).timestamp()
+    # Breeds span two FCI groups -> an all-breed show that crowns a main BIS.
+    dog_module._show_index["shows"]["13771"] = {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaaninvinttikoira", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+        ],
+    }
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+
+    grace = dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+    # Every breed ring is judged and the entry-completion grace has elapsed, but
+    # the only finals so far are junior/group placements -- no main BIS yet.
+    no_main_bis = {
+        "status": "complete",
+        "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "live_result_entry_completion_at": noon - grace - 1,
+        "total_breeds": 2,
+        "completed_breeds": {
+            "5:3": {"name": "basenji", "result_count": 2},
+            "10:7": {"name": "afgaaninvinttikoira", "result_count": 2},
+        },
+        "results": [
+            {"name": "Junior", "breedGroup": "10", "breedId": "7", "awards": "SA, JUN ROP, BIS JUN-1"},
+            {"name": "Group", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1"},
+            {"name": "C", "breedGroup": "5", "breedId": "3", "awards": "SA"},
+            {"name": "D", "breedGroup": "10", "breedId": "7", "awards": "EH"},
+        ],
+    }
+    with_main_bis = dict(
+        no_main_bis,
+        bis_detected_at=noon - grace - 1,
+        results=[
+            dict(no_main_bis["results"][0]),
+            dict(no_main_bis["results"][1], awards="SA, ROP, RYP-1, BIS-1"),
+            *no_main_bis["results"][2:],
+        ],
+    )
+
+    assert dog_result_cache._show_expects_main_bis(13771, no_main_bis) is True
+    # Entry completion alone must not settle an all-breed show without BIS-1.
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, no_main_bis, now=noon) is False
+    # Once BIS-1 lands and its grace elapses, the cache settles as before.
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, with_main_bis, now=noon) is True
+
+
+def test_show_finals_detection_ignores_plain_specialty_awards():
+    finals = {"results": [{"awards": "SA, ROP, RYP-2"}]}
+    junior = {"results": [{"awards": "SA, JUN ROP, BIS JUN-3"}]}
+    specialty = {"results": [{"awards": "SA, ROP, VSP, CACIB"}]}
+    assert dog_result_cache._result_doc_has_show_finals(finals) is True
+    assert dog_result_cache._result_doc_has_show_finals(junior) is True
+    assert dog_result_cache._result_doc_has_show_finals(specialty) is False
+
+
 def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
     final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
     now = final_due_at + 300
