@@ -1311,19 +1311,28 @@
 }
 .dog-result-row {
   display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.55rem 0.85rem;
+}
+/* Line 1: rank, identity (breed + name), and primary action */
+.dog-result-head {
+  display: flex;
   align-items: center;
-  padding: 0.5rem 0.85rem;
-  gap: 0.75rem;
-  min-height: 40px;
-  flex-wrap: nowrap;
+  gap: 0.6rem;
+  min-width: 0;
+}
+.dog-result-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0;
 }
 .dog-catalog-num {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.8rem;
+  font-size: 0.76rem;
   color: var(--dog-text-muted);
   font-weight: 500;
-  min-width: 1.75rem;
-  text-align: right;
   flex-shrink: 0;
 }
 .dog-placement-badge {
@@ -1339,12 +1348,23 @@
   justify-content: center;
   flex-shrink: 0;
 }
-.dog-name-col {
+.dog-result-identity {
+  display: flex;
+  flex-direction: column;
+  gap: 0.05rem;
   flex: 1;
   min-width: 0;
+}
+.dog-result-breed {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--dog-accent);
+  white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  white-space: nowrap;
+  max-width: 100%;
 }
 .dog-dog-name {
   color: var(--dog-text) !important;
@@ -1355,15 +1375,28 @@
   gap: 0.25rem;
   font-size: 0.9rem;
   max-width: 100%;
+  min-width: 0;
+}
+.dog-dog-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .dog-dog-name:hover {
   color: var(--dog-accent) !important;
+}
+.dog-dog-name:hover .dog-dog-name-text {
   text-decoration: underline;
 }
 .dog-dog-name-plain {
   font-weight: 500;
   color: var(--dog-text);
   font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
 }
 .dog-external {
   width: 0.75rem;
@@ -1377,6 +1410,40 @@
   opacity: 1;
   color: var(--dog-accent);
 }
+.dog-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+/* Line 2: class, gender, and awards (wraps freely) */
+.dog-result-meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.3rem 0.45rem;
+  min-width: 0;
+}
+.dog-result-class {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: var(--dog-text-muted);
+}
+.dog-result-gender {
+  font-size: 0.85rem;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--dog-text-muted);
+}
+.dog-result-gender.uros {
+  color: var(--dog-info);
+}
+.dog-result-gender.narttu {
+  color: var(--dog-accent-2);
+}
 
 /* ═══ Grade border accenting ═══ */
 .dog-result-card.dog-border-gold { border-left: 3px solid var(--dog-gold); }
@@ -1387,17 +1454,6 @@
 .dog-result-card.dog-border-default { border-left: 3px solid var(--dog-border); }
 
 /* ═══ Result badges ═══ */
-.dog-result-right {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-.dog-result-badges {
-  display: flex;
-  align-items: center;
-  gap: 0.35rem;
-}
 .dog-grade {
   display: inline-flex;
   align-items: center;
@@ -1717,22 +1773,6 @@
     display: none;
   }
 }
-.dog-breed-badge-inline,
-.dog-class-badge-inline,
-.dog-gender-badge-inline {
-  font-size: 0.72rem;
-  font-weight: 600;
-  background: var(--dog-surface-el);
-  color: var(--dog-text-muted);
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--dog-border);
-  border-radius: var(--dog-radius-sm);
-  text-transform: uppercase;
-}
-.dog-breed-badge-inline {
-  color: var(--dog-accent);
-}
-
 /* Pulsing live indicator dot */
 .dog-live-dot {
   display: inline-block;
@@ -1802,21 +1842,13 @@
 
 @media (max-width: 640px) {
   .dog-result-row {
-    flex-wrap: wrap;
-    gap: 0.5rem;
     padding: 0.6rem 0.75rem;
   }
-  .dog-name-col {
-    flex: 1 1 100%;
-    order: 3;
-    white-space: normal;
+  .dog-result-head {
+    gap: 0.5rem;
   }
   .dog-dog-name, .dog-dog-name-plain {
     font-size: 0.95rem;
-  }
-  .dog-result-right {
-    margin-left: auto;
-    order: 2;
   }
   .dog-critique-toggle-text {
     display: none;
