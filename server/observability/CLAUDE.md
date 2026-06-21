@@ -65,8 +65,8 @@ Refresh interval: 60s. Default time range: 24h.
 - Notification policy: `alerting/notification-policies.yaml`, routes provisioned Grafana alerts to `telegram-critical`
 - Rules: `alerting/nginx-alerts.yaml`
   - Shared unexpected nginx error-log burst detection for `erez.ac` and `sanakenno.fi`
-  - Shared upstream failure detection from nginx error logs, excluding Grafana `/logs/` restart noise
-  - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`, excluding Grafana `/logs/`
+  - Shared upstream failure detection from nginx error logs, excluding Grafana `/logs/` restart noise. Uses a `[2m]` count window with `for: 3m` so a brief web-container restart during deploy (upstream down < ~1 min) does not page, while a sustained outage still alerts within ~3 min.
+  - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`, excluding Grafana `/logs/`. Same `[2m]` / `for: 3m` deploy tolerance as the upstream rule (502/503s from a deploy restart are ignored).
   - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`, excluding Grafana `/logs/`
   - Shared auth/admin suspicious-response detection for 401/403/429 on app auth/admin paths
   - Shared 429 burst detection grouped by extracted `vhost` and `remote_addr`

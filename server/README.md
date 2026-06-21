@@ -19,12 +19,26 @@ rebuilding. The script waits for the web container to report healthy and verifie
 **Triggered by:** `webhook.service` (listens on port 9000, token-authenticated)
 
 ### `health-alert.sh`
-Checks the Docker container health status every 5 minutes via cron. Sends a
-Telegram alert when the container becomes unhealthy, and a recovery message
-with approximate downtime when it comes back up. Uses a flag file
-(`/tmp/site-unhealthy.flag`) to avoid alert spam. During a fresh deploy it
-honors `/tmp/erezac-deploying.flag`; if that flag is older than 30 minutes,
-alerts resume so a hung deploy still pages you.
+Combined health check for **both** erez.ac (`web_kontissa-web-1`) and
+sanakenno.fi (`sanakenno-a` / `sanakenno-b`) — this repo owns the shared host
+plumbing for both sites, so this single monitor replaces any per-site check.
+Runs every 5 minutes via cron. Sends a Telegram alert when a container becomes
+unhealthy and a recovery message with approximate downtime when it recovers.
+Per-container flag files (`/tmp/<container>-unhealthy.flag`) avoid alert spam,
+and Docker inspect is retried with a "missing" streak threshold so one transient
+read does not page.
+
+During a fresh deploy each site honors its own deploy flag (erez.ac:
+`/tmp/erezac-deploying.flag`, written by `deploy-site.sh`); while that flag is
+present and fresh, transient unhealthiness is suppressed. If the flag is older
+than 30 minutes (`HEALTH_ALERT_DEPLOY_SUPPRESS_SECONDS`), alerts resume so a hung
+deploy still pages you. This is what prevents the brief container-rebuild window
+from firing a false "erez.ac is down" alert.
+
+Mocked tests (no Docker/network/Telegram) live in `health-alert-test.sh`:
+```bash
+bash server/health-alert-test.sh all
+```
 
 **Deployed to:** `/home/kvjanhun/scripts/health-alert.sh`
 **Scheduled via:** `crontab -l` (runs as kvjanhun)

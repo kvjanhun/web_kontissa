@@ -94,7 +94,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "(connect\\(\\) failed|upstream timed out|no live upstreams|upstream prematurely closed connection|recv\\(\\) failed|send\\(\\) failed)" !~ "request: \"[A-Z]+ /logs/" [5m]))'
+              expr: 'sum by (filename) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.error\\.log"} |~ "(connect\\(\\) failed|upstream timed out|no live upstreams|upstream prematurely closed connection|recv\\(\\) failed|send\\(\\) failed)" !~ "request: \"[A-Z]+ /logs/" [2m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -144,10 +144,10 @@ groups:
               type: threshold
         noDataState: OK
         execErrState: Error
-        for: 1m
+        for: 3m
         annotations:
           summary: Nginx upstream failure detected
-          description: '{{ $labels.filename }} contains an upstream connectivity or timeout failure in the last 5 minutes.'
+          description: '{{ $labels.filename }} contains an upstream connectivity or timeout failure sustained over the last 3 minutes (brief deploy restarts are ignored).'
         labels:
           severity: critical
           service: nginx
@@ -167,7 +167,7 @@ groups:
                 type: loki
                 uid: loki_ds_1
               editorMode: code
-              expr: 'sum by (vhost) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", uri="uri", status="status" | uri!~"^/logs/" | status=~"5.." [5m]))'
+              expr: 'sum by (vhost) (count_over_time({job="nginx", filename=~"/var/log/nginx/(erez\\.ac|sanakenno\\.fi)\\.access\\.log"} | json vhost="server_name", uri="uri", status="status" | uri!~"^/logs/" | status=~"5.." [2m]))'
               intervalMs: 1000
               maxDataPoints: 43200
               queryType: instant
@@ -217,10 +217,10 @@ groups:
               type: threshold
         noDataState: OK
         execErrState: Error
-        for: 1m
+        for: 3m
         annotations:
           summary: 5xx spike on {{ $labels.vhost }}
-          description: '{{ $labels.vhost }} returned more than 2 non-Grafana nginx 5xx responses in 5 minutes.'
+          description: '{{ $labels.vhost }} returned more than 2 non-Grafana nginx 5xx responses, sustained over the last 3 minutes (brief deploy restarts are ignored).'
         labels:
           severity: critical
           service: nginx
