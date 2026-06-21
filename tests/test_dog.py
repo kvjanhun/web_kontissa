@@ -2393,3 +2393,23 @@ def test_show_stats_is_live_only_when_results_fetchable(client):
         )
         assert stats["is_live"] is True
 
+
+
+@patch("app.dog_show.crawler.time.sleep", lambda *a, **k: None)
+@patch("app.dog_show.crawler._update_index_show")
+def test_background_indexing_caps_batch_per_call(mock_update):
+    """One /api/dog/shows hit must not background-index more than the cap, so a
+    cold index can't spawn hundreds of Showlink requests from a web worker."""
+    import threading
+
+    cap = dog_crawler.BACKGROUND_INDEX_MAX_PER_CALL
+    shows = [{"id": 20000 + i} for i in range(cap + 5)]
+    dog_crawler._background_indexed_shows.clear()
+    try:
+        dog_crawler.queue_background_indexing(shows)
+        for thread in threading.enumerate():
+            if thread.name == "dog-bg-indexer":
+                thread.join(timeout=5)
+        assert mock_update.call_count == cap
+    finally:
+        dog_crawler._background_indexed_shows.clear()

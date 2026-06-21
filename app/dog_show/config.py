@@ -27,6 +27,11 @@ RESULT_IMMEDIATE_MAX_ACTIVE = int(os.environ.get("DOG_RESULT_IMMEDIATE_MAX_ACTIV
 RESULT_IMMEDIATE_WARMUP_DEFAULT = os.environ.get("DOG_RESULT_IMMEDIATE_WARMUP", "true").lower() != "false"
 RESULT_SHOW_MORNING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_MORNING_HOUR", "6"))
 RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "21"))
+
+# Max shows a single web-worker /api/dog/shows hit may background-index. Keeps a
+# cold/empty index from spawning hundreds of Showlink requests per request; the
+# dog-crawler service picks up the rest on its 15-minute crawl_index_once pass.
+BACKGROUND_INDEX_MAX_PER_CALL = int(os.environ.get("DOG_BACKGROUND_INDEX_MAX_PER_CALL", "5"))
 RESULT_LOCAL_TIMEZONE = os.environ.get("DOG_RESULT_TIMEZONE", "Europe/Helsinki")
 
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))

@@ -2,6 +2,7 @@ import time
 
 import structlog
 
+from .config import BACKGROUND_INDEX_MAX_PER_CALL
 from .indexing import _index_entry_from_detail
 from .parsers import _parse_show_detail
 from .showlink import _fetch_page, _source_url
@@ -155,6 +156,14 @@ def queue_background_indexing(shows):
 
     if not to_index:
         return
+
+    if len(to_index) > BACKGROUND_INDEX_MAX_PER_CALL:
+        logger.info(
+            "dog_background_indexing_capped",
+            requested=len(to_index),
+            cap=BACKGROUND_INDEX_MAX_PER_CALL,
+        )
+        to_index = to_index[:BACKGROUND_INDEX_MAX_PER_CALL]
 
     def run_indexing():
         for show in to_index:
