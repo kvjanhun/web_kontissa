@@ -1,104 +1,105 @@
 # /dog Browser — Review Findings & Follow-ups
 
-**Date:** 2026-06-21
-**Context:** Functionality + UX review of the `/dog` Showlink browser (frontend `frontend/features/dog/`, backend `app/dog_show/` + `app/api/dog.py`). Overall the feature is well-built and the scraping is polite and sound. This file records what shipped, the open ideas we agreed to defer, and the backend scraping audit.
+**Date:** 2026-06-21 (revised 2026-06-21 after judge-data investigation)
+**Context:** Functionality + UX review of the `/dog` Showlink browser (frontend `frontend/features/dog/`, backend `app/dog_show/` + `app/api/dog.py`). The scraping is polite and sound. This file records what shipped, the agreed direction, and the design detail for the next phases.
 
 ---
 
-## Shipped this session (done)
+## Investigation: where does judge data actually live? (2026-06-21)
 
-Small UX/polish pass, all green (142 vitest + 5 dog E2E + clean `nuxt generate`):
+We checked the assumption that the "basic scrape" already has judges for every show. **It does not.** Findings from the cached data and a few live Showlink probes:
 
-1. **Deep-link document title** — `DogBrowser.vue` syncs `document.title` to the open show/breed (`<title> | erez.ac`); list view unchanged. SEO/OG deliberately left alone (the tool is intentionally hidden for now).
-2. **Whole-show result count** — `DogShowDetailView.vue` shows "Löytyi N koiraa" once whole-show data is loaded, updating as filters narrow (parity with the breed view).
-3. **Dynamic grade options** — new pure helper `availableGradesFromResults()` derives the grade dropdown from loaded results (whole-show + single-breed). Keeps `HYL`/`EVA`/`POISSA` distinct and always retains the currently-selected grade.
-4. **Debounced in-show search** — input stays instant; the expensive whole-show regroup is debounced 200 ms (clearing applies immediately).
-5. **Overnight quiet hours for live shows** (idea A below) — live result fetching is suppressed 21:00–06:00 Finnish local time, evaluated via `zoneinfo`/`tzdata` (the container runs UTC). Also fixed: show date/time logic now uses Europe/Helsinki instead of the UTC container clock.
+- The index (`dog_show_index.json`) holds breed lists for **662 shows**, but only **16 shows** have any breed judge stored — and those 16 line up almost exactly with the shows we have fetched results for (13 have a full result cache; 3 have exactly one judged breed from a single breed-page click).
+- A fully-indexed past show like `12805` (228 breeds, `has_results: true` on all) stores only `name / count / group / breed_id / has_results / source_url` per breed. **No judge field.**
+- On Showlink, the breed-list / group pages (`?Id=X` and `?Id=X&R=n`) list breed names + entry counts only. The single "Tuomari …" on a group page is the **group-final (RYP) judge**, not the per-breed judges.
+- The per-breed judge appears **only on each individual breed result page** (`Tuomari X` in the result header → `_parse_breed_results`).
 
-Touched: `dogResults.js`, `useDogBrowser.js`, `DogBrowser.vue`, `DogShowDetailView.vue`, `DogShowTools.vue`, `DogBreedResultsView.vue`, `DogResultFilters.vue`, `tests/unit/dogResults.test.js` (items 1–4); `app/dog_show/config.py`, `app/dog_show/utils.py`, `app/api/dog.py`, `tests/test_dog.py`, `docs/dog-show-browser.md`, `frontend/pages/dog/about-crawler.vue` (item 5).
+**Consequence:** there is no cheap judges-listing shortcut. Getting judges for all shows means fetching the same breed-result pages the whole-show result crawl already fetches — so we may as well **keep all the data** (judges, grades, awards, dogs, critiques) rather than fetch the full page and discard most of it.
 
----
-
-## Open ideas / follow-ups (not yet actioned)
-
-### A. Overnight quiet hours for live result fetching  ✅ DONE 2026-06-21
-
-> Implemented as described below. Live shows now go quiet 21:00–06:00 (Europe/Helsinki, resolved via `tzdata` since the container is UTC). Net effect: stale cache served overnight, zero Showlink requests, daytime resumes at 06:00 — and the day-2-at-05:00 gap is closed. Original sketch kept below for reference.
->
-> **Frontend follow-up also done (2026-06-21):** the periodic *live* polls now pause overnight too. New pure helper `isOvernightResultWindow()` (`dogResults.js`) gates three loops in `useDogBrowser.js`: the detail live poll and the whole-show live re-poll skip the fetch and keep a slow ~15-min clock heartbeat (resume automatically at 06:00 if left open); the list-page index poll skips its fetch overnight unless it's still reflecting index-build progress. One-time loads, warming polls, and index-warming polling are all unaffected, so nothing is blocked from updating — only the pointless every-2-min live polling stops at night. Touched: `dogResults.js`, `useDogBrowser.js`, `tests/unit/dogResults.test.js`.
-
-
-**Problem:** A multi-day live show keeps its result cache on the 2-minute live TTL across the whole date range, so the crawler/web keep re-checking Showlink overnight even though no results are produced. There is no need to fetch live results between roughly **21:00 and 06:00** local time.
-
-**Approach (single chokepoint):** extend `_show_result_availability()` in `app/dog_show/utils.py`. Today the live branch is `start_date <= today <= end_date → can_fetch True`, with a `morning_hour` (06:00) gate applied **only** on `today == start_date`. Replace with a window gate that applies every day of the range:
-
-```python
-# config.py
-RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "21"))
-
-# utils.py, inside the live-range branch
-if start_date <= today <= end_date:
-    if now.hour < morning_hour:
-        return {**base, "can_fetch": False, "show_state": "live", "reason": "show_morning"}
-    if now.hour >= evening_hour:
-        return {**base, "can_fetch": False, "show_state": "live", "reason": "show_night"}
-    return {**base, "can_fetch": True, "show_state": "live", "reason": "show_day"}
-```
-
-This subsumes the existing first-day morning check and also closes the day-2-at-05:00 gap (currently `today != start_date` falls through to `can_fetch True`).
-
-**Why it's safe downstream** (all already honor `can_fetch`):
-- `crawl_result_cache_for_show` → returns `skipped` for live shows during quiet hours.
-- `_queue_live_result_cache_refresh(es)` → returns `None` (no queue, no immediate warmup).
-- `/all-results` → serves the existing (stale) cache from disk **without** queueing a refresh; only returns 425 if there is no cache at all.
-- TTL stays `RESULT_CACHE_LIVE_TTL` so the cache is *marked* stale, but the refresh is gated → **stale served, zero Showlink requests overnight.** Daytime resumes at 06:00.
-
-**Loose ends to handle when implementing:**
-- Add a `"show_night"` message in `_results_not_ready_response()` (`app/api/dog.py`), e.g. "Tuloksia ei haeta yöaikaan (klo 21–6)." Only surfaces if no cache exists yet during quiet hours (rare mid-range).
-- **Timezone:** the gate uses server-local `datetime.now()`. The existing `morning_hour=6` already assumes server local == Europe/Helsinki, so this is consistent — but confirm the NUC's TZ. If the server isn't on Helsinki time, make the window TZ-aware.
-- **Frontend (optional):** `getShowResultAvailability()` in `dogResults.js` computes phase from dates only, so the detail page would keep polling every 2 min overnight. Those hits only read erez.ac's own cache (no Showlink load), so it's harmless — but teaching the frontend the 21:00–06:00 window would also stop pointless overnight polling of our own server. Defer unless we care.
-- **Single-day vs multi-day:** recommend applying the evening cutoff uniformly to all live shows (simpler; late-night fetching is pointless anyway, and the BIS / entry-completion settling grace already ends live TTL for finished single-day shows). Flagged in case we want to restrict it to multi-day only.
-- Update `docs/dog-show-browser.md` (Freshness Policy + Environment knobs) and the public `frontend/pages/dog/about-crawler.vue` cadence copy (FI + EN) to mention the overnight pause. Add a `tests/test_dog.py` case for the night gate.
-
-**Size:** small, well-scoped backend change + docs + 1 test.
+**Cost model (confirmed):** ~1 request per breed-with-results → **~10k–20k requests per year of history**, dominated by a handful of 200+ breed all-breed shows. Off-peak at a polite rate this is a few nights to seed full history, then incremental for new shows. Crawling is the cheap part; storage + data model are the real work.
 
 ---
 
-### B. Bound `queue_background_indexing` in web workers  ← from scraping audit
+## Agreed direction (2026-06-21)
 
-The only under-bounded scraping path. `app/dog_show/crawler.py:queue_background_indexing()`:
-- dedup set `_background_indexed_shows` is **per-process**, not cross-worker (multiple Gunicorn workers can overlap), and
-- the worker thread iterates **all** missing/empty shows with no per-call cap (`for show in to_index:`), each doing a detail fetch that may itself fan out to group pages (with 0.5 s sleeps).
+> Take all the data, use all the data. Full results, not judge-only. **SQL migration must land before the all-shows backfill** (100k+ result rows do not belong in JSON). The dog store becomes a **separate, permanent `dog.db` database — not a cache**: a dedicated SQLite file for `/dog` only, no Litestream replication (Konsta backs it up manually), and historical data is kept forever. Drop the original "judges on list cards" idea; instead make the **show detail page groupable**.
 
-So on a cold/empty index, one `/api/dog/shows` hit can spawn a thread making *hundreds* of Showlink requests from the web container. It's bounded (1 s spacing, once per process) and the crawler would do the work anyway, but it's the least-contained path.
+Phases below are ordered by dependency.
 
-**Fix:** cap the batch per invocation (e.g. 3–5 shows) and/or gate it behind the shared job-file lock the result-cache path uses, and/or just lean on the `dog-crawler` service (which already runs `crawl_index_once` every 15 min). Cheap change.
+### Phase A — Bound `queue_background_indexing` in web workers  ✅ DONE (this session)
+
+The only under-bounded scraping path. `crawler.py:queue_background_indexing()` iterated **all** missing/empty shows per call (each a detail fetch that can fan out to group pages), with a per-process dedup set, so one cold-index `/api/dog/shows` hit could spawn hundreds of Showlink requests per worker.
+
+**Shipped:** cap the batch per invocation via `BACKGROUND_INDEX_MAX_PER_CALL` (default 5, env `DOG_BACKGROUND_INDEX_MAX_PER_CALL`) in `config.py`; `crawler.py` truncates `to_index` and logs `dog_background_indexing_capped`. The remaining shows are picked up on the next `/api/dog/shows` hit or by the `dog-crawler` service's 15-min `crawl_index_once`. 64/64 `tests/test_dog.py` pass.
+
+### Phase B — SQL migration (prerequisite for the backfill)
+
+Move dog persistence from JSON files to SQLite so the full-data backfill has somewhere to scale.
+
+**Decided (2026-06-21):**
+- **Separate `app/data/dog.db`, used only by `/dog`.** Wired as its own Flask-SQLAlchemy bind key (`SQLALCHEMY_BINDS={"dog": ...}`, `__bind_key__="dog"` on dog models) so the models stay in one place but the file is fully separate. Keeps the heavy `/dog` crawl data out of the low-write `site.db`, and the `dog-crawler` (already a separate process) gets its own DB boundary.
+- **Not replicated to Litestream.** Once fetched, the data is effectively static; Konsta handles backups of `dog.db` manually. So no change to `server/observability/litestream.yml`. Otherwise `dog.db` is a normal SQLite database in the `./app/data` bind mount.
+
+**This store is a persistent database, not a cache (key design constraint).**
+- Old shows' data is **permanent** — never evict or delete settled/historical rows. Retention/TTL logic governs only *when to re-fetch* live or recent shows; it must never *delete* captured data.
+- Audit the migration so none of the current JSON-cache retention/eviction semantics carry over as row deletion. When in doubt, keep the data.
+- Treat `dog.db` as the system of record for historical results, not a disposable cache layer.
+
+**Phase B starts by migrating what we already have and proving parity.**
+1. Migrate all currently-JSON'd state into `dog.db`: `dog_show_index.json` (662 shows), the 15 `dog_result_cache/*.json` docs, and `dog_result_jobs.json`. Idempotent one-off script, reviewed, run once against prod (per the `CLAUDE.md` schema-change policy: explicit plan + tests + reviewed manual prod procedure).
+2. **Verify every current `/dog` feature still works and performs** on the SQL backing before adding anything new — show list, show detail (all enrichment paths), breed results, whole-show all-results, search, live progress, crawler passes. Response shapes must stay byte-identical so the frontend + E2E don't move. Check read latency on the 662-show / full-results dataset.
+
+**Schema sketch (dog.db):**
+- `show` — id, name, title, date, month, source_url, breed/entry counts, updated_at, state flags.
+- `breed` — show_id, group, breed_id, name, entry_count, has_results, judge, result_updated_at. (Carries the per-breed judge; this is what the detail page + search read.)
+- `result` — show_id, group, breed_id, catalog number, dog name, reg_url, **reg_id** (parsed from reg_url — the cross-show anchor), grade, placement, awards, gender, class_name, critique.
+- `result_cache_meta` / `result_job` — replace `dog_result_cache/<id>.json` headers and `dog_result_jobs.json` (status, progress, probe cursor, backoff, heartbeat). Job rows are transient; result rows are permanent.
+
+**Work:**
+1. Define models (new module, e.g. `app/dog_show/models.py`, bind key `dog`) + create tables for fresh/test DBs (no live migrations at import/startup — per `CLAUDE.md`).
+2. Rewrite `store.py` read/write helpers to hit SQL instead of JSON, **preserving the in-memory cache objects and `_show_index`-shaped dict the rest of the package and `app/api/dog.py` re-exports depend on** (see `dog_show/CLAUDE.md` compatibility notes). This is the bulk of the work — `indexing.py`, `result_cache.py`, `search.py`, `crawler.py` all read those structures.
+3. The migration script + parity verification from "Phase B starts by…" above.
+4. Tests: port `tests/test_dog.py` fixtures to SQL (it currently builds `_show_index` dicts directly — these become DB rows). Keep response shapes identical.
+5. Update `docs/dog-show-browser.md` "Persistent Files" + `app/CLAUDE.md` + `dog_show/CLAUDE.md` to describe SQL storage and the permanent-database (non-cache) retention model.
+
+**Risk:** this is the large piece. `tests/test_dog.py` leans heavily on the JSON `_show_index` shape; budget time for the test port. Preserve all `/api/dog/*` response shapes.
+
+### Phase C — All-shows full-data off-peak backfill
+
+After Phase B. A crawler mode that backfills full results for shows beyond the live/7-day window.
+
+- **Quiet-hours gate:** only run between **00:00–06:00 Europe/Helsinki** (`DOG_RESULT_TIMEZONE`). New knobs analogous to the existing `DOG_RESULT_SHOW_MORNING_HOUR` window.
+- **Strictly polite, never bursty — this is a hard rule, even at 3am.** Steady, paced request flow with a low ceiling; no concurrency spikes, no firing a whole show's breeds back-to-back. Pace it so we make measured progress over many nights rather than hammering Showlink — but not so slow it would take a decade. Tune the per-request delay / nightly cap to a deliberate middle ground (e.g. a fixed inter-request spacing and a nightly request budget), and prefer raising the delay over raising concurrency if Showlink ever slows.
+- **Order: current → old (newest first).** Most-relevant history fills in first; deep history trickles in over subsequent nights.
+- Only runs when no live show and no user-queued result job is pending. Reuses the job queue + `crawl_result_cache_for_show` (now writing SQL); resumable per breed (already supported); persists progress so deploys/restarts don't lose work.
+- Once a settled/old show is fully captured it is **done permanently** — not re-crawled on later nights (it's a persistent record now, not a refreshing cache). The backfill only ever advances into not-yet-captured history.
+- **Verify two feasibility unknowns FIRST (cheap probes):**
+  - Does Showlink's show list expose **multi-year history** in a crawlable way, or only a rolling window? *Biggest unknown — determines how far back we can go.*
+  - How **stable is the dog id** in `reg_url` (`jalostus.kennelliitto.fi`)? It's the cross-show anchor for Phase E.
+- **Storage budget:** ~1–5 GB for a few years — fine on the NUC.
+
+### Phase D — Show detail grouping UI + front-page judge search
+
+Frontend-first; degrades gracefully as data fills (FCI grouping works today from group numbers; judge views light up as judges land).
+
+- **Show detail page grouping** (`frontend/features/dog/components/DogShowDetailView.vue` + helpers): three modes, **default = FCI group**.
+  - **FCI group (default):** group breeds under FCI ryhmä 1–10 with proper Finnish group names (add the 10-name map).
+  - **By judge:** group breeds under each judge.
+  - **Alphabetical:** current ordering, **with the judge shown in each breed row**.
+- **Front-page judge search** across all shows comes mostly for free: `search.py` already matches index/breed judges; once every show has judges in SQL, judge queries find all shows. Verify after Phase C and adjust ranking/labels.
+- **Dropped:** judges on the front-page list cards (original request #2). An all-breed show has 15–20+ judges; grouping on the detail page is the chosen home for this data instead.
+
+### Phase E — Deep cross-entity index + dog/judge/kennel profiles  (the big feature; later)
+
+- Secondary index keyed by **dog reg_id**, **judge**, **kennel** (zero extra Showlink load — post-process the SQL `result` rows).
+- "Dog profile" / "judge profile" views: every result across shows, reachable from the reg link already on each result card.
+- ~2–4 dev-days; data model + UI are the real cost.
 
 ---
 
-### C. Cross-show / cross-dog tracking  ← the big feature; deferred
+## Minor scraping notes (acceptable as-is)
 
-Track a dog / kennel / judge across all shows ("show me every result for this dog").
-
-**Politeness math (reassuring):** ~300–500 Finnish KC shows/year; cost ≈ 1 page per breed-with-results → **~10k–20k requests to fully cache one year** (a few 250-breed all-breed shows dominate; most specialties are tiny). At the current polite rate that's ~20–50 min of pure request time per year if flat-out, but spread off-peak ≈ **a couple of nights per year of history**, linear across years. Far less than a season of live-show warming. **Crawling is the cheap part.**
-
-**Approach (~2–4 dev-days; data model + UI are the real cost):**
-1. **Backfill driver** — crawler mode that queues result-cache jobs for shows beyond the 7-day window, strictly rate-limited, only when no live/queued work pends. Reuses the existing job queue + `crawl_result_cache_for_show`.
-2. **Deep index (zero extra Showlink load)** — post-process existing whole-show caches into a secondary index keyed by dog (reg id from `reg_url`), judge, kennel.
-3. **Storage → SQLite for the index** — at ~100k+ dog-result rows JSON creaks; SQLite gives indexed lookups **and** free Litestream backup (the JSON caches currently aren't backed up). Whole-show caches stay JSON.
-4. **Endpoints + "dog profile" view** — results across shows, reachable from the reg link already on every result card.
-
-**Two feasibility unknowns to verify FIRST (cheap to probe):**
-- Does Showlink's show list expose **multi-year history** in a crawlable way, or only a rolling window? If rolling-only, deep history needs another entry point. *Biggest unknown.*
-- How **stable is the dog id** inside `reg_url` (jalostus.kennelliitto.fi)? That reg number is the anchor; without it cross-show linking degrades to fuzzy name + messy kennel-name parsing.
-
-**Storage budget:** ~1–5 GB JSON for a few years of caches — fine on the NUC.
-
----
-
-### D. Minor scraping notes (acceptable as-is)
-
-- No `requests.Session` keep-alive (efficiency, not politeness) — could add a shared session in `showlink.py`.
+- No `requests.Session` keep-alive (efficiency, not politeness) — could add a shared session in `showlink.py` (worth doing alongside Phase C's larger crawl volume).
 - No explicit `Retry-After`/429 honoring — the job backoff covers it.
 - No `robots.txt` check — fine for a low-volume, identified crawler with a public info page.
 
@@ -113,5 +114,4 @@ Track a dog / kennel / judge across all shows ("show me every result for this do
 - Bounded concurrency: ≤3 workers, 0.4 s between request starts, per show.
 - Durable job queue with linear backoff capped at 1 h; `dog_result_jobs.json` acts as a cross-process lock so web + crawler don't double-warm.
 - Atomic writes (temp + `os.replace`), resumable per-breed progress, persisted probe cursor.
-
-Only genuinely under-bounded path = **B** above.
+- Phase A closed the last under-bounded path (`queue_background_indexing`).
