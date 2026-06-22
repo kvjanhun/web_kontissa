@@ -23,7 +23,7 @@ Read this section first when changing `/dog`.
 Important guardrails:
 
 - The frontend must never fan out across all breed result pages; use `/api/dog/shows/<id>/all-results` for whole-show filtering.
-- Persistent dog state is JSON under `DOG_INDEX_DIR`, not SQLite. Do not delete `app/data`, `dog_show_index.json`, `dog_result_jobs.json`, or `dog_result_cache/` casually.
+- Persistent dog state is a dedicated SQLite database, `dog.db` (the `/dog`-only store, separate from `site.db`). It is a **permanent database, not a cache**: historical rows are never evicted. Do not delete `app/data` or `dog.db` casually. All reads/writes go through `app/dog_show/store.py`; the schema lives in `app/dog_show/models.py` and the JSON↔row conversion in `app/dog_show/sqlstore.py`.
 - `pages/dog/index.vue` is intentionally thin after the frontend refactor; dog UI belongs in `frontend/features/dog/`.
 - `app/api/dog.py` is intentionally a backend route facade; dog backend implementation belongs in `app/dog_show/`.
 - Keep Showlink request volume bounded. Prefer crawler/job/cache changes over more client polling.
@@ -59,10 +59,10 @@ Rate limits are intentionally lower than internal crawler throughput:
 ## Data Flow
 
 1. The browser loads `/dog` and calls `/api/dog/shows`.
-2. The show list is enriched from `dog_show_index.json` with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches. When a live show's result cache is stale, this endpoint queues a bounded server-side refresh so front-page polling can move the number forward.
+2. The show list is enriched from the breed index in `dog.db` (`dog_show`/`dog_breed`) with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches. When a live show's result cache is stale, this endpoint queues a bounded server-side refresh so front-page polling can move the number forward.
 3. Opening a show calls `/api/dog/shows/<show_id>`.
-4. If `dog_show_index.json` already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
-5. For live shows, the detail response also reads `dog_result_cache/<show_id>.json` and adds per-breed `result_count`, `result_total_count`, `result_updated_at`, and `result_progress` fields when the cache has seen that breed.
+4. If the breed index already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
+5. For live shows, the detail response also reads the show's result cache (`dog_result_cache`/`dog_result`) and adds per-breed `result_count`, `result_total_count`, `result_updated_at`, and `result_progress` fields when the cache has seen that breed.
 6. If a live show's result cache is stale, the detail endpoint queues the same bounded background refresh used by the show list. The open detail page polls the detail endpoint every 2 minutes.
 7. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
 8. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
@@ -70,22 +70,25 @@ Rate limits are intentionally lower than internal crawler throughput:
 10. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
 11. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
 12. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
-13. Live whole-show result refreshes also probe a bounded rotating set of unchecked breeds, because a direct breed result page can contain rows before its group-list checkmark appears. When a probe finds rows, the breed is marked `has_results` in `dog_show_index.json`.
+13. Live whole-show result refreshes also probe a bounded rotating set of unchecked breeds, because a direct breed result page can contain rows before its group-list checkmark appears. When a probe finds rows, the breed is marked `has_results` in the breed index.
 14. The crawler service also processes queued jobs and proactively warms recent shows.
 15. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
 
-## Persistent Files
+## Persistent Storage (dog.db)
 
-All dog crawler state is JSON under `DOG_INDEX_DIR`. In Docker this is `/app/data`, backed by the host bind mount `./app/data:/app/data`.
+All dog state lives in a dedicated SQLite database, `dog.db`, the `/dog`-only store. Its path is `DOG_DATABASE_URI` (default: `dog.db` inside `DOG_INDEX_DIR`). In Docker that is `/app/data/dog.db`, backed by the host bind mount `./app/data:/app/data`. It uses its own standalone SQLAlchemy engine (`app/dog_show/db.py`), **not** the Flask-SQLAlchemy `db` object, because dog writes happen in background warmup threads and the separate `scripts/dog_crawl.py` process, neither of which has a Flask app context. WAL + `busy_timeout` let the web process read while the crawler writes.
 
-- `dog_show_index.json`: show metadata, breed lists, and known breed judges for search and fast show-detail reads.
-- `dog_result_cache/<show_id>.json`: whole-show result cache documents. These also carry breed-level judges; search can use this data and backfill missing judges into `dog_show_index.json`.
-- `dog_result_jobs.json`: durable queue for missing or stale whole-show caches.
+This is a **permanent database, not a cache**: old shows' data is kept forever and never evicted. Retention/TTL logic governs only *when to re-fetch* live or recent shows — it must never delete captured rows.
 
-These files are not SQLite tables. Litestream currently replicates `/data/site.db` only, so these JSON files are persistent on disk but not covered by the Litestream database backup policy.
+Tables (see `app/dog_show/models.py`):
 
-Do not delete `app/data` or the whole `dog_result_cache` directory casually. To repair one bad result cache, remove only `app/data/dog_result_cache/<show_id>.json`; the next read or crawler pass will rebuild it.
-For recent/live shows, complete caches with zero result breeds are ignored and rebuilt when the index is stale or now shows result-enabled breeds.
+- `dog_show` + `dog_breed`: show metadata and breed lists (with per-breed judges) for search and fast show-detail reads. Replaces the old `dog_show_index.json`. Global `last_updated` and an `index_generation` counter live in `dog_meta`.
+- `dog_result_cache` + `dog_result`: whole-show result cache documents. `dog_result_cache` holds the doc header + a JSON `meta` blob (completed/failed breeds + live-tracking fields); `dog_result` is one normalized row per dog result. Each result row also carries `breed_judge`, so a breed's judge survives independently of `dog_breed` and lazy enrichment can fold it into the index. Replaces `dog_result_cache/<show_id>.json`.
+- `dog_result_job`: durable queue for missing or stale whole-show caches. Replaces `dog_result_jobs.json`. Job rows are transient; result rows are permanent.
+
+`dog.db` is **not** replicated to Litestream (which covers `site.db` only) — once fetched the data is effectively static and Konsta backs it up manually. The in-memory `_show_index` mirror (`store.py`) is reloaded only when `dog_meta.index_generation` advances, so cross-process freshness works without re-reading on every request.
+
+`store.py` keeps the `_show_index` dict and all `/api/dog/*` response shapes byte-identical to the old JSON era; the one-off migration `scripts/migrate_dog_to_sql.py` loaded the legacy JSON files into `dog.db` with validated round-trip parity. For recent/live shows, complete caches with zero result breeds are still ignored and rebuilt when the index is stale or now shows result-enabled breeds.
 
 ## Freshness Policy
 
@@ -121,9 +124,8 @@ If `R=R` is present, the parser fetches that aggregate breed-list page instead o
 
 Environment knobs:
 
-- `DOG_INDEX_DIR`: base directory for dog JSON state.
-- `DOG_RESULT_CACHE_DIR`: override whole-show result cache directory.
-- `DOG_RESULT_JOBS_PATH`: override result job queue path.
+- `DOG_INDEX_DIR`: base directory for dog state; also the default location of `dog.db`.
+- `DOG_DATABASE_URI`: full SQLAlchemy URL for the `/dog` database; defaults to `dog.db` inside `DOG_INDEX_DIR`.
 - `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
 - `DOG_RESULT_BIS_FINAL_GRACE_SECONDS`: seconds to keep live polling after main BIS appears in cached awards; defaults to `1800`.
 - `DOG_RESULT_LIVE_PROBE_BREED_LIMIT`: max unchecked breeds to probe during one live whole-show refresh; defaults to `64`.
@@ -173,7 +175,7 @@ The web container is started with `DOG_NO_CRAWLER=true`; it does not run the lon
 
 - Crawling is server-side; the frontend never fans out across all breed result pages.
 - Whole-show result crawling saves progress after every breed, so partial work can resume.
-- Queued jobs use durable JSON state so deploys and restarts do not lose user-requested cache work.
+- Queued jobs are persisted in `dog.db` (`dog_result_job`) so deploys and restarts do not lose user-requested cache work.
 - Failed queued jobs are deferred with backoff, capped at 1 hour.
 - A running job is considered stale after 30 minutes and can be retried.
 - If a complete cache is stale, stale data can still be served while a refresh is queued.
@@ -241,6 +243,24 @@ Disable user-triggered immediate warmup for a test run:
 ```bash
 DOG_RESULT_IMMEDIATE_WARMUP=false SECRET_KEY=dev python3 run.py
 ```
+
+## One-off JSON → dog.db Migration
+
+`scripts/migrate_dog_to_sql.py` is the reviewed one-off that loaded the legacy JSON caches (`dog_show_index.json`, `dog_result_cache/*.json`, `dog_result_jobs.json`) into `dog.db`. It reads the JSON files directly (decoupled from the now-SQL store), folds result-only judges into the breed list the way the app does lazily, writes the rows, then validates that every record round-trips back identically before reporting success. It is idempotent — it replaces all dog rows each run.
+
+Validate-only (re-check an existing `dog.db` against the JSON, no writes):
+
+```bash
+SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py --validate-only
+```
+
+Run the migration (writes `DOG_DATABASE_URI`, default `app/data/dog.db`):
+
+```bash
+SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py
+```
+
+On the NUC, stop the web + crawler containers first, run the migration against the host `./app/data`, confirm it prints `OK: … round-trip identically`, then start the containers. `dog.db` is not Litestream-replicated; back it up manually.
 
 ## Testing
 

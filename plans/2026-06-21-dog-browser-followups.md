@@ -32,13 +32,15 @@ The only under-bounded scraping path. `crawler.py:queue_background_indexing()` i
 
 **Shipped:** cap the batch per invocation via `BACKGROUND_INDEX_MAX_PER_CALL` (default 5, env `DOG_BACKGROUND_INDEX_MAX_PER_CALL`) in `config.py`; `crawler.py` truncates `to_index` and logs `dog_background_indexing_capped`. The remaining shows are picked up on the next `/api/dog/shows` hit or by the `dog-crawler` service's 15-min `crawl_index_once`. 64/64 `tests/test_dog.py` pass.
 
-### Phase B — SQL migration (prerequisite for the backfill)
+### Phase B — SQL migration (prerequisite for the backfill)  ✅ DONE (this session)
 
-Move dog persistence from JSON files to SQLite so the full-data backfill has somewhere to scale.
+Moved dog persistence from JSON files to SQLite so the full-data backfill has somewhere to scale. Shipped in two commits on `dog-sql-migration`: B.1 (SQL foundation + validated one-off migration) and B.2 (cutover of `store.py`). 65 dog tests + 288 backend tests green; read parity + performance verified against the real 662-show / 4.9k-result dataset.
 
-**Decided (2026-06-21):**
-- **Separate `app/data/dog.db`, used only by `/dog`.** Wired as its own Flask-SQLAlchemy bind key (`SQLALCHEMY_BINDS={"dog": ...}`, `__bind_key__="dog"` on dog models) so the models stay in one place but the file is fully separate. Keeps the heavy `/dog` crawl data out of the low-write `site.db`, and the `dog-crawler` (already a separate process) gets its own DB boundary.
+**Decided (2026-06-21) and as built:**
+- **Separate `app/data/dog.db`, used only by `/dog`.** Built on a **standalone SQLAlchemy engine + thread-local scoped session** (`app/dog_show/db.py`), **not** a Flask-SQLAlchemy bind — dog writes happen in background warmup threads and the separate `scripts/dog_crawl.py` process, neither of which has a Flask app context, so `db.session` would not work there. Keeps the heavy `/dog` crawl data out of the low-write `site.db`. URL is `DOG_DATABASE_URI` (default `dog.db` inside `DOG_INDEX_DIR`).
 - **Not replicated to Litestream.** Once fetched, the data is effectively static; Konsta handles backups of `dog.db` manually. So no change to `server/observability/litestream.yml`. Otherwise `dog.db` is a normal SQLite database in the `./app/data` bind mount.
+- **No referential/identity constraints** (`PRAGMA foreign_keys` off, no breed `UniqueConstraint`): the legacy JSON store enforced none and several paths rely on that permissiveness. Per-breed judges are stored on both `dog_breed.judge` and `dog_result.breed_judge` (the result cache is the source of judges, so a judge survives a round-trip even before the index breed has it).
+- **`_show_index` stays the shared in-memory mirror**, reloaded from `dog.db` only when a `dog_meta.index_generation` counter advances; `_save_index()` flushes only dirty shows. Generation-gated no-op load ≈ 0.3 ms; full reload ≈ 0.25 s (gated, rare).
 
 **This store is a persistent database, not a cache (key design constraint).**
 - Old shows' data is **permanent** — never evict or delete settled/historical rows. Retention/TTL logic governs only *when to re-fetch* live or recent shows; it must never *delete* captured data.
