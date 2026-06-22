@@ -50,6 +50,7 @@ def main():
     parser.add_argument("--backfill-delay", type=float, default=None, help="Seconds between backfill breed-result requests (default: config BACKFILL_DELAY)")
     parser.add_argument("--backfill-workers", type=int, default=None, help="Concurrent requests per backfill show (default 1 — keep low)")
     parser.add_argument("--backfill-limit", type=int, default=None, help="Max shows to backfill per pass (default 1)")
+    parser.add_argument("--backfill-breed-budget", type=int, default=None, help="Max breeds per backfill pass before yielding the loop (default: config BACKFILL_BREED_BUDGET)")
     args = parser.parse_args()
 
     # The crawler is the main writer; make sure the dog.db schema exists before
@@ -135,6 +136,7 @@ def main():
                 limit=args.backfill_limit,
                 delay=args.backfill_delay,
                 workers=args.backfill_workers,
+                breed_budget=args.backfill_breed_budget,
             )
 
         logger.info("dog_crawler_pass_complete", **summary)

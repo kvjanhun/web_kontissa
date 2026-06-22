@@ -18,10 +18,11 @@ from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
-    _breed_result_cache, _claim_result_cache_job, _defer_result_cache_job,
+    _append_result_breed, _breed_result_cache, _claim_result_cache_job,
+    _complete_result_cache_show_ids, _defer_result_cache_job,
     _heartbeat_result_cache_job, _indexed_show, _load_index, _load_result_cache_doc,
     _load_result_jobs, _remove_result_cache_job, _result_job_due, _queue_result_cache_job,
-    _save_index, _save_result_cache_doc, _set_result_job_running,
+    _save_index, _save_result_cache_doc, _save_result_cache_header, _set_result_job_running,
     _show_all_results_cache, _show_detail_cache, _show_index,
 )
 from .utils import (
@@ -672,8 +673,13 @@ def _fetch_breed_results_for_show_cache(show_id, breed):
     }
 
 def _save_result_doc_progress(show_id, doc, preserve_existing_complete):
+    """Header-only progress save (status / completed / failed breeds / live meta).
+
+    Used where no new result rows were produced (breed failure, detail-fetch
+    failure, bounded pause). The success path appends the breed's rows via
+    _append_result_breed instead of rewriting the whole show."""
     if not preserve_existing_complete:
-        _save_result_cache_doc(show_id, doc)
+        _save_result_cache_header(show_id, doc)
 
 def _record_result_breed_failure(show_id, doc, breed, exc, preserve_existing_complete):
     breed_key = _breed_cache_key_from_breed(breed)
@@ -734,7 +740,8 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     doc.setdefault("completed_breeds", {})[item["breed_key"]] = completed_entry
     doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
     doc["updated_at"] = fetched_at
-    _save_result_doc_progress(show_id, doc, preserve_existing_complete)
+    if not preserve_existing_complete:
+        _append_result_breed(show_id, doc, group, breed_id, mapped_results)
     _heartbeat_result_cache_job(show_id)
     updated_index = False
     if result_count and _update_index_breed_result_flag(show_id, group, breed_id):
@@ -789,8 +796,14 @@ def _crawl_missing_breed_results(show_id, pending_breeds, doc, delay, workers, p
 
     return None
 
-def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force=False, source="manual", workers=RESULT_CRAWL_DEFAULT_WORKERS):
-    """Build or resume the persisted whole-show results cache for one show."""
+def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force=False, source="manual", workers=RESULT_CRAWL_DEFAULT_WORKERS, max_breeds=None):
+    """Build or resume the persisted whole-show results cache for one show.
+
+    max_breeds caps how many not-yet-fetched breeds this call crawls before
+    returning status="incomplete" (the show stays resumable, not marked complete).
+    Used by the bounded off-peak backfill so a 200+ breed show is captured across
+    several passes instead of holding the crawler loop for one long crawl. None =
+    crawl all pending breeds in one call (the default for live/auto/queued work)."""
     show_id = int(show_id)
     now = time.time()
     availability = _show_result_availability_for_id(
@@ -860,7 +873,13 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             if existing.get(key):
                 doc[key] = existing.get(key)
     if not preserve_existing_complete:
-        _save_result_cache_doc(show_id, doc)
+        if resumable:
+            # Already-completed breeds' rows are persisted; just refresh the header
+            # so a resume pass doesn't rewrite the whole accumulated result set.
+            _save_result_cache_header(show_id, doc)
+        else:
+            # Fresh crawl: clear any stale partial rows, write the empty baseline.
+            _save_result_cache_doc(show_id, doc)
 
     try:
         show_detail_data = _show_detail_for_result_cache(show_id)
@@ -869,7 +888,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         doc["last_error"] = str(exc)
         doc["updated_at"] = time.time()
         if not preserve_existing_complete:
-            _save_result_cache_doc(show_id, doc)
+            _save_result_cache_header(show_id, doc)
         logger.warning("dog_result_cache_detail_failed", show_id=show_id, source=source, error=str(exc))
         return {
             "show_id": show_id,
@@ -890,7 +909,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     doc["total_breeds"] = len(breeds_with_results)
     doc["updated_at"] = time.time()
     if not preserve_existing_complete:
-        _save_result_cache_doc(show_id, doc)
+        _save_result_cache_header(show_id, doc)
 
     completed_breeds = doc.setdefault("completed_breeds", {})
     doc.setdefault("failed_breeds", {})
@@ -899,6 +918,12 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         breed for breed in breeds_with_results
         if _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
+    # Bounded pass: crawl at most max_breeds this call; the rest resume next pass.
+    bounded_incomplete = (
+        max_breeds is not None and 0 <= max_breeds < len(pending_breeds)
+    )
+    if bounded_incomplete:
+        pending_breeds = pending_breeds[:max_breeds]
     logger.info(
         "dog_result_cache_crawl_start",
         show_id=show_id,
@@ -909,6 +934,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         total_breeds=len(breeds_with_results),
         completed_breeds=len(completed_breeds),
         pending_breeds=len(pending_breeds),
+        max_breeds=max_breeds,
         workers=max(1, int(workers or 1)),
         delay=delay,
     )
@@ -921,7 +947,30 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         preserve_existing_complete=preserve_existing_complete,
     )
     if failure:
+        failure["crawled_breeds"] = len(pending_breeds)
         return failure
+
+    if bounded_incomplete:
+        # Budget reached with breeds still pending: persist progress (the crawled
+        # breeds' rows were appended incrementally) and resume on the next pass.
+        # The show is NOT marked complete, so it stays a backfill candidate.
+        doc["updated_at"] = time.time()
+        if not preserve_existing_complete:
+            _save_result_cache_header(show_id, doc)
+        logger.info(
+            "dog_result_cache_bounded_pause",
+            show_id=show_id,
+            source=source,
+            crawled_breeds=len(pending_breeds),
+            completed_breeds=len(doc.get("completed_breeds", {})),
+            total_breeds=len(breeds_with_results),
+        )
+        return {
+            "show_id": show_id,
+            "status": "incomplete",
+            "crawled_breeds": len(pending_breeds),
+            "progress": _result_cache_progress(show_id, doc=doc),
+        }
 
     cached_at = time.time()
     _mark_live_entry_completion_state(
@@ -949,6 +998,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     return {
         "show_id": show_id,
         "status": "complete",
+        "crawled_breeds": len(pending_breeds),
         "progress": _result_cache_progress(show_id, doc=doc),
     }
 
@@ -1200,6 +1250,9 @@ def _backfill_candidates(now, limit=1):
     secured first. A show is "captured" once it has a complete result cache; that
     is permanent and never re-crawled."""
     _load_index()
+    # One status-column scan instead of fully reconstructing each complete doc
+    # (all result rows + a breed-lookup join) just to read its status string.
+    captured = _complete_result_cache_show_ids()
     candidates = []
     for sid_str, show in (_show_index.get("shows") or {}).items():
         if not _result_breeds_with_results(show.get("breeds") or []):
@@ -1208,7 +1261,7 @@ def _backfill_candidates(now, limit=1):
             sid = int(sid_str)
         except (TypeError, ValueError):
             continue
-        if _result_cache_doc_is_complete(_load_result_cache_doc(sid)):
+        if sid in captured:
             continue  # already permanently captured
         show_date = _show_date_for_id(sid)
         candidates.append((show_date or datetime.date.max, sid))
@@ -1218,14 +1271,20 @@ def _backfill_candidates(now, limit=1):
     return [sid for _, sid in candidates[:limit]]
 
 
-def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_window=False):
+def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_window=False, breed_budget=None):
     """One polite, off-peak backfill step: capture full results for the oldest
     not-yet-captured show(s). Yields outside the window and while user/live result
-    jobs are pending. Single worker + deliberate delay keep it non-bursty."""
+    jobs are pending. Single worker + deliberate delay keep it non-bursty.
+
+    breed_budget caps total breeds crawled this pass across all selected shows; a
+    show larger than the remaining budget is crawled partially (status="incomplete")
+    and resumes next pass, so one 200+ breed show never holds the loop for minutes.
+    None disables the cap (whole shows per pass)."""
     now = now or time.time()
     limit = config.BACKFILL_SHOW_LIMIT if limit is None else limit
     delay = config.BACKFILL_DELAY if delay is None else delay
     workers = config.BACKFILL_WORKERS if workers is None else workers
+    breed_budget = config.BACKFILL_BREED_BUDGET if breed_budget is None else breed_budget
 
     if not force_window and not _within_backfill_window(now):
         logger.info("dog_backfill_skipped", reason="outside_window")
@@ -1246,23 +1305,36 @@ def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_wi
         delay=delay,
         workers=max(1, int(workers or 1)),
         limit=limit,
+        breed_budget=breed_budget,
     )
 
     attempted = []
     completed = 0
     failed = 0
+    in_progress = 0
+    # None = unbounded; otherwise breeds we may still crawl this pass.
+    remaining = None if breed_budget is None else max(0, int(breed_budget))
     for sid in candidates:
-        summary = crawl_result_cache_for_show(sid, delay=delay, source="backfill", workers=workers)
+        if remaining is not None and remaining <= 0:
+            break
+        summary = crawl_result_cache_for_show(
+            sid, delay=delay, source="backfill", workers=workers, max_breeds=remaining,
+        )
         attempted.append(summary)
         logger.info(
             "dog_backfill_show_complete",
             show_id=sid,
             status=summary.get("status"),
+            crawled_breeds=summary.get("crawled_breeds"),
             error=summary.get("error"),
         )
         status = summary.get("status")
+        if remaining is not None:
+            remaining = max(0, remaining - (summary.get("crawled_breeds") or 0))
         if status == "complete":
             completed += 1
+        elif status == "incomplete":
+            in_progress += 1
         elif status != "skipped":
             failed += 1
 
@@ -1270,6 +1342,7 @@ def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_wi
         "status": "ok",
         "attempted": len(attempted),
         "completed": completed,
+        "in_progress": in_progress,
         "failed": failed,
         "show_ids": candidates,
         "items": attempted,
@@ -1278,6 +1351,7 @@ def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_wi
         "dog_backfill_pass_complete",
         attempted=pass_summary["attempted"],
         completed=completed,
+        in_progress=in_progress,
         failed=failed,
     )
     return pass_summary

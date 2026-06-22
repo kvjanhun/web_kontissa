@@ -11,9 +11,11 @@ This is a permanent store, not a cache: historical rows are never evicted.
 """
 
 import contextlib
+import time
 
 import structlog
 from sqlalchemy import create_engine, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import declarative_base, scoped_session, sessionmaker
 
 from .config import DOG_DATABASE_URI
@@ -21,6 +23,15 @@ from .config import DOG_DATABASE_URI
 logger = structlog.get_logger(__name__)
 
 Base = declarative_base()
+
+# SQLite serializes writers: with the crawler and web workers both writing dog.db,
+# a second writer's first write statement raises OperationalError("database is
+# locked") once busy_timeout elapses (WAL acquires the write lock at the first
+# write, not at commit). run_write() re-runs the whole unit of work on that error
+# with short backoff so brief contention recovers instead of failing silently, and
+# emits a structured dog_db_write_contention log so it shows up on the dashboard.
+_WRITE_MAX_ATTEMPTS = 4
+_WRITE_RETRY_BACKOFF = 0.1
 
 # Module-level engine/session, rebindable so tests can point at an isolated DB.
 _engine = None
@@ -95,7 +106,8 @@ def init_db(uri=None):
 
 @contextlib.contextmanager
 def session_scope():
-    """Transactional scope around a series of operations."""
+    """Transactional scope around a series of operations (reads, or single-writer
+    contexts). Writes that may contend with another process should use run_write."""
     if _Session is None:
         configure()
     session = _Session()
@@ -107,3 +119,43 @@ def session_scope():
         raise
     finally:
         _Session.remove()
+
+
+def _is_locked_error(exc):
+    return "database is locked" in str(exc).lower()
+
+
+def run_write(work, op="dog_db_write"):
+    """Run work(session) in a transaction, retrying on SQLite write contention.
+
+    The unit of work is re-run (not just re-committed) because the lock error can
+    surface at any write statement, not only at commit. Dog writes are all
+    delete-then-reinsert / merge, so replaying them is idempotent. Non-lock errors
+    propagate immediately; persistent contention re-raises after the last attempt."""
+    if _Session is None:
+        configure()
+    for attempt in range(1, _WRITE_MAX_ATTEMPTS + 1):
+        session = _Session()
+        try:
+            result = work(session)
+            session.commit()
+            return result
+        except OperationalError as exc:
+            session.rollback()
+            if not _is_locked_error(exc) or attempt == _WRITE_MAX_ATTEMPTS:
+                raise
+            backoff = _WRITE_RETRY_BACKOFF * attempt
+            logger.warning(
+                "dog_db_write_contention",
+                op=op,
+                attempt=attempt,
+                max_attempts=_WRITE_MAX_ATTEMPTS,
+                backoff=round(backoff, 3),
+                error=str(exc)[:200],
+            )
+            time.sleep(backoff)
+        except Exception:
+            session.rollback()
+            raise
+        finally:
+            _Session.remove()

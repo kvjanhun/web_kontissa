@@ -8,7 +8,7 @@ byte-for-byte faithful to what the rest of the package and `/api/dog/*` expect.
 
 import json
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 
 from .models import (
     DogBreed, DogBreedAward, DogMeta, DogResult, DogResultCache, DogResultJob, DogShow,
@@ -143,15 +143,15 @@ def read_index(session):
 # Whole-show result doc  (<-> dog_result_cache/<id>.json)
 # ---------------------------------------------------------------------------
 
-def write_result_doc(session, show_id, doc):
-    sid = int(show_id)
-    session.execute(delete(DogResult).where(DogResult.show_id == sid))
-    session.execute(delete(DogBreedAward).where(DogBreedAward.show_id == sid))
-
+def _result_cache_meta_blob(doc):
     meta = {
         k: v for k, v in doc.items()
         if k not in _RESULT_DOC_PROMOTED and k not in ("results", "show_id")
     }
+    return json.dumps(meta, ensure_ascii=False)
+
+
+def _write_result_cache_header(session, sid, doc):
     session.merge(DogResultCache(
         show_id=sid,
         version=doc.get("version"),
@@ -164,13 +164,15 @@ def write_result_doc(session, show_id, doc):
         updated_at=doc.get("updated_at"),
         cached_at=doc.get("cached_at"),
         last_error=doc.get("last_error"),
-        meta=json.dumps(meta, ensure_ascii=False),
+        meta=_result_cache_meta_blob(doc),
     ))
 
-    for seq, result in enumerate(doc.get("results") or []):
+
+def _insert_result_rows(session, sid, results, start_seq=0):
+    for offset, result in enumerate(results or []):
         session.add(DogResult(
             show_id=sid,
-            seq=seq,
+            seq=start_seq + offset,
             fci_group=str(result.get("breedGroup", "") or ""),
             breed_id=str(result.get("breedId", "") or ""),
             breed_name=result.get("breedName", "") or "",
@@ -188,25 +190,86 @@ def write_result_doc(session, show_id, doc):
             class_name=result.get("class_name", "") or "",
         ))
 
-    # Project per-breed honor-roll winners (kept in completed_breeds) into the
-    # queryable award table. completed_breeds keys are "group:breed_id".
+
+# completed_breeds keys are "group:breed_id"; each value's "awards" list holds the
+# breed honor-roll winners projected into the queryable DogBreedAward table.
+def _insert_breed_award_rows(session, sid, group, breed_id, awards):
+    for position, award in enumerate(awards or []):
+        if not isinstance(award, dict):
+            continue
+        session.add(DogBreedAward(
+            show_id=sid,
+            fci_group=group,
+            breed_id=breed_id,
+            position=position,
+            award_type=award.get("type", "") or "",
+            name=award.get("name", "") or "",
+            owner=award.get("owner", "") or "",
+            text=award.get("text", "") or "",
+        ))
+
+
+def write_result_doc(session, show_id, doc):
+    """Full delete-and-reinsert of a whole-show result doc.
+
+    Reserved for the final status="complete" save and the one-off migration, where
+    a single clean rewrite is correct (and renormalizes seq to 0..n-1). Per-breed
+    progress saves go through append_result_breed instead, which avoids re-deleting
+    and re-inserting the entire accumulated set on every breed."""
+    sid = int(show_id)
+    session.execute(delete(DogResult).where(DogResult.show_id == sid))
+    session.execute(delete(DogBreedAward).where(DogBreedAward.show_id == sid))
+
+    _write_result_cache_header(session, sid, doc)
+    _insert_result_rows(session, sid, doc.get("results") or [], start_seq=0)
     for breed_key, breed_data in (doc.get("completed_breeds") or {}).items():
         if not isinstance(breed_data, dict):
             continue
         group, _, bid = str(breed_key).partition(":")
-        for position, award in enumerate(breed_data.get("awards") or []):
-            if not isinstance(award, dict):
-                continue
-            session.add(DogBreedAward(
-                show_id=sid,
-                fci_group=group,
-                breed_id=bid,
-                position=position,
-                award_type=award.get("type", "") or "",
-                name=award.get("name", "") or "",
-                owner=award.get("owner", "") or "",
-                text=award.get("text", "") or "",
-            ))
+        _insert_breed_award_rows(session, sid, group, bid, breed_data.get("awards"))
+
+
+def write_result_cache_header(session, show_id, doc):
+    """Update only the per-show cache header/meta row (status, completed/failed
+    breeds, live-tracking blob) without touching the normalized result rows.
+
+    The progress path uses this for breed failures and on resume, where the result
+    rows are already persisted and only the header needs refreshing."""
+    _write_result_cache_header(session, int(show_id), doc)
+
+
+def append_result_breed(session, show_id, doc, group, breed_id, results):
+    """Incrementally persist one freshly-completed breed: append its result rows
+    (seq continues monotonically after the show's current max) and its honor-roll
+    awards, then refresh the cache header/meta from doc.
+
+    Scoped-deletes the breed's existing result + award rows first so a resumed or
+    retried breed stays idempotent (no duplicates). Each transaction writes a
+    single breed's handful of rows instead of the whole accumulated set."""
+    sid = int(show_id)
+    group = str(group or "")
+    breed_id = str(breed_id or "")
+
+    session.execute(delete(DogResult).where(
+        DogResult.show_id == sid,
+        DogResult.fci_group == group,
+        DogResult.breed_id == breed_id,
+    ))
+    session.execute(delete(DogBreedAward).where(
+        DogBreedAward.show_id == sid,
+        DogBreedAward.fci_group == group,
+        DogBreedAward.breed_id == breed_id,
+    ))
+
+    next_seq = session.execute(
+        select(func.coalesce(func.max(DogResult.seq), -1)).where(DogResult.show_id == sid)
+    ).scalar_one() + 1
+    _insert_result_rows(session, sid, results or [], start_seq=next_seq)
+
+    breed_data = (doc.get("completed_breeds") or {}).get(f"{group}:{breed_id}") or {}
+    _insert_breed_award_rows(session, sid, group, breed_id, breed_data.get("awards"))
+
+    _write_result_cache_header(session, sid, doc)
 
 
 def _breed_obj_for(breed_row, fallback_group, fallback_breed_id, fallback_name):
@@ -271,8 +334,38 @@ def read_result_doc(session, show_id):
     return doc
 
 
-def all_result_cache_show_ids(session):
-    return [row[0] for row in session.execute(select(DogResultCache.show_id)).all()]
+def complete_result_cache_show_ids(session):
+    """Show ids with a fully-captured result cache (status='complete').
+
+    A single status-column scan, used by the backfill candidate filter to skip
+    already-captured shows without reconstructing each whole-show doc."""
+    return {
+        row[0] for row in session.execute(
+            select(DogResultCache.show_id).where(DogResultCache.status == "complete")
+        ).all()
+    }
+
+
+def pre_phase_c_result_cache_show_ids(session):
+    """Show ids of complete result caches captured before the Phase C full-data
+    change: they have result rows, but every row's competitive_placement is empty
+    and there are no honor-roll award rows. Used by the one-off re-crawl to gain
+    the new fields. (Post-Phase-C captures have PU/PN placements and/or awards.)"""
+    complete = select(DogResultCache.show_id).where(DogResultCache.status == "complete")
+    has_competitive = (
+        select(DogResult.show_id)
+        .where(func.coalesce(DogResult.competitive_placement, "") != "")
+        .distinct()
+    )
+    has_awards = select(DogBreedAward.show_id).distinct()
+    stmt = (
+        select(DogResult.show_id)
+        .where(DogResult.show_id.in_(complete))
+        .where(DogResult.show_id.notin_(has_competitive))
+        .where(DogResult.show_id.notin_(has_awards))
+        .distinct()
+    )
+    return {row[0] for row in session.execute(stmt).all()}
 
 
 # ---------------------------------------------------------------------------

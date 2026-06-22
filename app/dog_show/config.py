@@ -44,6 +44,11 @@ BACKFILL_END_HOUR = int(os.environ.get("DOG_BACKFILL_END_HOUR", "6"))
 BACKFILL_DELAY = float(os.environ.get("DOG_BACKFILL_DELAY", "2.0"))
 BACKFILL_WORKERS = int(os.environ.get("DOG_BACKFILL_WORKERS", "1"))
 BACKFILL_SHOW_LIMIT = int(os.environ.get("DOG_BACKFILL_SHOW_LIMIT", "1"))
+# Max breeds a single backfill pass crawls before returning, so a 200+ breed
+# historical show is captured across several passes (resuming per-breed) instead
+# of holding the crawler loop for one long crawl. ~25 breeds ≈ 50s at 2s spacing,
+# comfortably inside the loop cadence and the off-peak window.
+BACKFILL_BREED_BUDGET = int(os.environ.get("DOG_BACKFILL_BREED_BUDGET", "25"))
 
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")

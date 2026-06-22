@@ -144,6 +144,7 @@ Environment knobs:
 - `DOG_BACKFILL_DELAY`: seconds between backfill breed-result requests; defaults to `2.0`. Prefer raising this over adding workers if Showlink ever slows.
 - `DOG_BACKFILL_WORKERS`: concurrent requests per backfill show; defaults to `1` (deliberately serial — the backfill must never be bursty).
 - `DOG_BACKFILL_SHOW_LIMIT`: max shows to backfill per crawler pass; defaults to `1`.
+- `DOG_BACKFILL_BREED_BUDGET`: max breeds crawled per backfill pass before the pass returns; defaults to `25` (≈50s at the 2s spacing). A show larger than the budget is crawled across several passes (resuming per-breed) instead of holding the crawler loop for one long crawl.
 
 ## Historical Backfill (Phase C)
 
@@ -152,6 +153,22 @@ Environment knobs:
 Oldest-first is deliberate: Showlink keeps a **rolling ~24-month window** and silently drops older shows (their pages return an empty shell, results gone for good). Oldest-first races that window so the most at-risk history is secured first; recent shows are already covered by the auto-warm and live-refresh paths. A show that has already aged out is recorded complete with zero results and not retried.
 
 Each backfill fetch captures everything the result page offers in one pass: per-dog `competitive_placement` (PU/PN), and the breed honor-roll (`dog_breed_award`: ROP/VSP/SERT/veteran/junior/breeder winners with owner/kennel), in addition to the grades, awards, critiques, and judges already captured.
+
+Backfill passes are **bounded by `DOG_BACKFILL_BREED_BUDGET`** (default 25 breeds): a 200+ breed historical show is crawled in chunks across consecutive passes rather than holding the loop for one ~7–8 minute crawl. The crawl is resumable per-breed, so each pass continues the same show (`status="incomplete"`) until the final pass marks it complete. This keeps the queued/auto/live passes responsive between backfill chunks.
+
+### One-off re-crawl of pre-Phase-C shows
+
+A handful of shows were captured between Phase B (SQL migration) and Phase C (full-data capture); their result rows lack `competitive_placement` and they have no `dog_breed_award` rows. `scripts/dog_recrawl_pre_phase_c.py` is a one-off that finds exactly those shows (complete caches with result rows but zero non-empty `competitive_placement` and zero awards) and force-re-crawls them oldest-first so they gain the new fields. It is **not** part of the crawler loop.
+
+Before forcing each show it fetches the live Showlink detail page and only re-crawls if the show **still serves result-bearing breeds** — a show that has aged out of Showlink's window is skipped and its captured data is left intact (a force re-crawl would otherwise overwrite it with an empty result set). Run it against the host `./app/data` like the other one-off migrations:
+
+```bash
+SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py --dry-run   # list selected ids
+SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py             # re-crawl all (oldest first)
+SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py --limit 5   # oldest 5 only
+```
+
+It is idempotent: once a show has the new fields it no longer matches the selector.
 
 ## Public Crawler Identity
 
@@ -170,7 +187,7 @@ The public info page at `/dog/about-crawler` explains in Finnish and English wha
 Current `docker-compose.yml` command:
 
 ```bash
-python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
+python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3 --backfill
 ```
 
 This means:
@@ -181,6 +198,7 @@ This means:
 - Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 - During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
+- Every pass (lowest priority): one off-peak historical backfill step (`--backfill`), bounded to ~25 breeds (`DOG_BACKFILL_BREED_BUDGET`) so a large show is captured across passes. No-op outside the Finnish 00:00–06:00 window or while any user/live result job is pending. See [Historical Backfill](#historical-backfill-phase-c).
 
 The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.
 

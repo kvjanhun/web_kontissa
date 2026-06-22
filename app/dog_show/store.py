@@ -91,15 +91,17 @@ def _save_index():
     if not dirty:
         return
 
+    def _write(session):
+        for sid in dirty:
+            show = _show_index.get("shows", {}).get(sid)
+            if show is None:
+                continue
+            sqlstore.write_show(session, sid, show)
+        sqlstore.set_meta(session, "last_updated", _show_index.get("last_updated") or 0)
+        return sqlstore.bump_index_generation(session)
+
     try:
-        with dog_db.session_scope() as session:
-            for sid in dirty:
-                show = _show_index.get("shows", {}).get(sid)
-                if show is None:
-                    continue
-                sqlstore.write_show(session, sid, show)
-            sqlstore.set_meta(session, "last_updated", _show_index.get("last_updated") or 0)
-            new_generation = sqlstore.bump_index_generation(session)
+        new_generation = dog_db.run_write(_write, op="index_save")
     except Exception:
         logger.exception("dog_index_save_failed")
         return
@@ -122,8 +124,39 @@ def _load_result_cache_doc(show_id):
 
 
 def _save_result_cache_doc(show_id, doc):
-    with dog_db.session_scope() as session:
-        sqlstore.write_result_doc(session, show_id, doc)
+    """Full rewrite of a whole-show result doc (final complete save / migration)."""
+    dog_db.run_write(
+        lambda session: sqlstore.write_result_doc(session, show_id, doc),
+        op="result_cache_doc",
+    )
+
+
+def _save_result_cache_header(show_id, doc):
+    """Update only the cache header/meta row, leaving result rows untouched. Used
+    on breed failure and on resume, where the rows are already persisted."""
+    dog_db.run_write(
+        lambda session: sqlstore.write_result_cache_header(session, show_id, doc),
+        op="result_cache_header",
+    )
+
+
+def _append_result_breed(show_id, doc, group, breed_id, results):
+    """Incrementally persist one freshly-completed breed's rows + awards and refresh
+    the cache header — the per-breed progress save (replaces whole-show rewrite)."""
+    dog_db.run_write(
+        lambda session: sqlstore.append_result_breed(session, show_id, doc, group, breed_id, results),
+        op="result_breed_append",
+    )
+
+
+def _complete_result_cache_show_ids():
+    """Set of show ids with a complete result cache (for the backfill skip check)."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.complete_result_cache_show_ids(session)
+    except Exception:
+        logger.exception("dog_complete_result_cache_ids_failed")
+        return set()
 
 
 # ---------------------------------------------------------------------------
@@ -140,8 +173,10 @@ def _load_result_jobs():
 
 
 def _save_result_jobs(data):
-    with dog_db.session_scope() as session:
-        sqlstore.write_jobs(session, data)
+    dog_db.run_write(
+        lambda session: sqlstore.write_jobs(session, data),
+        op="result_jobs",
+    )
 
 
 def _queue_result_cache_job(show_id, reason="user"):

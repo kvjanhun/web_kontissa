@@ -2566,3 +2566,194 @@ def test_backfill_crawls_oldest_and_persists_phase_c_fields(mock_get, monkeypatc
     again = dog_result_cache._backfill_candidates(now=_hel_timestamp(2026, 6, 22, 3), limit=10)
     assert 12754 not in again
     assert 14042 in again
+
+
+# ---------------------------------------------------------------------------
+# Post-Phase-C review follow-ups: incremental writes, status-only candidate scan,
+# bounded backfill, pre-Phase-C re-crawl selector
+# ---------------------------------------------------------------------------
+
+def _dog_row_count(model, show_id):
+    from sqlalchemy import func, select
+    with dog_db.session_scope() as session:
+        return session.execute(
+            select(func.count()).select_from(model).where(model.show_id == show_id)
+        ).scalar_one()
+
+
+def _phase_c_result(group, breed, number, comp="", judge="J"):
+    return {
+        "number": number, "name": f"Dog {number}", "reg_url": "", "grade": "ERI",
+        "placement": number, "competitive_placement": comp, "awards": "", "critique": "c",
+        "gender": "uros", "class_name": "AVO", "breedName": f"breed-{breed}",
+        "breedGroup": group, "breedId": breed,
+        "breedObj": {"name": f"breed-{breed}", "group": group, "breed_id": breed, "judge": judge},
+    }
+
+
+def test_append_result_breed_matches_full_rewrite():
+    """Incremental per-breed appends reconstruct a doc byte-identical to a single
+    full rewrite of the same final doc, with identical row counts."""
+    import copy
+    from app.dog_show import sqlstore
+    from app.dog_show.models import DogBreedAward, DogResult
+
+    final_doc = {
+        "version": 1, "status": "complete", "source": "test", "title": "T",
+        "source_url": "u", "total_breeds": 2, "started_at": 1.0, "updated_at": 9.0,
+        "cached_at": 9.0, "last_error": None,
+        "completed_breeds": {
+            "5:3": {"name": "breed-3", "result_count": 2, "judge": "J",
+                    "awards": [{"type": "ROP", "name": "A", "owner": "OA", "text": "A, Om. OA"}]},
+            "8:124": {"name": "breed-124", "result_count": 1, "judge": "J",
+                      "awards": [{"type": "CACIB uros", "name": "B", "owner": "OB", "text": "B, Om. OB"}]},
+        },
+        "failed_breeds": {},
+        "results": [
+            _phase_c_result("5", "3", 1, comp="PU1"),
+            _phase_c_result("5", "3", 2, comp=""),
+            _phase_c_result("8", "124", 1, comp="PN1"),
+        ],
+    }
+
+    # Reference: one clean full rewrite into show 9001.
+    with dog_db.session_scope() as session:
+        sqlstore.write_result_doc(session, 9001, final_doc)
+    with dog_db.session_scope() as session:
+        ref_doc = sqlstore.read_result_doc(session, 9001)
+
+    # Incremental: progressive per-breed appends into show 9002, mirroring the crawl.
+    building = copy.deepcopy(final_doc)
+    building["status"] = "running"
+    building["results"] = []
+    building["completed_breeds"] = {}
+    with dog_db.session_scope() as session:
+        sqlstore.write_result_cache_header(session, 9002, building)
+
+    b1 = [r for r in final_doc["results"] if r["breedId"] == "3"]
+    building["results"].extend(b1)
+    building["completed_breeds"]["5:3"] = final_doc["completed_breeds"]["5:3"]
+    with dog_db.session_scope() as session:
+        sqlstore.append_result_breed(session, 9002, building, "5", "3", b1)
+
+    b2 = [r for r in final_doc["results"] if r["breedId"] == "124"]
+    building["results"].extend(b2)
+    building["completed_breeds"]["8:124"] = final_doc["completed_breeds"]["8:124"]
+    building["status"] = "complete"
+    with dog_db.session_scope() as session:
+        sqlstore.append_result_breed(session, 9002, building, "8", "124", b2)
+
+    with dog_db.session_scope() as session:
+        inc_doc = sqlstore.read_result_doc(session, 9002)
+
+    ref_doc.pop("show_id")
+    inc_doc.pop("show_id")
+    assert inc_doc == ref_doc  # byte-identical reconstruction
+    assert _dog_row_count(DogResult, 9001) == _dog_row_count(DogResult, 9002) == 3
+    assert _dog_row_count(DogBreedAward, 9001) == _dog_row_count(DogBreedAward, 9002) == 2
+
+
+def test_append_result_breed_idempotent_on_resave():
+    """Re-appending the same breed (resume/retry) replaces its rows rather than
+    duplicating result or award rows."""
+    from app.dog_show import sqlstore
+    from app.dog_show.models import DogBreedAward, DogResult
+
+    rows = [_phase_c_result("5", "3", 1, comp="PU1"), _phase_c_result("5", "3", 2)]
+    doc = {
+        "version": 1, "status": "running", "source": "t", "title": "T", "source_url": "u",
+        "total_breeds": 1, "results": list(rows),
+        "completed_breeds": {"5:3": {"name": "breed-3", "result_count": 2, "judge": "J",
+            "awards": [{"type": "ROP", "name": "X", "owner": "Y", "text": "X, Om. Y"}]}},
+    }
+
+    with dog_db.session_scope() as session:
+        sqlstore.append_result_breed(session, 9100, doc, "5", "3", rows)
+    assert (_dog_row_count(DogResult, 9100), _dog_row_count(DogBreedAward, 9100)) == (2, 1)
+
+    with dog_db.session_scope() as session:
+        sqlstore.append_result_breed(session, 9100, doc, "5", "3", rows)
+    assert (_dog_row_count(DogResult, 9100), _dog_row_count(DogBreedAward, 9100)) == (2, 1)
+
+
+def test_complete_result_cache_show_ids_only_complete():
+    from app.dog_show import sqlstore
+
+    dog_module._save_result_cache_doc(300, {"status": "complete", "total_breeds": 0, "results": []})
+    dog_module._save_result_cache_doc(301, {"status": "running", "total_breeds": 0, "results": []})
+    dog_module._save_result_cache_doc(302, {"status": "partial", "total_breeds": 0, "results": []})
+
+    with dog_db.session_scope() as session:
+        assert sqlstore.complete_result_cache_show_ids(session) == {300}
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_backfill_breed_budget_spans_passes(mock_get, monkeypatch):
+    """A show larger than the per-pass breed budget is captured across multiple
+    passes and marked complete only when every breed is crawled."""
+    from app.dog_show import sqlstore
+    from app.dog_show.models import DogResult
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    seed_index_show("12000", {
+        "title": "01.06.2024 Big Show", "name": "Big Show",
+        "date": "01.06.", "month": "kesäkuu 2024", "source_url": dog_module._source_url(12000),
+        "breeds": [
+            {"name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "noutaja", "count": 3, "group": "8", "breed_id": "124", "has_results": True},
+            {"name": "villakoira", "count": 3, "group": "9", "breed_id": "172", "has_results": True},
+        ],
+    })
+
+    resp = MagicMock()
+    resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
+    resp.status_code = 200
+    mock_get.return_value = resp
+
+    def complete_ids():
+        with dog_db.session_scope() as session:
+            return sqlstore.complete_result_cache_show_ids(session)
+
+    now = _hel_timestamp(2026, 6, 22, 3)
+
+    # Pass 1: budget 2 of 3 breeds → in progress, not complete, still a candidate.
+    p1 = dog_result_cache.crawl_backfill_once(limit=1, delay=0, workers=1, force_window=True, breed_budget=2)
+    assert p1["status"] == "ok"
+    assert p1["in_progress"] == 1
+    assert p1["completed"] == 0
+    assert 12000 not in complete_ids()
+    assert 12000 in dog_result_cache._backfill_candidates(now=now, limit=10)
+
+    # Pass 2: remaining breed crawled → complete and no longer a candidate.
+    p2 = dog_result_cache.crawl_backfill_once(limit=1, delay=0, workers=1, force_window=True, breed_budget=2)
+    assert p2["completed"] == 1
+    assert 12000 in complete_ids()
+    assert 12000 not in dog_result_cache._backfill_candidates(now=now, limit=10)
+
+    # 3 breeds × 1 dog each, captured exactly once (no duplicate rows across passes).
+    assert _dog_row_count(DogResult, 12000) == 3
+
+
+def test_pre_phase_c_selector_picks_only_pre_phase_c_shows():
+    """The re-crawl selector picks complete caches that have result rows but no
+    competitive_placement and no awards, and skips everything else."""
+    from app.dog_show import sqlstore
+
+    # 200: pre-Phase-C → complete, result rows, all empty competitive, no awards.
+    dog_module._save_result_cache_doc(200, {"status": "complete", "total_breeds": 1,
+        "results": [_phase_c_result("5", "3", 1), _phase_c_result("5", "3", 2)]})
+    # 201: already has competitive_placement → excluded.
+    dog_module._save_result_cache_doc(201, {"status": "complete", "total_breeds": 1,
+        "results": [_phase_c_result("5", "3", 1, comp="PU1")]})
+    # 202: already has honor-roll awards → excluded.
+    dog_module._save_result_cache_doc(202, {"status": "complete", "total_breeds": 1,
+        "results": [_phase_c_result("5", "3", 1)],
+        "completed_breeds": {"5:3": {"awards": [{"type": "ROP", "name": "X", "owner": "Y", "text": "X, Om. Y"}]}}})
+    # 203: not complete → excluded.
+    dog_module._save_result_cache_doc(203, {"status": "running", "total_breeds": 1,
+        "results": [_phase_c_result("5", "3", 1)]})
+    # 204: complete but no result rows → excluded (nothing to enrich).
+    dog_module._save_result_cache_doc(204, {"status": "complete", "total_breeds": 0, "results": []})
+
+    with dog_db.session_scope() as session:
+        assert sqlstore.pre_phase_c_result_cache_show_ids(session) == {200}
