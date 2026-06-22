@@ -1,5 +1,6 @@
 <script setup>
 import DogResultCard from './DogResultCard.vue'
+import { showBreedGroupCritiqueKey } from '../dogResults.js'
 
 const props = defineProps({
   group: {
@@ -23,7 +24,7 @@ const props = defineProps({
 defineEmits(['group-click', 'open-breed', 'toggle-critique'])
 
 function critiqueKey(dog) {
-  return `all-${props.group.key}-${dog.number || dog.name}`
+  return showBreedGroupCritiqueKey(props.group, dog)
 }
 </script>
 

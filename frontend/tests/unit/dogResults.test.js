@@ -15,6 +15,8 @@ import {
   groupShowBreedGroups,
   isOvernightResultWindow,
   parseShowDateRange,
+  showAwardCritiqueKey,
+  showBreedGroupCritiqueKey,
   showStatItems,
   showStatsLabel,
   sortBreedAwards,
@@ -673,6 +675,32 @@ describe('groupShowBreedGroups', () => {
 
   it('returns no sections for an empty breed list', () => {
     expect(groupShowBreedGroups([], 'fci')).toEqual([])
+  })
+})
+
+describe('show-detail critique keys', () => {
+  it('builds the breed-group key from the group key and dog number', () => {
+    const group = { key: '6:Basenji' }
+    expect(showBreedGroupCritiqueKey(group, { number: 1, name: 'Aamun Tähti' }))
+      .toBe('all-6:Basenji-1')
+  })
+
+  it('falls back to the dog name when there is no catalog number', () => {
+    const group = { key: '6:Basenji' }
+    expect(showBreedGroupCritiqueKey(group, { number: '', name: 'Aamun Tähti' }))
+      .toBe('all-6:Basenji-Aamun Tähti')
+  })
+
+  it('builds the award key including the dogs breed identity', () => {
+    const group = { key: 'BIS' }
+    expect(showAwardCritiqueKey(group, { number: 2, breedGroup: '6', breedName: 'Basenji', name: 'Iltatähti' }))
+      .toBe('show-award-BIS-6-2')
+  })
+
+  it('award key falls back to breed name then dog name', () => {
+    const group = { key: 'ROP/VSP' }
+    expect(showAwardCritiqueKey(group, { breedName: 'Basenji', name: 'Iltatähti' }))
+      .toBe('show-award-ROP/VSP-Basenji-Iltatähti')
   })
 })
 

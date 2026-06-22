@@ -4,6 +4,7 @@ import DogMetaBar from './DogMetaBar.vue'
 import DogResultCard from './DogResultCard.vue'
 import DogShowTools from './DogShowTools.vue'
 import DogStateBlock from './DogStateBlock.vue'
+import { showAwardCritiqueKey, showBreedGroupCritiqueKey } from '../dogResults.js'
 
 const props = defineProps({
   showDetail: {
@@ -136,7 +137,7 @@ const props = defineProps({
   },
 })
 
-defineEmits([
+const emit = defineEmits([
   'retry-detail',
   'update:breedSearchQuery',
   'update:resultBreedsOnly',
@@ -149,6 +150,7 @@ defineEmits([
   'breed-group-click',
   'open-breed',
   'toggle-critique',
+  'toggle-all-critiques',
   'toggle-breed-section',
   'toggle-all-breed-sections',
 ])
@@ -160,7 +162,7 @@ const groupModeOptions = [
 ]
 
 function awardCritiqueKey(group, dog) {
-  return `show-award-${group.key}-${dog.breedGroup || dog.breedName || ''}-${dog.number || dog.name}`
+  return showAwardCritiqueKey(group, dog)
 }
 
 const shownDogCount = computed(() => {
@@ -170,6 +172,42 @@ const shownDogCount = computed(() => {
   }
   return props.showBreedGroups.reduce((total, group) => total + (group.dogs?.length || 0), 0)
 })
+
+// Critique toggles only exist for dogs that are actually on screen: cards in the
+// award view, or dogs inside breed groups that are both expanded and in a section
+// that isn't collapsed. "Expand all" mirrors the breed page and acts only on those.
+const visibleCritiqueKeys = computed(() => {
+  if (!props.allDogsLoaded) return []
+  const keys = []
+  if (props.dogAwardFilter && props.showAwardResultGroups.length) {
+    props.showAwardResultGroups.forEach(group => {
+      group.dogs.forEach(dog => {
+        if (dog.critique) keys.push(showAwardCritiqueKey(group, dog))
+      })
+    })
+    return keys
+  }
+  props.showBreedSections.forEach(section => {
+    if (section.label && props.isBreedSectionCollapsed(section.key)) return
+    section.breeds.forEach(group => {
+      if (!props.isBreedGroupExpanded(group)) return
+      group.dogs.forEach(dog => {
+        if (dog.critique) keys.push(showBreedGroupCritiqueKey(group, dog))
+      })
+    })
+  })
+  return keys
+})
+
+const allVisibleCritiquesExpanded = computed(() => {
+  const keys = visibleCritiqueKeys.value
+  if (keys.length === 0) return false
+  return keys.every(key => props.expandedCritiques.has(key))
+})
+
+function toggleAllVisibleCritiques() {
+  emit('toggle-all-critiques', visibleCritiqueKeys.value, !allVisibleCritiquesExpanded.value)
+}
 </script>
 
 <template>
@@ -221,6 +259,17 @@ const shownDogCount = computed(() => {
         <div class="dog-results-meta-left">
           Löytyi <span class="dog-highlight-text">{{ shownDogCount }}</span> {{ shownDogCount === 1 ? 'koira' : 'koiraa' }}
         </div>
+        <button
+          v-if="visibleCritiqueKeys.length"
+          type="button"
+          class="dog-critique-toggle-all-btn"
+          @click="toggleAllVisibleCritiques"
+        >
+          <svg class="dog-chevron-icon" :class="{ 'dog-chevron-up': allVisibleCritiquesExpanded }" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="196 96 128 164 60 96" />
+          </svg>
+          <span>{{ allVisibleCritiquesExpanded ? 'Piilota arvostelut' : 'Näytä kaikki arvostelut' }}</span>
+        </button>
       </div>
 
       <div

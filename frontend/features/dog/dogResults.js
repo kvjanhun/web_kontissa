@@ -334,6 +334,17 @@ export function groupShowBreedGroups(breedGroups = [], mode = 'fci') {
   })
 }
 
+// Critique-expansion keys for the show-detail view. Kept here (not inlined in
+// the components) so the rendered toggle and the "expand all" computation agree
+// on the same key and can never drift apart.
+export function showBreedGroupCritiqueKey(group, dog) {
+  return `all-${group.key}-${dog.number || dog.name}`
+}
+
+export function showAwardCritiqueKey(group, dog) {
+  return `show-award-${group.key}-${dog.breedGroup || dog.breedName || ''}-${dog.number || dog.name}`
+}
+
 export function splitAwards(value) {
   return (value || '').split(',').map(item => item.trim()).filter(Boolean)
 }

@@ -1970,6 +1970,11 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
+  /* Reserve the toggle button's height up front. On the show page the
+     "Näytä kaikki arvostelut" control only appears after a breed group is
+     opened; without a stable min-height the taller chip button would grow this
+     row and nudge the results below it down. */
+  min-height: 2.55rem;
   margin: 0.5rem 0 1.25rem;
   padding: 0.25rem 0.25rem 0.5rem;
   border-bottom: 1px solid var(--dog-border);

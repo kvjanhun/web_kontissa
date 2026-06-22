@@ -170,6 +170,7 @@ watch(pageTitle, (title) => {
         @breed-group-click="onBreedGroupClick"
         @open-breed="openBreed"
         @toggle-critique="toggleCritique"
+        @toggle-all-critiques="toggleAllCritiques"
         @toggle-breed-section="toggleBreedSection"
         @toggle-all-breed-sections="toggleAllBreedSections"
       />

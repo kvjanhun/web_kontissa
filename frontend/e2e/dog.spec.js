@@ -396,9 +396,18 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
     await expect(page.getByText('Aamun Tähti')).toHaveCount(0)
+    // With every breed group collapsed there is nothing on screen to expand.
+    await expect(page.getByRole('button', { name: 'Näytä kaikki arvostelut' })).toHaveCount(0)
     await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     await expect(page.getByText('Iltatähti')).toBeVisible()
+
+    // Expand/collapse-all critiques appears once an open group has a critique.
+    await expect(page.getByText('Hieno basenji')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Näytä kaikki arvostelut' }).click()
+    await expect(page.getByText('Hieno basenji')).toBeVisible()
+    await page.getByRole('button', { name: 'Piilota arvostelut' }).click()
+    await expect(page.getByText('Hieno basenji')).toHaveCount(0)
 
     // Filter by grade 'ERI'
     await page.locator('select').first().selectOption('eri')
