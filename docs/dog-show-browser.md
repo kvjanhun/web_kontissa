@@ -83,7 +83,8 @@ This is a **permanent database, not a cache**: old shows' data is kept forever a
 Tables (see `app/dog_show/models.py`):
 
 - `dog_show` + `dog_breed`: show metadata and breed lists (with per-breed judges) for search and fast show-detail reads. Replaces the old `dog_show_index.json`. Global `last_updated` and an `index_generation` counter live in `dog_meta`.
-- `dog_result_cache` + `dog_result`: whole-show result cache documents. `dog_result_cache` holds the doc header + a JSON `meta` blob (completed/failed breeds + live-tracking fields); `dog_result` is one normalized row per dog result. Each result row also carries `breed_judge`, so a breed's judge survives independently of `dog_breed` and lazy enrichment can fold it into the index. Replaces `dog_result_cache/<show_id>.json`.
+- `dog_result_cache` + `dog_result`: whole-show result cache documents. `dog_result_cache` holds the doc header + a JSON `meta` blob (completed/failed breeds + live-tracking fields); `dog_result` is one normalized row per dog result. Each result row also carries `breed_judge` (so a breed's judge survives independently of `dog_breed`) and `competitive_placement` (the PU/PN best-of-sex ranking). Replaces `dog_result_cache/<show_id>.json`.
+- `dog_breed_award`: breed honor-roll winners (ROP/VSP/SERT/veteran/junior/breeder) with `name` + `owner`, parsed from each result page's award table. A queryable projection of the awards also kept in the result doc's `completed_breeds` blob; rewritten per show alongside `dog_result`. Powers Phase E "wins by dog/kennel" queries.
 - `dog_result_job`: durable queue for missing or stale whole-show caches. Replaces `dog_result_jobs.json`. Job rows are transient; result rows are permanent.
 
 `dog.db` is **not** replicated to Litestream (which covers `site.db` only) — once fetched the data is effectively static and Konsta backs it up manually. The in-memory `_show_index` mirror (`store.py`) is reloaded only when `dog_meta.index_generation` advances, so cross-process freshness works without re-reading on every request.
@@ -139,6 +140,18 @@ Environment knobs:
 - `DOG_RESULT_TIMEZONE`: IANA timezone used to evaluate show dates and the morning/evening result windows; defaults to `Europe/Helsinki`. The crawler/web containers run in UTC, so this is resolved explicitly via `tzdata` rather than the process clock.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
+- `DOG_BACKFILL_START_HOUR` / `DOG_BACKFILL_END_HOUR`: Finnish local off-peak window for the historical backfill; defaults to `0`–`6` (00:00–06:00). End is exclusive; the window may wrap midnight.
+- `DOG_BACKFILL_DELAY`: seconds between backfill breed-result requests; defaults to `2.0`. Prefer raising this over adding workers if Showlink ever slows.
+- `DOG_BACKFILL_WORKERS`: concurrent requests per backfill show; defaults to `1` (deliberately serial — the backfill must never be bursty).
+- `DOG_BACKFILL_SHOW_LIMIT`: max shows to backfill per crawler pass; defaults to `1`.
+
+## Historical Backfill (Phase C)
+
+`scripts/dog_crawl.py --backfill` enables an off-peak, oldest-first crawl that captures full results for shows beyond the live/auto window. It is a no-op outside the Finnish 00:00–06:00 window and while any user/live result job is queued or running, so it never competes with live work. It selects the **oldest not-yet-captured** show with result-bearing breeds, crawls it via the normal result-cache path (single worker, `DOG_BACKFILL_DELAY` between requests), and marks it complete. A complete show is **permanently captured and never re-crawled** — the backfill only advances into not-yet-captured history.
+
+Oldest-first is deliberate: Showlink keeps a **rolling ~24-month window** and silently drops older shows (their pages return an empty shell, results gone for good). Oldest-first races that window so the most at-risk history is secured first; recent shows are already covered by the auto-warm and live-refresh paths. A show that has already aged out is recorded complete with zero results and not retried.
+
+Each backfill fetch captures everything the result page offers in one pass: per-dog `competitive_placement` (PU/PN), and the breed honor-roll (`dog_breed_award`: ROP/VSP/SERT/veteran/junior/breeder winners with owner/kennel), in addition to the grades, awards, critiques, and judges already captured.
 
 ## Public Crawler Identity
 
@@ -261,6 +274,14 @@ SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py
 ```
 
 On the NUC, stop the web + crawler containers first, run the migration against the host `./app/data`, confirm it prints `OK: … round-trip identically`, then start the containers. `dog.db` is not Litestream-replicated; back it up manually.
+
+## Phase C schema migration (existing dog.db)
+
+`scripts/migrate_dog_phase_c.py` adds the Phase C capture fields to an existing `dog.db`: the `dog_result.competitive_placement` column (an additive `ALTER TABLE`) and the `dog_breed_award` table (`create_all`). It is idempotent and additive — it never drops or rewrites rows; pre-Phase-C rows simply have `NULL` competitive_placement and no honor-roll until those shows are (re)crawled. Run it once before enabling `--backfill` on the new image:
+
+```bash
+docker compose run --rm web python scripts/migrate_dog_phase_c.py   # prints what it changed
+```
 
 ## Testing
 

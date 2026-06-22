@@ -78,7 +78,8 @@ class DogResult(Base):
     # judge into the index even before the crawl path has written it there.
     breed_judge = Column(Text)
     grade = Column(Text, default="")
-    placement = Column(Integer)
+    placement = Column(Integer)                  # class placement (luokkasija)
+    competitive_placement = Column(Text, default="")  # best-of-sex rank: PU1/PN1/...
     awards = Column(Text, default="")
     critique = Column(Text, default="")
     gender = Column(Text, default="")
@@ -86,6 +87,31 @@ class DogResult(Base):
 
     __table_args__ = (
         Index("ix_result_breed", "show_id", "fci_group", "breed_id"),
+    )
+
+
+class DogBreedAward(Base):
+    """Breed honor-roll winners (ROP/VSP/SERT/veteran/junior/breeder) parsed from
+    the result page's award table. A derived, queryable projection of the awards
+    also kept inside the result doc's completed_breeds blob — populated from there
+    on write so Phase E can ask "every ROP/BIS win by dog/kennel X" without
+    scanning JSON. Rewritten wholesale per show alongside dog_result."""
+
+    __tablename__ = "dog_breed_award"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    show_id = Column(Integer, nullable=False, index=True)
+    fci_group = Column(Text, default="")
+    breed_id = Column(Text, default="")
+    position = Column(Integer, default=0, nullable=False)  # order within the breed's honor roll
+    award_type = Column(Text, default="")   # ROP, VSP, "SERT uros", "ROP veteraani", ...
+    name = Column(Text, default="")          # winning dog (or kennel for the breeder award)
+    owner = Column(Text, default="")
+    text = Column(Text, default="")          # raw "Name, Om. Owner" as shown
+
+    __table_args__ = (
+        Index("ix_breed_award_breed", "show_id", "fci_group", "breed_id"),
+        Index("ix_breed_award_name", "name"),
     )
 
 

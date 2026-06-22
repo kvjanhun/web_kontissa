@@ -10,7 +10,9 @@ import json
 
 from sqlalchemy import delete, select
 
-from .models import DogBreed, DogMeta, DogResult, DogResultCache, DogResultJob, DogShow
+from .models import (
+    DogBreed, DogBreedAward, DogMeta, DogResult, DogResultCache, DogResultJob, DogShow,
+)
 from .utils import _clean_judge_name, _parse_reg_id
 
 # Whole-show result-doc top-level fields promoted to their own columns. Every
@@ -144,6 +146,7 @@ def read_index(session):
 def write_result_doc(session, show_id, doc):
     sid = int(show_id)
     session.execute(delete(DogResult).where(DogResult.show_id == sid))
+    session.execute(delete(DogBreedAward).where(DogBreedAward.show_id == sid))
 
     meta = {
         k: v for k, v in doc.items()
@@ -178,11 +181,32 @@ def write_result_doc(session, show_id, doc):
             breed_judge=(result.get("breedObj") or {}).get("judge") or None,
             grade=result.get("grade", "") or "",
             placement=result.get("placement"),
+            competitive_placement=result.get("competitive_placement", "") or "",
             awards=result.get("awards", "") or "",
             critique=result.get("critique", "") or "",
             gender=result.get("gender", "") or "",
             class_name=result.get("class_name", "") or "",
         ))
+
+    # Project per-breed honor-roll winners (kept in completed_breeds) into the
+    # queryable award table. completed_breeds keys are "group:breed_id".
+    for breed_key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict):
+            continue
+        group, _, bid = str(breed_key).partition(":")
+        for position, award in enumerate(breed_data.get("awards") or []):
+            if not isinstance(award, dict):
+                continue
+            session.add(DogBreedAward(
+                show_id=sid,
+                fci_group=group,
+                breed_id=bid,
+                position=position,
+                award_type=award.get("type", "") or "",
+                name=award.get("name", "") or "",
+                owner=award.get("owner", "") or "",
+                text=award.get("text", "") or "",
+            ))
 
 
 def _breed_obj_for(breed_row, fallback_group, fallback_breed_id, fallback_name):
@@ -223,7 +247,7 @@ def read_result_doc(session, show_id):
         # index breed has not been enriched with it yet.
         if row.breed_judge:
             breed_obj["judge"] = row.breed_judge
-        results.append({
+        result = {
             "number": row.number,
             "name": row.name or "",
             "reg_url": row.reg_url or "",
@@ -237,7 +261,12 @@ def read_result_doc(session, show_id):
             "breedGroup": row.fci_group or "",
             "breedId": row.breed_id or "",
             "breedObj": breed_obj,
-        })
+        }
+        # Only emit when present, mirroring the optional judge field — keeps the
+        # pre-Phase-C migrated docs (which had no PU/PN data) round-tripping clean.
+        if row.competitive_placement:
+            result["competitive_placement"] = row.competitive_placement
+        results.append(result)
     doc["results"] = results
     return doc
 

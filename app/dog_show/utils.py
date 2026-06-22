@@ -27,6 +27,19 @@ def _local_now():
         return datetime.datetime.now()
     return datetime.datetime.now(_LOCAL_TZ).replace(tzinfo=None)
 
+def _local_dt(now=None):
+    """Finnish wall-clock datetime for a unix timestamp (or now if None).
+
+    Same timezone handling as _local_now(), but for an explicit timestamp — used
+    by the backfill off-peak window check, which must evaluate Finnish local
+    hours regardless of the container's UTC clock.
+    """
+    if now is None:
+        return _local_now()
+    if _LOCAL_TZ is None:
+        return datetime.datetime.fromtimestamp(now)
+    return datetime.datetime.fromtimestamp(now, _LOCAL_TZ).replace(tzinfo=None)
+
 def _is_recent_show(month_str):
     """Check if the show month is the current or previous month."""
     if not month_str:

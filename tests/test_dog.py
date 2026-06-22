@@ -2433,3 +2433,136 @@ def test_background_indexing_caps_batch_per_call(mock_update):
         assert mock_update.call_count == cap
     finally:
         dog_crawler._background_indexed_shows.clear()
+
+
+# ---------------------------------------------------------------------------
+# Phase C: full-data capture extensions + off-peak oldest-first backfill
+# ---------------------------------------------------------------------------
+
+def _hel_timestamp(year, month, day, hour):
+    from zoneinfo import ZoneInfo
+    import datetime as _dt
+    return _dt.datetime(year, month, day, hour, 0, tzinfo=ZoneInfo("Europe/Helsinki")).timestamp()
+
+
+def test_parse_breed_results_captures_competitive_placement():
+    from bs4 import BeautifulSoup
+    from app.dog_show.parsers import _parse_breed_results
+    data = _parse_breed_results(BeautifulSoup(SAMPLE_BREED_RESULTS_FLOATLEFT_HTML, "html.parser"), 13771)
+    # cells[4] (PU/PN competitive ranking) was previously dropped.
+    assert data["results"][0]["competitive_placement"] == "PU3"
+    assert data["results"][0]["placement"] == 1  # class placement still distinct
+
+
+def test_parse_breed_results_honor_roll_splits_owner():
+    from bs4 import BeautifulSoup
+    from app.dog_show.parsers import _parse_breed_results
+    data = _parse_breed_results(BeautifulSoup(SAMPLE_BREED_RESULTS_HTML, "html.parser"), 14042)
+    award = data["awards"][0]
+    assert award["type"] == "ROP"
+    assert award["text"] == "Wazazi Tempting Fate, Om. Kortelainen Sanna"  # back-compat shape kept
+    assert award["name"] == "Wazazi Tempting Fate"
+    assert award["owner"] == "Kortelainen Sanna"
+
+
+def test_split_award_name_owner():
+    from app.dog_show.parsers import _split_award_name_owner
+    assert _split_award_name_owner("Heinäkengän, Om. Hytönen Leena") == ("Heinäkengän", "Hytönen Leena")
+    assert _split_award_name_owner("Kennel Only") == ("Kennel Only", "")
+    assert _split_award_name_owner("") == ("", "")
+
+
+def test_backfill_window_gating():
+    assert dog_result_cache._within_backfill_window(_hel_timestamp(2026, 1, 15, 3)) is True
+    assert dog_result_cache._within_backfill_window(_hel_timestamp(2026, 1, 15, 12)) is False
+    assert dog_result_cache._within_backfill_window(_hel_timestamp(2026, 1, 15, 6)) is False  # end exclusive
+    # wrap-around window (22:00 -> 06:00)
+    assert dog_result_cache._within_backfill_window(_hel_timestamp(2026, 1, 15, 23), start_hour=22, end_hour=6) is True
+    assert dog_result_cache._within_backfill_window(_hel_timestamp(2026, 1, 15, 12), start_hour=22, end_hour=6) is False
+
+
+def test_backfill_skips_outside_window():
+    summary = dog_result_cache.crawl_backfill_once(now=_hel_timestamp(2026, 1, 15, 12))
+    assert summary["status"] == "skipped"
+    assert summary["reason"] == "outside_window"
+
+
+def test_backfill_yields_to_pending_jobs():
+    seed_index_show("14042", {
+        "title": "14.06.2024 Basenji", "name": "Basenji", "date": "14.06.", "month": "kesäkuu 2024",
+        "source_url": dog_module._source_url(14042),
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    dog_module._queue_result_cache_job(14042)  # a user/live job is pending
+    summary = dog_result_cache.crawl_backfill_once(force_window=True)
+    assert summary["status"] == "skipped"
+    assert summary["reason"] == "jobs_pending"
+
+
+def test_backfill_candidates_oldest_first_skips_captured_and_resultless():
+    seed_index_show("12754", {  # June 2024 — oldest, uncaptured
+        "title": "15.06.2024 Old", "name": "Old", "date": "15.06.", "month": "kesäkuu 2024",
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    seed_index_show("13500", {  # June 2025 — middle, uncaptured
+        "title": "15.06.2025 Mid", "name": "Mid", "date": "15.06.", "month": "kesäkuu 2025",
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    seed_index_show("14042", {  # June 2026 — newest, already captured (complete cache)
+        "title": "14.06.2026 New", "name": "New", "date": "14.06.", "month": "kesäkuu 2026",
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    seed_index_show("13600", {  # has no result-bearing breeds → nothing to fetch
+        "title": "15.06.2025 NoResults", "name": "NoResults", "date": "15.06.", "month": "kesäkuu 2025",
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": False}],
+    })
+    dog_module._save_result_cache_doc(14042, {"status": "complete", "total_breeds": 1, "results": []})
+
+    candidates = dog_result_cache._backfill_candidates(now=_hel_timestamp(2026, 6, 22, 3), limit=10)
+    assert candidates == [12754, 13500]  # oldest first; captured (14042) and resultless (13600) excluded
+
+
+@patch("app.dog_show.showlink.requests.get")
+def test_backfill_crawls_oldest_and_persists_phase_c_fields(mock_get, monkeypatch):
+    from sqlalchemy import select
+    from app.dog_show import db as _dog_db
+    from app.dog_show.models import DogResult, DogBreedAward
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    seed_index_show("12754", {  # oldest — should be crawled first
+        "title": "15.06.2024 Old Retriever Show", "name": "Old Retriever Show",
+        "date": "15.06.", "month": "kesäkuu 2024", "source_url": dog_module._source_url(12754),
+        "breeds": [{"name": "sileäkarvainen noutaja", "count": 5, "group": "8", "breed_id": "124", "has_results": True}],
+    })
+    seed_index_show("14042", {  # newer — should NOT be picked this pass (limit 1)
+        "title": "14.06.2026 New", "name": "New", "date": "14.06.", "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(14042),
+        "breeds": [{"name": "basenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+
+    resp = MagicMock()
+    resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
+    resp.status_code = 200
+    mock_get.return_value = resp
+
+    summary = dog_result_cache.crawl_backfill_once(limit=1, delay=0, workers=1, force_window=True)
+
+    assert summary["status"] == "ok"
+    assert summary["show_ids"] == [12754]  # oldest-first
+    assert summary["completed"] == 1
+
+    # saves to database: the new per-dog field and the honor-roll table
+    with _dog_db.session_scope() as session:
+        results = session.execute(select(DogResult).where(DogResult.show_id == 12754)).scalars().all()
+        awards = session.execute(select(DogBreedAward).where(DogBreedAward.show_id == 12754)).scalars().all()
+
+    assert any(r.competitive_placement == "PU3" for r in results)
+    cacib = next(a for a in awards if a.award_type == "CACIB uros")
+    assert cacib.name == "Calzeat Causin Heads To Turn"
+    assert cacib.owner == "Nyberg Tiia"
+    assert cacib.breed_id == "124"
+
+    # captured permanently → not re-selected on the next pass
+    again = dog_result_cache._backfill_candidates(now=_hel_timestamp(2026, 6, 22, 3), limit=10)
+    assert 12754 not in again
+    assert 14042 in again

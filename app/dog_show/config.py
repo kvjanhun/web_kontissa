@@ -34,6 +34,17 @@ RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "2
 BACKGROUND_INDEX_MAX_PER_CALL = int(os.environ.get("DOG_BACKGROUND_INDEX_MAX_PER_CALL", "5"))
 RESULT_LOCAL_TIMEZONE = os.environ.get("DOG_RESULT_TIMEZONE", "Europe/Helsinki")
 
+# Phase C all-shows backfill: full-data crawl of historical shows, run only in an
+# off-peak window, strictly polite (single worker, deliberate per-request delay),
+# oldest-first so the most at-risk history (closest to ageing off Showlink's
+# rolling window) is captured first. Disabled unless dog_crawl.py is run with
+# --backfill. The window is Finnish local time; the crawler container runs UTC.
+BACKFILL_START_HOUR = int(os.environ.get("DOG_BACKFILL_START_HOUR", "0"))
+BACKFILL_END_HOUR = int(os.environ.get("DOG_BACKFILL_END_HOUR", "6"))
+BACKFILL_DELAY = float(os.environ.get("DOG_BACKFILL_DELAY", "2.0"))
+BACKFILL_WORKERS = int(os.environ.get("DOG_BACKFILL_WORKERS", "1"))
+BACKFILL_SHOW_LIMIT = int(os.environ.get("DOG_BACKFILL_SHOW_LIMIT", "1"))
+
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
 INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
 RESULT_CACHE_DIR = os.environ.get("DOG_RESULT_CACHE_DIR", os.path.join(INDEX_DIR, "dog_result_cache"))

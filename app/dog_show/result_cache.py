@@ -19,14 +19,14 @@ from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
     _breed_result_cache, _claim_result_cache_job, _defer_result_cache_job,
-    _heartbeat_result_cache_job, _indexed_show, _load_result_cache_doc, _load_result_jobs,
-    _remove_result_cache_job, _result_job_due, _queue_result_cache_job, _save_index,
-    _save_result_cache_doc, _set_result_job_running,
+    _heartbeat_result_cache_job, _indexed_show, _load_index, _load_result_cache_doc,
+    _load_result_jobs, _remove_result_cache_job, _result_job_due, _queue_result_cache_job,
+    _save_index, _save_result_cache_doc, _set_result_job_running,
     _show_all_results_cache, _show_detail_cache, _show_index,
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _is_recent_show, _result_doc_has_main_bis, _result_doc_has_show_finals,
+    _is_recent_show, _local_dt, _result_doc_has_main_bis, _result_doc_has_show_finals,
     _result_doc_live_bis_grace_finished,
     _result_doc_live_entry_completion_grace_finished, _show_age_days,
     _show_result_availability, _utc_iso,
@@ -380,12 +380,13 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
         _save_index()
 
     fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
+    breed_completed = (doc.get("completed_breeds") or {}).get(f"{group}:{breed}") or {}
     return {
         "show_id": int(show_id),
         "title": doc.get("title", ""),
         "breed": breed_obj.get("name", ""),
         "judge": breed_obj.get("judge", ""),
-        "awards": [],
+        "awards": breed_completed.get("awards") or [],
         "results": [
             {
                 "number": dog.get("number"),
@@ -393,6 +394,7 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
                 "reg_url": dog.get("reg_url"),
                 "grade": dog.get("grade"),
                 "placement": dog.get("placement"),
+                "competitive_placement": dog.get("competitive_placement"),
                 "awards": dog.get("awards"),
                 "critique": dog.get("critique"),
                 "gender": dog.get("gender"),
@@ -497,6 +499,7 @@ def _map_breed_results_to_all_results(show_id, breed, breed_data):
             "reg_url": dog.get("reg_url"),
             "grade": dog.get("grade"),
             "placement": dog.get("placement"),
+            "competitive_placement": dog.get("competitive_placement"),
             "awards": dog.get("awards"),
             "critique": dog.get("critique"),
             "gender": dog.get("gender"),
@@ -718,13 +721,17 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
         breed["has_results"] = True
 
     doc.setdefault("results", []).extend(mapped_results)
-    doc.setdefault("completed_breeds", {})[item["breed_key"]] = {
+    completed_entry = {
         "name": breed.get("name", ""),
         "result_count": result_count,
         "judge": judge,
         "updated_at": fetched_at,
         "updated_at_iso": _utc_iso(fetched_at),
     }
+    honor_roll = item["breed_data"].get("awards") or []
+    if honor_roll:
+        completed_entry["awards"] = honor_roll
+    doc.setdefault("completed_breeds", {})[item["breed_key"]] = completed_entry
     doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
     doc["updated_at"] = fetched_at
     _save_result_doc_progress(show_id, doc, preserve_existing_complete)
@@ -1165,6 +1172,116 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
         auto_recent=bool(auto_recent),
     )
     return pass_summary
+
+def _within_backfill_window(now=None, start_hour=None, end_hour=None):
+    """True when the Finnish local hour is inside the off-peak backfill window.
+
+    Supports windows that wrap midnight (e.g. start 22, end 6)."""
+    start_hour = config.BACKFILL_START_HOUR if start_hour is None else start_hour
+    end_hour = config.BACKFILL_END_HOUR if end_hour is None else end_hour
+    hour = _local_dt(now if now is not None else time.time()).hour
+    if start_hour == end_hour:
+        return False
+    if start_hour < end_hour:
+        return start_hour <= hour < end_hour
+    return hour >= start_hour or hour < end_hour
+
+
+def _has_pending_result_jobs():
+    """Any user/live result job queued or running — backfill yields to those."""
+    jobs = _load_result_jobs().get("jobs", {})
+    return any(job.get("state") in ("queued", "running") for job in jobs.values())
+
+
+def _backfill_candidates(now, limit=1):
+    """Oldest not-yet-captured shows that have result-bearing breeds.
+
+    Oldest-first races Showlink's rolling window so the most at-risk history is
+    secured first. A show is "captured" once it has a complete result cache; that
+    is permanent and never re-crawled."""
+    _load_index()
+    candidates = []
+    for sid_str, show in (_show_index.get("shows") or {}).items():
+        if not _result_breeds_with_results(show.get("breeds") or []):
+            continue  # no result pages to fetch (future show / no results)
+        try:
+            sid = int(sid_str)
+        except (TypeError, ValueError):
+            continue
+        if _result_cache_doc_is_complete(_load_result_cache_doc(sid)):
+            continue  # already permanently captured
+        show_date = _show_date_for_id(sid)
+        candidates.append((show_date or datetime.date.max, sid))
+
+    candidates.sort(key=lambda item: (item[0], item[1]))  # oldest date, then id
+    limit = len(candidates) if limit is None else max(0, limit)
+    return [sid for _, sid in candidates[:limit]]
+
+
+def crawl_backfill_once(limit=None, delay=None, workers=None, now=None, force_window=False):
+    """One polite, off-peak backfill step: capture full results for the oldest
+    not-yet-captured show(s). Yields outside the window and while user/live result
+    jobs are pending. Single worker + deliberate delay keep it non-bursty."""
+    now = now or time.time()
+    limit = config.BACKFILL_SHOW_LIMIT if limit is None else limit
+    delay = config.BACKFILL_DELAY if delay is None else delay
+    workers = config.BACKFILL_WORKERS if workers is None else workers
+
+    if not force_window and not _within_backfill_window(now):
+        logger.info("dog_backfill_skipped", reason="outside_window")
+        return {"status": "skipped", "reason": "outside_window", "attempted": 0}
+
+    if _has_pending_result_jobs():
+        logger.info("dog_backfill_skipped", reason="jobs_pending")
+        return {"status": "skipped", "reason": "jobs_pending", "attempted": 0}
+
+    candidates = _backfill_candidates(now, limit=limit)
+    if not candidates:
+        logger.info("dog_backfill_idle", reason="nothing_to_backfill")
+        return {"status": "idle", "reason": "nothing_to_backfill", "attempted": 0}
+
+    logger.info(
+        "dog_backfill_pass_start",
+        show_ids=candidates,
+        delay=delay,
+        workers=max(1, int(workers or 1)),
+        limit=limit,
+    )
+
+    attempted = []
+    completed = 0
+    failed = 0
+    for sid in candidates:
+        summary = crawl_result_cache_for_show(sid, delay=delay, source="backfill", workers=workers)
+        attempted.append(summary)
+        logger.info(
+            "dog_backfill_show_complete",
+            show_id=sid,
+            status=summary.get("status"),
+            error=summary.get("error"),
+        )
+        status = summary.get("status")
+        if status == "complete":
+            completed += 1
+        elif status != "skipped":
+            failed += 1
+
+    pass_summary = {
+        "status": "ok",
+        "attempted": len(attempted),
+        "completed": completed,
+        "failed": failed,
+        "show_ids": candidates,
+        "items": attempted,
+    }
+    logger.info(
+        "dog_backfill_pass_complete",
+        attempted=pass_summary["attempted"],
+        completed=completed,
+        failed=failed,
+    )
+    return pass_summary
+
 
 def _finish_immediate_warmup(show_id):
     with _immediate_warmups_lock:

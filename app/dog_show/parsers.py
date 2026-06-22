@@ -9,6 +9,18 @@ from .utils import _clean_judge_name
 
 logger = structlog.get_logger(__name__)
 
+def _split_award_name_owner(text):
+    """Split a breed honor-roll entry like 'Wazazi Tempting Fate, Om. Kortelainen
+    Sanna' into (name, owner). For the breeder award the name is the kennel
+    ('Heinäkengän'). Returns ('', '') for blanks and (text, '') when no owner."""
+    text = (text or "").strip()
+    if not text:
+        return "", ""
+    parts = re.split(r",\s*Om\.\s*", text, maxsplit=1)
+    name = parts[0].strip()
+    owner = parts[1].strip() if len(parts) > 1 else ""
+    return name, owner
+
 def _parse_show_list(soup):
     """Parse the sidebar show listing table."""
     shows = []
@@ -176,14 +188,18 @@ def _parse_breed_results(soup, show_id):
     if judge_el:
         judge = _clean_judge_name(judge_el.get_text(" ", strip=True))
 
-    # Awards (ROP table)
+    # Awards (ROP/VSP honor-roll table): breed-level winners with owner/kennel.
     awards = []
     for row in soup.select("table.roptulostaulukko tr.roptulos"):
         cells = row.find_all("td")
         if len(cells) >= 2:
+            text = cells[1].get_text(strip=True)
+            name, owner = _split_award_name_owner(text)
             awards.append({
                 "type": cells[0].get_text(strip=True),
-                "text": cells[1].get_text(strip=True),
+                "text": text,
+                "name": name,
+                "owner": owner,
             })
 
     # Individual results
@@ -229,14 +245,17 @@ def _parse_breed_results(soup, show_id):
                 # Grade
                 grade = cells[2].get_text(strip=True)
 
-                # Placement
+                # Placement (class placement)
                 placement_text = cells[3].get_text(strip=True)
                 try:
                     placement = int(placement_text) if placement_text else None
                 except ValueError:
                     placement = None
 
-                # Awards
+                # Competitive placement (best-of-sex ranking: PU1/PN1/...).
+                competitive_placement = cells[4].get_text(strip=True) if len(cells) > 4 else ""
+
+                # Awards (quality + honours string, e.g. "SA, ROP, SERT")
                 awards_text = cells[5].get_text(strip=True) if len(cells) > 5 else ""
 
                 # Critique: look for the next sibling tr.arvostelu
@@ -255,6 +274,7 @@ def _parse_breed_results(soup, show_id):
                     "reg_url": reg_url,
                     "grade": grade,
                     "placement": placement,
+                    "competitive_placement": competitive_placement,
                     "awards": awards_text,
                     "critique": critique,
                     "gender": current_gender,

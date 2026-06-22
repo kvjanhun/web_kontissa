@@ -21,7 +21,7 @@ os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 from app.dog_show import db as dog_db  # noqa: E402
 from app.dog_show.config import DOG_DATABASE_URI  # noqa: E402
 from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once  # noqa: E402
-from app.dog_show.result_cache import crawl_result_cache_once  # noqa: E402
+from app.dog_show.result_cache import crawl_backfill_once, crawl_result_cache_once  # noqa: E402
 
 logger = structlog.get_logger(__name__)
 
@@ -46,6 +46,10 @@ def main():
     parser.add_argument("--auto-result-limit", type=int, default=None, help="Maximum automatic result caches to update per run")
     parser.add_argument("--result-delay", type=float, default=0.4, help="Seconds between result page request starts")
     parser.add_argument("--result-workers", type=int, default=3, help="Maximum concurrent result page requests for one show")
+    parser.add_argument("--backfill", action="store_true", help="Enable off-peak full-data backfill of historical shows (oldest-first, single worker)")
+    parser.add_argument("--backfill-delay", type=float, default=None, help="Seconds between backfill breed-result requests (default: config BACKFILL_DELAY)")
+    parser.add_argument("--backfill-workers", type=int, default=None, help="Concurrent requests per backfill show (default 1 — keep low)")
+    parser.add_argument("--backfill-limit", type=int, default=None, help="Max shows to backfill per pass (default 1)")
     args = parser.parse_args()
 
     # The crawler is the main writer; make sure the dog.db schema exists before
@@ -122,6 +126,16 @@ def main():
             next_auto_results_at = time.time() + auto_results_interval
         else:
             summary["next_auto_results_in"] = max(0, round(next_auto_results_at - now))
+
+        # Lowest priority: off-peak historical backfill. crawl_backfill_once is a
+        # no-op outside the Finnish 00:00–06:00 window or while user/live result
+        # jobs are pending, so it never competes with live work.
+        if args.backfill:
+            summary["backfill"] = crawl_backfill_once(
+                limit=args.backfill_limit,
+                delay=args.backfill_delay,
+                workers=args.backfill_workers,
+            )
 
         logger.info("dog_crawler_pass_complete", **summary)
 
