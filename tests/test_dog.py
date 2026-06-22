@@ -9,6 +9,7 @@ from app.dog_show import indexing as dog_indexing
 from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import showlink as dog_showlink
 from app.dog_show import store as dog_store
+from app.dog_show import db as dog_db
 from app.dog_show.utils import _is_recent_show, _show_result_availability
 
 SAMPLE_SHOW_LIST_HTML = """
@@ -158,10 +159,11 @@ SAMPLE_BREED_RESULTS_FLOATLEFT_HTML = """
 
 @pytest.fixture(autouse=True)
 def clear_caches(monkeypatch, tmp_path):
-    monkeypatch.setattr(dog_store, "INDEX_DIR", str(tmp_path))
-    monkeypatch.setattr(dog_store, "INDEX_PATH", str(tmp_path / "dog_show_index.json"))
-    monkeypatch.setattr(dog_store, "RESULT_CACHE_DIR", str(tmp_path / "dog_result_cache"))
-    monkeypatch.setattr(dog_store, "RESULT_JOBS_PATH", str(tmp_path / "dog_result_jobs.json"))
+    # Each test gets a fresh, isolated dog.db file with empty tables.
+    dog_db_uri = "sqlite:///" + str(tmp_path / "dog.db")
+    dog_db.configure(dog_db_uri)
+    dog_db.init_db(dog_db_uri)
+
     monkeypatch.setattr(dog_result_cache, "RESULT_IMMEDIATE_WARMUP", False)
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
@@ -171,7 +173,27 @@ def clear_caches(monkeypatch, tmp_path):
     dog_result_cache._immediate_warmups.clear()
     dog_module._show_index["shows"].clear()
     dog_module._show_index["last_updated"] = 0
-    dog_store._show_index_mtime = 0
+    dog_store._index_generation = None
+    dog_store._dirty_index_show_ids.clear()
+    yield
+    # Release the per-test database file so its WAL handles don't leak.
+    dog_db.configure("sqlite://")
+
+
+def seed_index_show(show_id, show):
+    """Seed one show into the dog index the way the app does — mutate the shared
+    mirror, mark it dirty, flush to dog.db, then reload so the mirror reflects
+    exactly what was persisted (normalized breed dicts, generation advanced)."""
+    sid = str(int(show_id))
+    dog_module._show_index.setdefault("shows", {})[sid] = show
+    updated = show.get("updated_at")
+    if updated:
+        dog_module._show_index["last_updated"] = max(
+            dog_module._show_index.get("last_updated") or 0, updated
+        )
+    dog_store._mark_index_dirty(sid)
+    dog_store._save_index()
+    dog_store._load_index(force=True)
 
 @patch("app.dog_show.showlink.requests.get")
 def test_fetch_page_advertises_crawler_identity(mock_get):
@@ -208,7 +230,7 @@ def test_get_shows(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_shows_enriches_cached_index_stats(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "updated_at": 1781431200,
@@ -216,7 +238,7 @@ def test_get_shows_enriches_cached_index_stats(mock_get, client):
             {"name": "basenji", "count": 78, "has_results": True},
             {"name": "ibizanpodenco", "count": 12, "has_results": False},
         ],
-    }
+    })
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
     mock_resp.status_code = 200
@@ -236,7 +258,7 @@ def test_get_shows_enriches_cached_index_stats(mock_get, client):
 
 
 def test_show_stats_include_live_result_progress(client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "date": "14.06.",
         "month": "kesäkuu 2026",
@@ -244,7 +266,7 @@ def test_show_stats_include_live_result_progress(client):
             {"name": "basenji", "count": 2, "has_results": True},
             {"name": "ibizanpodenco", "count": 1, "has_results": True},
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14042, {
         "status": "running",
         "results": [{}, {}, {}, {}],
@@ -269,14 +291,14 @@ def test_show_stats_include_live_result_progress(client):
     assert past_stats["is_live"] is False
     assert "result_count" not in past_stats
 
-    dog_module._show_index["shows"]["14043"] = {
+    seed_index_show("14043", {
         "title": "14.06.2026 Villakoira",
         "date": "14.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             {"name": "villakoira", "count": 4, "has_results": True},
         ],
-    }
+    })
     uncached_live_stats = dog_module._show_stats_from_index(
         14043,
         show={"id": 14043, "date": "14.06.", "month": "kesäkuu 2026"},
@@ -287,7 +309,7 @@ def test_show_stats_include_live_result_progress(client):
 
 
 def test_show_stats_ignore_empty_single_breed_specialty_cache(client):
-    dog_module._show_index["shows"]["14079"] = {
+    seed_index_show("14079", {
         "title": "20.06.2026 Bostoninterrieri",
         "name": "Bostoninterrieri",
         "date": "20.06.",
@@ -302,7 +324,7 @@ def test_show_stats_ignore_empty_single_breed_specialty_cache(client):
                 "has_results": False,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14079, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14079,
@@ -339,7 +361,7 @@ def test_get_shows_queues_stale_live_result_refresh(monkeypatch, client):
         "month": "kesäkuu 2026",
         "source_url": dog_module._source_url(13771),
     }
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "date": "20.-21.06.",
@@ -349,7 +371,7 @@ def test_get_shows_queues_stale_live_result_refresh(monkeypatch, client):
         "breeds": [
             { "name": "basenji", "count": 2066, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13771, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13771,
@@ -452,12 +474,12 @@ def test_show_result_availability_handles_showlink_today_section():
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "updated_at": 1781431200,
         "breeds": [],
-    }
+    })
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
     mock_resp.status_code = 200
@@ -514,7 +536,7 @@ def test_recent_show_detail_cache_expires(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_old_show_detail_cache_is_reused(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {"month": "tammikuu 2000", "breeds": []}
+    seed_index_show("14042", {"month": "tammikuu 2000", "breeds": []})
     _show_detail_cache[14042] = {
         "data": {"id": 14042, "title": "cached old show", "breeds": []},
         "ts": 0,
@@ -529,7 +551,7 @@ def test_old_show_detail_cache_is_reused(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "source_url": dog_module._source_url(14042),
@@ -537,7 +559,7 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/14042")
 
@@ -553,7 +575,7 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
 @patch("app.dog_show.showlink.requests.get")
 def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock_get, monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "date": "20.-21.06.",
@@ -564,7 +586,7 @@ def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock
             { "name": "basenji", "count": 26, "group": "5", "breed_id": "3", "has_results": True },
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13771, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13771,
@@ -605,7 +627,7 @@ def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get, monkeypatch, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "name": "Basenji",
         "date": "14.06.",
@@ -615,7 +637,7 @@ def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get,
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
         ],
-    }
+    })
     monkeypatch.setattr(dog_indexing, "_is_show_recent_by_id", lambda show_id: True)
     monkeypatch.setattr(
         dog_indexing,
@@ -638,7 +660,7 @@ def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get,
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, client):
-    dog_module._show_index["shows"]["14079"] = {
+    seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
         "name": "Bostoninterrieri",
         "date": "20.06.",
@@ -654,7 +676,7 @@ def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, 
                 "has_results": False,
             },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/14079")
 
@@ -666,7 +688,7 @@ def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, 
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, client):
-    dog_module._show_index["shows"]["13992"] = {
+    seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "name": "Pertunmaa Pentunäyttely",
         "month": "heinäkuu 2025",
@@ -681,7 +703,7 @@ def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, clie
                 "has_results": True,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13992, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13992,
@@ -710,7 +732,7 @@ def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, clie
 
 
 def test_persist_show_detail_preserves_cached_result_flags(client):
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "date": "20.-21.06.",
@@ -725,7 +747,7 @@ def test_persist_show_detail_preserves_cached_result_flags(client):
                 "has_results": False,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13771, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13771,
@@ -785,7 +807,7 @@ def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
         },
         "ts": dog_module.time.time(),
     }
-    dog_module._show_index["shows"]["13992"] = {
+    seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "month": "heinäkuu 2025",
         "breeds": [
@@ -797,7 +819,7 @@ def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
                 "has_results": True,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13992, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13992,
@@ -843,7 +865,7 @@ def test_cached_show_detail_merges_index_judges(mock_get, client):
         },
         "ts": dog_module.time.time(),
     }
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "Basenji Show 2026",
         "source_url": dog_module._source_url(14042),
         "breeds": [
@@ -856,7 +878,7 @@ def test_cached_show_detail_merges_index_judges(mock_get, client):
                 "judge": "Paula Steele",
             },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/14042")
 
@@ -978,13 +1000,13 @@ def test_get_show_detail_general(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
-    dog_module._show_index["shows"]["13934"] = {
+    seed_index_show("13934", {
         "title": "stale empty index",
         "name": "Kanakoirakerho",
         "date": "14.06.",
         "month": "kesäkuu 2026",
         "breeds": [],
-    }
+    })
     mock_resp_main = MagicMock()
     mock_resp_main.text = SAMPLE_AGGREGATE_SHOW_MAIN_HTML
     mock_resp_main.status_code = 200
@@ -1014,14 +1036,14 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeypatch):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "stale empty index",
         "name": "Basenji",
         "date": "14.06.",
         "month": "tammikuu 2000",
         "breeds": [],
-    }
-    dog_module._show_index["shows"]["14043"] = {
+    })
+    seed_index_show("14043", {
         "title": "already indexed",
         "name": "Villakoira erikoisnäyttely",
         "date": "15.06.",
@@ -1029,7 +1051,7 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
         "breeds": [
             {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
         ],
-    }
+    })
     monkeypatch.setattr(dog_crawler.time, "sleep", lambda seconds: None)
 
     mock_resp_list = MagicMock()
@@ -1052,14 +1074,14 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
 
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "stale empty index",
         "name": "Basenji",
         "date": "14.06.",
         "month": "tammikuu 2000",
         "breeds": [],
-    }
-    dog_module._show_index["shows"]["14043"] = {
+    })
+    seed_index_show("14043", {
         "title": "already indexed",
         "name": "Villakoira erikoisnäyttely",
         "date": "15.06.",
@@ -1067,7 +1089,7 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
         "breeds": [
             {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
         ],
-    }
+    })
     monkeypatch.setattr(dog_crawler.time, "sleep", lambda seconds: None)
 
     mock_resp_list = MagicMock()
@@ -1124,7 +1146,7 @@ def test_get_breed_results(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_breed_results_strips_glued_judge_label(mock_get, client):
-    dog_module._show_index["shows"]["13763"] = {
+    seed_index_show("13763", {
         "title": "18.-19.04.2026 Vaasa KV",
         "name": "Vaasa KV",
         "month": "huhtikuu 2026",
@@ -1138,7 +1160,7 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
                 "judge": "TuomariTarja Kolkka",
             }
         ],
-    }
+    })
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML
     mock_resp.status_code = 200
@@ -1155,7 +1177,7 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "month": "kesäkuu 2026",
@@ -1168,7 +1190,7 @@ def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
                 "has_results": False,
             },
         ],
-    }
+    })
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
     mock_resp.status_code = 200
@@ -1186,14 +1208,14 @@ def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_future_breed_results_return_not_ready_without_fetching(mock_get, client):
-    dog_module._show_index["shows"]["15001"] = {
+    seed_index_show("15001", {
         "title": "20.06.2999 Future Show",
         "date": "20.06.",
         "month": "kesäkuu 2999",
         "breeds": [
             { "name": "basenji", "count": 4, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/15001/results?group=5&breed=3")
 
@@ -1207,14 +1229,14 @@ def test_future_breed_results_return_not_ready_without_fetching(mock_get, client
 
 @patch("app.dog_show.showlink.requests.get")
 def test_future_show_all_results_return_not_ready_without_queueing(mock_get, client):
-    dog_module._show_index["shows"]["15001"] = {
+    seed_index_show("15001", {
         "title": "20.06.2999 Future Show",
         "date": "20.06.",
         "month": "kesäkuu 2999",
         "breeds": [
             { "name": "basenji", "count": 4, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/15001/all-results")
 
@@ -1229,14 +1251,14 @@ def test_future_show_all_results_return_not_ready_without_queueing(mock_get, cli
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": False },
         ],
-    }
+    })
 
     resp = client.get("/api/dog/shows/14042/all-results")
 
@@ -1249,21 +1271,20 @@ def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client
     assert data["started"] is False
     mock_get.assert_not_called()
 
-    with open(dog_store.RESULT_JOBS_PATH, encoding="utf-8") as f:
-        jobs = json.load(f)
+    jobs = dog_module._load_result_jobs()
     assert jobs["jobs"]["14042"]["state"] == "queued"
     assert jobs["jobs"]["14042"]["reason"] == "user"
 
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeypatch, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     started = []
     monkeypatch.setattr(
         dog_module,
@@ -1281,13 +1302,13 @@ def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeyp
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monkeypatch, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     old_updated_at = 100
     dog_module._save_result_jobs({
         "jobs": {
@@ -1311,8 +1332,7 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
     data = resp.get_json()
     assert data["status"] == "warming"
     assert data["progress"]["state"] == "running"
-    with open(dog_store.RESULT_JOBS_PATH, encoding="utf-8") as f:
-        jobs = json.load(f)["jobs"]
+    jobs = dog_module._load_result_jobs()["jobs"]
     assert jobs["14042"]["state"] == "running"
     assert jobs["14042"]["requested_at"] == 1000
     assert jobs["14042"]["updated_at"] == old_updated_at
@@ -1321,13 +1341,13 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
         "month": "tammikuu 2000",
         "breeds": [
             { "name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14042, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14042,
@@ -1365,14 +1385,14 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
 
 def test_live_result_cache_becomes_stale_after_two_minutes(monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "date": "20.-21.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     fresh_doc = {
@@ -1390,14 +1410,14 @@ def test_live_result_cache_becomes_stale_after_two_minutes(monkeypatch, client):
 
 def test_live_result_cache_stops_short_ttl_after_bis_grace(monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 18, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     base_doc = {
@@ -1422,14 +1442,14 @@ def test_live_result_cache_stops_short_ttl_after_bis_grace(monkeypatch, client):
 
 def test_live_show_stats_stop_after_bis_grace(client):
     noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13771, {
         "status": "complete",
         "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
@@ -1453,14 +1473,14 @@ def test_live_show_stats_stop_after_bis_grace(client):
 
 def test_live_show_stats_stop_after_entry_completion_grace(client):
     noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["14079"] = {
+    seed_index_show("14079", {
         "title": "20.06.2026 Bostoninterrieri",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "bostoninterrieri", "count": 26, "group": "9", "breed_id": "296", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14079, {
         "status": "complete",
         "cached_at": noon - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
@@ -1487,7 +1507,7 @@ def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
     is judged, so entry completion must not settle the cache before BIS-1."""
     noon = dog_module.datetime.datetime(2026, 6, 20, 14, 0).timestamp()
     # Breeds span two FCI groups -> an all-breed show that crowns a main BIS.
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "date": "20.-21.06.",
         "month": "kesäkuu 2026",
@@ -1495,7 +1515,7 @@ def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
             {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
             {"name": "afgaaninvinttikoira", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     grace = dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
@@ -1552,14 +1572,14 @@ def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
         "name": "Jyväskylä KV",
         "month": "kesäkuu 2026",
     }
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: [show])
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
@@ -1587,14 +1607,14 @@ def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
 
 def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "date": "20.-21.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
     old_cached_at = now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1
@@ -1647,14 +1667,14 @@ def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, c
     }
     monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: [show])
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "date": "20.-21.06.",
         "month": "kesäkuu 2026",
         "breeds": [
             { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13771, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13771,
@@ -1677,7 +1697,7 @@ def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, c
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_result_flags(mock_get, monkeypatch, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "name": "Basenji",
         "date": "14.06.",
@@ -1687,7 +1707,7 @@ def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_resul
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14042, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14042,
@@ -1724,7 +1744,7 @@ def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_resul
 
 @patch("app.dog_show.showlink.requests.get")
 def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, client):
-    dog_module._show_index["shows"]["14079"] = {
+    seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
         "name": "Bostoninterrieri",
         "date": "20.06.",
@@ -1740,7 +1760,7 @@ def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, 
                 "has_results": False,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14079, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14079,
@@ -1767,13 +1787,13 @@ def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, 
 
 @patch("app.dog_show.showlink.requests.get")
 def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
         "month": "tammikuu 2000",
         "breeds": [
             { "name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14042, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14042,
@@ -1813,7 +1833,7 @@ def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_cached_breed_results_backfill_index_judge(mock_get, client):
-    dog_module._show_index["shows"]["13992"] = {
+    seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "name": "Pertunmaa Pentunäyttely",
         "month": "heinäkuu 2025",
@@ -1826,7 +1846,7 @@ def test_cached_breed_results_backfill_index_judge(mock_get, client):
                 "has_results": True,
             },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13992, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13992,
@@ -1864,7 +1884,7 @@ def test_cached_breed_results_backfill_index_judge(mock_get, client):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monkeypatch, client):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
         "month": "tammikuu 2000",
         "source_url": dog_module._source_url(14042),
@@ -1872,7 +1892,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": False },
         ],
-    }
+    })
     sleeps = []
     monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: sleeps.append(seconds))
     mock_resp = MagicMock()
@@ -1902,7 +1922,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
 
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results(mock_get, monkeypatch):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "name": "Basenji",
         "date": "14.06.",
@@ -1912,7 +1932,7 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": False },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache, "_indexed_result_flags_need_refresh", lambda show_id, indexed_show=None, now=None: True)
     monkeypatch.setattr(
         dog_result_cache,
@@ -1944,7 +1964,7 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_get, monkeypatch):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "date": "20.-21.06.",
@@ -1955,7 +1975,7 @@ def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": False },
         ],
-    }
+    })
     live_detail_html = """
     <div id="divOtsikko">
         <h1>20.-21.06.2026 Jyväskylä KV</h1>
@@ -2001,7 +2021,7 @@ def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
-    dog_module._show_index["shows"]["13771"] = {
+    seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
         "name": "Jyväskylä KV",
         "date": "20.-21.06.",
@@ -2013,7 +2033,7 @@ def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
             { "name": "sileäkarvainen noutaja", "count": 26, "group": "8", "breed_id": "124", "has_results": False },
             { "name": "barbet", "count": 7, "group": "8", "breed_id": "293", "has_results": False },
         ],
-    }
+    })
     monkeypatch.setattr(
         dog_result_cache,
         "_show_result_availability_for_id",
@@ -2048,7 +2068,7 @@ def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
 
 @patch("app.dog_show.showlink.requests.get")
 def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(mock_get, monkeypatch):
-    dog_module._show_index["shows"]["14079"] = {
+    seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
         "name": "Bostoninterrieri",
         "date": "20.06.",
@@ -2064,7 +2084,7 @@ def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(m
                 "has_results": False,
             },
         ],
-    }
+    })
     monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
@@ -2087,14 +2107,14 @@ def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(m
 
 @patch("app.dog_show.showlink.requests.get")
 def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatch):
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "source_url": dog_module._source_url(14042),
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
         ],
-    }
+    })
     dog_module._save_result_cache_doc(14042, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 14042,
@@ -2143,12 +2163,12 @@ def test_search_shows_by_breed(mock_get, client):
     mock_resp_list.status_code = 200
 
     from app.api.dog import _show_index
-    _show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True }
         ]
-    }
+    })
 
     mock_get.return_value = mock_resp_list
 
@@ -2168,12 +2188,12 @@ def test_search_indexed_show_name_without_breed_match(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
-    dog_module._show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "breeds": [
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True }
         ]
-    }
+    })
     mock_get.return_value = mock_resp_list
 
     resp = client.get("/api/dog/search?q=base")
@@ -2213,13 +2233,13 @@ def test_search_shows_by_judge(mock_get, client):
     mock_resp_list.status_code = 200
 
     from app.api.dog import _show_index
-    _show_index["shows"]["14042"] = {
+    seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True, "judge": "Paula Steele" },
             { "name": "ibizanpodenco", "count": 12, "group": "5", "breed_id": "4", "has_results": True, "judge": "Paula Steele" },
         ]
-    }
+    })
 
     mock_get.return_value = mock_resp_list
 
@@ -2240,7 +2260,7 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
-    dog_module._show_index["shows"]["13763"] = {
+    seed_index_show("13763", {
         "title": "18.-19.04.2026 Vaasa KV",
         "name": "Vaasa KV",
         "date": "18.-19.04.",
@@ -2256,7 +2276,7 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
                 "judge": "TuomariTarja Kolkka",
             }
         ],
-    }
+    })
     mock_get.return_value = mock_resp_list
 
     resp = client.get("/api/dog/search?q=tuomari%20tarja")
@@ -2278,7 +2298,7 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
-    dog_module._show_index["shows"]["13992"] = {
+    seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "name": "Pertunmaa Pentunäyttely",
         "date": "27.07.",
@@ -2293,7 +2313,7 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
                 "has_results": True,
             }
         ],
-    }
+    })
     dog_module._save_result_cache_doc(13992, {
         "version": dog_module.RESULT_CACHE_VERSION,
         "show_id": 13992,
@@ -2367,7 +2387,7 @@ def test_parse_show_meta_from_title():
 
 
 def test_show_stats_is_live_only_when_results_fetchable(client):
-    dog_module._show_index["shows"]["14021"] = {
+    seed_index_show("14021", {
         "title": "21.06.2026 Amerikancockerspanieli",
         "name": "Amerikancockerspanieli",
         "date": "21.06.",
@@ -2375,7 +2395,7 @@ def test_show_stats_is_live_only_when_results_fetchable(client):
         "breeds": [
             {"name": "amerikancockerspanieli", "count": 21, "group": "8", "breed_id": "117"},
         ],
-    }
+    })
 
     with patch("app.dog_show.indexing._show_result_availability") as mock_avail:
         mock_avail.return_value = {"can_fetch": False}

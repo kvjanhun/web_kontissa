@@ -44,7 +44,12 @@ def _make_engine(uri):
             # timeout serializes the occasional concurrent writer politely.
             cursor.execute("PRAGMA journal_mode=WAL")
             cursor.execute("PRAGMA busy_timeout=5000")
-            cursor.execute("PRAGMA foreign_keys=ON")
+            # Deliberately NOT enabling `foreign_keys`. The legacy JSON store had
+            # no referential integrity: result docs and jobs could exist for any
+            # show id. We keep that permissiveness so writes never fail on insert
+            # ordering or "orphan" rows. This is a permanent store that never
+            # deletes shows, and write_show/write_result_doc delete-then-reinsert
+            # their own rows explicitly, so cascade enforcement buys us nothing.
             cursor.close()
 
     return engine

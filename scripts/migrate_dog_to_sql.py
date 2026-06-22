@@ -10,11 +10,13 @@ record round-trips back to the exact structure the rest of the package and
     SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py --validate-only
 
 Source dir is DOG_INDEX_DIR (default ./app/data); target is DOG_DATABASE_URI
-(default dog.db inside that dir).
+(default dog.db inside that dir). This script reads the legacy JSON directly so
+it stays runnable after store.py has been cut over to SQL.
 """
 
 import argparse
 import glob
+import json
 import os
 import sys
 
@@ -24,14 +26,88 @@ if REPO_ROOT not in sys.path:
 
 os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-migrate-local-only")
+os.environ.setdefault("DATABASE_URI", "sqlite://")  # in-memory; migration only touches dog.db
 
 import structlog  # noqa: E402
 
-from app.dog_show import db as dog_db  # noqa: E402
-from app.dog_show import indexing, sqlstore, store  # noqa: E402
+from app.dog_show import config, db as dog_db, sqlstore  # noqa: E402
+from app.dog_show.indexing import _breed_identity_from_result, _merge_breed_map_judges_into_breeds  # noqa: E402
+from app.dog_show.utils import _clean_breed_data  # noqa: E402
 
 logger = structlog.get_logger(__name__)
 
+
+# ---- JSON source loaders (read the legacy files directly) ------------------
+
+def _load_json(path, default):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except FileNotFoundError:
+        return default
+    except Exception:
+        logger.exception("dog_migrate_source_load_failed", path=path)
+        return default
+
+
+def _load_source_index():
+    data = _load_json(config.INDEX_PATH, {"shows": {}, "last_updated": 0})
+    if not isinstance(data, dict) or "shows" not in data:
+        return {"shows": {}, "last_updated": 0}
+    return {"shows": data.get("shows", {}), "last_updated": data.get("last_updated", 0)}
+
+
+def _load_source_docs():
+    docs = {}
+    for path in glob.glob(os.path.join(config.RESULT_CACHE_DIR, "*.json")):
+        stem = os.path.basename(path)[:-5]
+        if not stem.isdigit():
+            continue
+        doc = _load_json(path, None)
+        if isinstance(doc, dict):
+            docs[int(stem)] = doc
+    return dict(sorted(docs.items()))
+
+
+def _load_source_jobs():
+    data = _load_json(config.RESULT_JOBS_PATH, {"jobs": {}, "updated_at": 0})
+    if not isinstance(data, dict) or not isinstance(data.get("jobs"), dict):
+        return {"jobs": {}, "updated_at": 0}
+    return data
+
+
+def _breed_map_from_doc(doc):
+    """Per-breed judge map from one result doc — mirrors indexing._cached_result_breed_map,
+    but takes the doc directly so it does not read through the (now SQL) store."""
+    breeds = {}
+    for key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict) or ":" not in key:
+            continue
+        group, breed_id = key.split(":", 1)
+        breed = _clean_breed_data({
+            "name": breed_data.get("name", ""),
+            "group": group,
+            "breed_id": breed_id,
+            "has_results": True,
+            "judge": breed_data.get("judge", ""),
+        })
+        if breed.get("judge"):
+            breeds[(group, breed_id)] = breed
+
+    for result in doc.get("results") or []:
+        key = _breed_identity_from_result(result)
+        if not key:
+            continue
+        breed = _clean_breed_data(result.get("breedObj") or {})
+        if breed.get("judge"):
+            breed.setdefault("group", key[0])
+            breed.setdefault("breed_id", key[1])
+            breed.setdefault("has_results", True)
+            breeds[key] = breed
+    return breeds
+
+
+# ---- parity comparator -----------------------------------------------------
 
 def _diff(a, b, path="$"):
     """Return a human description of the first structural difference, or None."""
@@ -61,15 +137,9 @@ def _diff(a, b, path="$"):
 def migrate(validate_only=False):
     dog_db.init_db()
 
-    store._load_index(force=True)
-    source_index = store._show_index
-    result_ids = sorted(
-        int(os.path.basename(p)[:-5])
-        for p in glob.glob(os.path.join(store.RESULT_CACHE_DIR, "*.json"))
-        if os.path.basename(p)[:-5].isdigit()
-    )
-    source_docs = {sid: store._load_result_cache_doc(sid) for sid in result_ids}
-    source_jobs = store._load_result_jobs()
+    source_index = _load_source_index()
+    source_docs = _load_source_docs()
+    source_jobs = _load_source_jobs()
 
     # Consolidate: fold judges that only live in a result cache back into the
     # breed list, exactly as the running app does lazily on detail/search. This
@@ -80,8 +150,7 @@ def migrate(validate_only=False):
         show = source_index.get("shows", {}).get(str(sid))
         if not show:
             continue
-        breed_map = indexing._cached_result_breed_map(sid)
-        if indexing._merge_breed_map_judges_into_breeds(show.get("breeds", []), breed_map):
+        if _merge_breed_map_judges_into_breeds(show.get("breeds", []), _breed_map_from_doc(doc)):
             backfilled += 1
     if backfilled:
         logger.info("dog_migrate_judge_backfill", shows=backfilled)
@@ -90,9 +159,9 @@ def migrate(validate_only=False):
         with dog_db.session_scope() as session:
             sqlstore.write_index(session, source_index)
             for sid, doc in source_docs.items():
-                if doc is not None:
-                    sqlstore.write_result_doc(session, sid, doc)
+                sqlstore.write_result_doc(session, sid, doc)
             sqlstore.write_jobs(session, source_jobs)
+            sqlstore.bump_index_generation(session)
         logger.info(
             "dog_migrate_written",
             shows=len(source_index.get("shows", {})),
@@ -112,8 +181,6 @@ def migrate(validate_only=False):
 
         breedobj_mismatches = 0
         for sid, doc in source_docs.items():
-            if doc is None:
-                continue
             sql_doc = sqlstore.read_result_doc(session, sid)
             d = _diff(doc, sql_doc, f"$.result[{sid}]")
             if d:

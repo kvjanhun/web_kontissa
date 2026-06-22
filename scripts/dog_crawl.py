@@ -18,9 +18,10 @@ if REPO_ROOT not in sys.path:
 os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 
+from app.dog_show import db as dog_db  # noqa: E402
+from app.dog_show.config import DOG_DATABASE_URI  # noqa: E402
 from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once  # noqa: E402
 from app.dog_show.result_cache import crawl_result_cache_once  # noqa: E402
-from app.dog_show.store import INDEX_PATH, RESULT_CACHE_DIR  # noqa: E402
 
 logger = structlog.get_logger(__name__)
 
@@ -47,10 +48,13 @@ def main():
     parser.add_argument("--result-workers", type=int, default=3, help="Maximum concurrent result page requests for one show")
     args = parser.parse_args()
 
+    # The crawler is the main writer; make sure the dog.db schema exists before
+    # any pass runs (importing app already does this, but be explicit).
+    dog_db.init_db()
+
     logger.info(
         "dog_crawler_boot",
-        index_path=INDEX_PATH,
-        result_cache_dir=RESULT_CACHE_DIR,
+        dog_database_uri=DOG_DATABASE_URI,
         loop=args.loop,
     )
 

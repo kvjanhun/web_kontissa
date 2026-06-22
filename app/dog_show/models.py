@@ -16,7 +16,7 @@ maps these back to the dict keys the rest of the package expects.
 """
 
 from sqlalchemy import (
-    Boolean, Column, Float, ForeignKey, Index, Integer, Text, UniqueConstraint,
+    Boolean, Column, Float, ForeignKey, Index, Integer, Text,
 )
 
 from .db import Base
@@ -50,8 +50,11 @@ class DogBreed(Base):
     judge = Column(Text)
     source_url = Column(Text, default="")
 
+    # No uniqueness on (show_id, fci_group, breed_id): the legacy JSON breed list
+    # was an ordered list with no identity constraint (breeds may share or omit a
+    # group/breed_id). `position` preserves order; write_show replaces a show's
+    # breeds wholesale, so no upsert relies on a unique key.
     __table_args__ = (
-        UniqueConstraint("show_id", "fci_group", "breed_id", name="uq_breed_identity"),
         Index("ix_breed_judge", "judge"),
     )
 
@@ -69,6 +72,11 @@ class DogResult(Base):
     name = Column(Text, default="")
     reg_url = Column(Text, default="")
     reg_id = Column(Text, index=True)       # parsed from reg_url; cross-show anchor
+    # The breed's judge as carried on this result's breedObj. The result cache is
+    # the source of per-breed judges (parsed from the breed result page), so this
+    # is preserved independently of dog_breed: it lets the lazy enrichment fold a
+    # judge into the index even before the crawl path has written it there.
+    breed_judge = Column(Text)
     grade = Column(Text, default="")
     placement = Column(Integer)
     awards = Column(Text, default="")

@@ -66,6 +66,13 @@ def unauthorized():
 with app.app_context():
     db.create_all()
 
+# Create the /dog persistent database's tables (separate dog.db, standalone
+# engine — see app/dog_show/db.py). Idempotent create-if-missing of empty
+# tables, never drops or alters — the same "empty tables for fresh databases"
+# allowance the line above uses for site.db.
+from app.dog_show import db as dog_db  # noqa: E402
+dog_db.init_db()
+
 # App-wide request counter (used by AdminHealth)
 _stats = {"requests": 0, "start_time": time.time()}
 

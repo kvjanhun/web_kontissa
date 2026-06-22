@@ -7,7 +7,9 @@ from .indexing import _index_entry_from_detail
 from .parsers import _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
-from .store import _index_summary, _load_index, _save_index, _show_detail_cache, _show_index
+from .store import (
+    _index_summary, _load_index, _mark_index_dirty, _save_index, _show_detail_cache, _show_index,
+)
 from .utils import _is_recent_show
 
 logger = structlog.get_logger(__name__)
@@ -20,6 +22,7 @@ def _update_index_show(show):
 
     _show_index["shows"][str(sid)] = _index_entry_from_detail(sid, show, detail, show_updated)
     _show_index["last_updated"] = show_updated
+    _mark_index_dirty(sid)
     _save_index()
     _show_detail_cache.pop(sid, None)
 

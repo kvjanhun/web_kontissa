@@ -5,8 +5,8 @@ import structlog
 
 from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS
 from .store import (
-    _indexed_show, _load_index, _load_result_cache_doc, _save_index, _show_detail_cache,
-    _show_index, _show_list_cache,
+    _indexed_show, _load_index, _load_result_cache_doc, _mark_index_dirty, _save_index,
+    _show_detail_cache, _show_index, _show_list_cache,
 )
 from .showlink import _source_url
 from .utils import (
@@ -276,9 +276,11 @@ def _update_index_breed_judge(show_id, group, breed_id, judge):
             if _clean_judge_name(current) == judge:
                 if current != judge:
                     breed["judge"] = judge
+                    _mark_index_dirty(show_id)
                     return True
                 return False
             breed["judge"] = judge
+            _mark_index_dirty(show_id)
             return True
     return False
 
@@ -293,6 +295,7 @@ def _update_index_breed_result_flag(show_id, group, breed_id):
             if breed.get("has_results") is True:
                 return False
             breed["has_results"] = True
+            _mark_index_dirty(show_id)
             return True
     return False
 
@@ -483,6 +486,7 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
         updated_at,
     )
     _show_index["last_updated"] = updated_at
+    _mark_index_dirty(sid)
     _save_index()
 
 def _index_entry_from_detail(show_id, show, detail, updated_at):

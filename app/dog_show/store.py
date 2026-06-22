@@ -1,14 +1,17 @@
-import json
-import os
 import time
 
 import structlog
 
 from . import config
-from .utils import _clean_judge_name, _utc_iso
+from . import db as dog_db
+from . import sqlstore
+from .utils import _utc_iso
 
 logger = structlog.get_logger(__name__)
 
+# Legacy JSON locations. Storage now lives in dog.db (see db.py / sqlstore.py),
+# but these constants are still re-exported (api/dog.py, scripts/dog_crawl.py)
+# and describe where the one-off migration reads its source from.
 INDEX_DIR = config.INDEX_DIR
 INDEX_PATH = config.INDEX_PATH
 RESULT_CACHE_DIR = config.RESULT_CACHE_DIR
@@ -16,142 +19,130 @@ RESULT_JOBS_PATH = config.RESULT_JOBS_PATH
 RESULT_JOB_STALE_SECONDS = config.RESULT_JOB_STALE_SECONDS
 RESULT_JOB_BACKOFF_SECONDS = config.RESULT_JOB_BACKOFF_SECONDS
 
+# In-memory working caches. `_show_index` stays the shared, mutated-in-place
+# mirror of the breed index that indexing.py, search.py, crawler.py, and
+# app/api/dog.py all read; only its backing store changed (dog.db, not JSON).
 _show_list_cache = {"data": None, "ts": 0}
 _show_detail_cache = {}
 _breed_result_cache = {}
 _show_all_results_cache = {}
 _show_index = {"shows": {}, "last_updated": 0}
-_show_index_mtime = 0
 
-def _temp_json_path(path):
-    directory = os.path.dirname(path)
-    filename = os.path.basename(path)
-    return os.path.join(directory, f".{filename}.{os.getpid()}.tmp")
+# Cross-process freshness: the index generation we last loaded into _show_index.
+# None means "never loaded" so the first _load_index() always reads. Bumped in
+# the DB on every write; when the stored value moves ahead of this, we reload.
+_index_generation = None
 
-def _normalize_show_index_judges():
-    changed = False
-    for show in _show_index.get("shows", {}).values():
-        for breed in show.get("breeds", []) or []:
-            if "judge" not in breed:
-                continue
-            current = breed.get("judge")
-            cleaned = _clean_judge_name(current)
-            if cleaned != current:
-                changed = True
-                if cleaned:
-                    breed["judge"] = cleaned
-                else:
-                    breed.pop("judge", None)
-    return changed
+# Show ids whose mirror entry changed since the last flush. _save_index() writes
+# only these (one show = a handful of rows) instead of rewriting all ~47k breed
+# rows every time a single judge or result flag is folded in.
+_dirty_index_show_ids = set()
+
+
+def _mark_index_dirty(show_id):
+    """Record that _show_index["shows"][show_id] changed and needs flushing."""
+    _dirty_index_show_ids.add(str(int(show_id)))
+
+
+# ---------------------------------------------------------------------------
+# Breed index  (dog_show + dog_breed + dog_meta)
+# ---------------------------------------------------------------------------
 
 def _load_index(force=False):
-    """Load the persisted breed index when missing or changed on disk."""
-    global _show_index_mtime
+    """Refresh the in-memory mirror when the DB generation has advanced.
+
+    Cheap generation check on every call (a single keyed lookup), full rebuild
+    only when something actually changed — mirroring the old mtime-gated JSON
+    reload. Returns True when the mirror was reloaded.
+    """
+    global _index_generation
 
     try:
-        mtime = os.path.getmtime(INDEX_PATH)
-    except FileNotFoundError:
-        if force:
-            _show_index.clear()
-            _show_index.update({"shows": {}, "last_updated": 0})
-            _show_index_mtime = 0
-        return False
-
-    if not force and _show_index_mtime == mtime:
-        return False
-
-    try:
-        with open(INDEX_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict) or "shows" not in data:
-            logger.warning("dog_index_invalid_shape")
-            return False
-        _show_index.clear()
-        _show_index.update({
-            "shows": data.get("shows", {}),
-            "last_updated": data.get("last_updated", 0),
-        })
-        _show_index_mtime = mtime
-        if _normalize_show_index_judges():
-            _save_index()
-        logger.info("dog_index_loaded", count=len(_show_index["shows"]))
-        return True
+        with dog_db.session_scope() as session:
+            generation = sqlstore.get_index_generation(session)
+            if not force and _index_generation is not None and generation == _index_generation:
+                return False
+            new_index = sqlstore.read_index(session)
     except Exception:
         logger.exception("dog_index_load_failed")
         return False
 
-def _save_index():
-    global _show_index_mtime
+    _show_index.clear()
+    _show_index.update(new_index)
+    _index_generation = generation
+    _dirty_index_show_ids.clear()
+    logger.info("dog_index_loaded", count=len(_show_index.get("shows", {})))
+    return True
 
-    tmp_path = _temp_json_path(INDEX_PATH)
+
+def _save_index():
+    """Flush dirty mirror shows to dog.db and bump the index generation.
+
+    Every mutation path calls _load_index() before mutating, so the mirror is
+    the current DB state plus our one-show change; we therefore adopt the bumped
+    generation as our own (like the JSON store recorded the new file mtime) and
+    skip reloading our own write. Other processes still see the bump and reload.
+    Writes are per-show, so two processes editing different shows never clobber
+    each other the way the old whole-file JSON write could.
+    """
+    global _index_generation
+
+    dirty = list(_dirty_index_show_ids)
+    if not dirty:
+        return
+
     try:
-        os.makedirs(INDEX_DIR, exist_ok=True)
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(_show_index, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, INDEX_PATH)
-        _show_index_mtime = os.path.getmtime(INDEX_PATH)
+        with dog_db.session_scope() as session:
+            for sid in dirty:
+                show = _show_index.get("shows", {}).get(sid)
+                if show is None:
+                    continue
+                sqlstore.write_show(session, sid, show)
+            sqlstore.set_meta(session, "last_updated", _show_index.get("last_updated") or 0)
+            new_generation = sqlstore.bump_index_generation(session)
     except Exception:
         logger.exception("dog_index_save_failed")
-        try:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-        except OSError:
-            pass
+        return
 
-def _atomic_write_json(path, data):
-    tmp_path = _temp_json_path(path)
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, path)
-    except Exception:
-        logger.exception("dog_json_save_failed", path=path)
-        try:
-            if os.path.exists(tmp_path):
-                os.unlink(tmp_path)
-        except OSError:
-            pass
-        raise
+    _dirty_index_show_ids.clear()
+    _index_generation = new_generation
 
-def _result_cache_path(show_id):
-    return os.path.join(RESULT_CACHE_DIR, f"{int(show_id)}.json")
+
+# ---------------------------------------------------------------------------
+# Whole-show result doc  (dog_result_cache + dog_result)
+# ---------------------------------------------------------------------------
 
 def _load_result_cache_doc(show_id):
     try:
-        with open(_result_cache_path(show_id), "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        return None
+        with dog_db.session_scope() as session:
+            return sqlstore.read_result_doc(session, show_id)
     except Exception:
         logger.exception("dog_result_cache_load_failed", show_id=show_id)
         return None
 
-    if not isinstance(data, dict):
-        logger.warning("dog_result_cache_invalid_shape", show_id=show_id)
-        return None
-    return data
 
 def _save_result_cache_doc(show_id, doc):
-    _atomic_write_json(_result_cache_path(show_id), doc)
+    with dog_db.session_scope() as session:
+        sqlstore.write_result_doc(session, show_id, doc)
+
+
+# ---------------------------------------------------------------------------
+# Result jobs  (dog_result_job)
+# ---------------------------------------------------------------------------
 
 def _load_result_jobs():
     try:
-        with open(RESULT_JOBS_PATH, "r", encoding="utf-8") as f:
-            data = json.load(f)
-    except FileNotFoundError:
-        return {"jobs": {}, "updated_at": 0}
+        with dog_db.session_scope() as session:
+            return sqlstore.read_jobs(session)
     except Exception:
         logger.exception("dog_result_jobs_load_failed")
         return {"jobs": {}, "updated_at": 0}
 
-    if not isinstance(data, dict) or not isinstance(data.get("jobs"), dict):
-        logger.warning("dog_result_jobs_invalid_shape")
-        return {"jobs": {}, "updated_at": 0}
-    return data
 
 def _save_result_jobs(data):
-    _atomic_write_json(RESULT_JOBS_PATH, data)
+    with dog_db.session_scope() as session:
+        sqlstore.write_jobs(session, data)
+
 
 def _queue_result_cache_job(show_id, reason="user"):
     now = time.time()
@@ -176,6 +167,7 @@ def _queue_result_cache_job(show_id, reason="user"):
     _save_result_jobs(jobs_doc)
     return job
 
+
 def _set_result_job_running(show_id):
     now = time.time()
     jobs_doc = _load_result_jobs()
@@ -189,6 +181,7 @@ def _set_result_job_running(show_id):
     jobs_doc["updated_at"] = now
     _save_result_jobs(jobs_doc)
     return job
+
 
 def _claim_result_cache_job(show_id, reason="user-immediate", stale_seconds=None):
     now = time.time()
@@ -213,6 +206,7 @@ def _claim_result_cache_job(show_id, reason="user-immediate", stale_seconds=None
     _save_result_jobs(jobs_doc)
     return job
 
+
 def _heartbeat_result_cache_job(show_id, min_interval=15):
     now = time.time()
     jobs_doc = _load_result_jobs()
@@ -230,6 +224,7 @@ def _heartbeat_result_cache_job(show_id, min_interval=15):
     _save_result_jobs(jobs_doc)
     return True
 
+
 def _remove_result_cache_job(show_id):
     jobs_doc = _load_result_jobs()
     jobs = jobs_doc.setdefault("jobs", {})
@@ -238,6 +233,7 @@ def _remove_result_cache_job(show_id):
         jobs.pop(sid, None)
         jobs_doc["updated_at"] = time.time()
         _save_result_jobs(jobs_doc)
+
 
 def _defer_result_cache_job(show_id, error):
     now = time.time()
@@ -259,6 +255,7 @@ def _defer_result_cache_job(show_id, error):
     _save_result_jobs(jobs_doc)
     return job
 
+
 def _result_job_due(job, now=None, stale_seconds=None):
     now = now or time.time()
     stale_seconds = RESULT_JOB_STALE_SECONDS if stale_seconds is None else max(1, int(stale_seconds))
@@ -268,9 +265,15 @@ def _result_job_due(job, now=None, stale_seconds=None):
             return False
     return (job.get("next_attempt_at") or 0) <= now
 
+
+# ---------------------------------------------------------------------------
+# Small read helpers used across the package
+# ---------------------------------------------------------------------------
+
 def _indexed_show(show_id):
     _load_index()
     return _show_index.get("shows", {}).get(str(show_id))
+
 
 def _index_summary(total_show_count=None):
     updated = _show_index.get("last_updated") or 0

@@ -4,6 +4,9 @@ import pytest
 # Set test database URI before importing the app, so __init__.py picks it up
 os.environ["DATABASE_URI"] = "sqlite://"  # in-memory, overridden per-test below
 os.environ["DOG_NO_CRAWLER"] = "true"
+# Keep the import-time dog.db init off the real ./app/data/dog.db; the dog test
+# fixture rebinds this to a fresh per-test file (see tests/test_dog.py).
+os.environ["DOG_DATABASE_URI"] = "sqlite://"
 
 
 from app import app as flask_app, limiter

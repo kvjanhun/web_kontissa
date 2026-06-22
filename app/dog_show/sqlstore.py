@@ -106,15 +106,32 @@ def _show_to_dict(show_row, breed_rows):
 
 
 def read_index(session):
-    """Rebuild the `{"shows": {...}, "last_updated": ts}` index dict."""
+    """Rebuild the `{"shows": {...}, "last_updated": ts}` index dict.
+
+    Uses Core column selects (lightweight Row objects, accessed by name exactly
+    like the ORM entities) rather than full ORM instances — at ~47k breed rows
+    the ORM hydration cost dominates, and this keeps the full reload close to the
+    old whole-file JSON parse it replaces.
+    """
     breeds_by_show = {}
-    for row in session.execute(
-        select(DogBreed).order_by(DogBreed.show_id, DogBreed.position)
-    ).scalars():
+    breed_cols = session.execute(
+        select(
+            DogBreed.show_id, DogBreed.name, DogBreed.entry_count, DogBreed.fci_group,
+            DogBreed.breed_id, DogBreed.has_results, DogBreed.source_url, DogBreed.judge,
+        ).order_by(DogBreed.show_id, DogBreed.position)
+    )
+    for row in breed_cols:
         breeds_by_show.setdefault(row.show_id, []).append(row)
 
     shows = {}
-    for show_row in session.execute(select(DogShow)).scalars():
+    show_cols = session.execute(
+        select(
+            DogShow.id, DogShow.title, DogShow.name, DogShow.date, DogShow.month,
+            DogShow.source_url, DogShow.updated_at, DogShow.updated_at_iso,
+            DogShow.empty_breed_list_confirmed,
+        )
+    )
+    for show_row in show_cols:
         shows[str(show_row.id)] = _show_to_dict(show_row, breeds_by_show.get(show_row.id, []))
 
     return {"shows": shows, "last_updated": get_meta_number(session, "last_updated", 0)}
@@ -158,6 +175,7 @@ def write_result_doc(session, show_id, doc):
             name=result.get("name", "") or "",
             reg_url=result.get("reg_url", "") or "",
             reg_id=_parse_reg_id(result.get("reg_url")) or None,
+            breed_judge=(result.get("breedObj") or {}).get("judge") or None,
             grade=result.get("grade", "") or "",
             placement=result.get("placement"),
             awards=result.get("awards", "") or "",
@@ -199,6 +217,12 @@ def read_result_doc(session, show_id):
         select(DogResult).where(DogResult.show_id == sid).order_by(DogResult.seq)
     ).scalars():
         breed_row = breed_lookup.get((row.fci_group or "", row.breed_id or ""))
+        breed_obj = _breed_obj_for(breed_row, row.fci_group, row.breed_id, row.breed_name)
+        # The result row carries the breed's judge in its own right (the result
+        # cache is the source of per-breed judges), so it survives even when the
+        # index breed has not been enriched with it yet.
+        if row.breed_judge:
+            breed_obj["judge"] = row.breed_judge
         results.append({
             "number": row.number,
             "name": row.name or "",
@@ -212,7 +236,7 @@ def read_result_doc(session, show_id):
             "breedName": row.breed_name or "",
             "breedGroup": row.fci_group or "",
             "breedId": row.breed_id or "",
-            "breedObj": _breed_obj_for(breed_row, row.fci_group, row.breed_id, row.breed_name),
+            "breedObj": breed_obj,
         })
     doc["results"] = results
     return doc
@@ -277,3 +301,21 @@ def get_meta_number(session, key, default=0):
         return json.loads(row.value)
     except (ValueError, TypeError):
         return default
+
+
+# ---------------------------------------------------------------------------
+# Index generation counter
+# ---------------------------------------------------------------------------
+# A monotonic integer bumped on every index write. Each process records the
+# generation it last loaded into its in-memory mirror; when the stored value
+# advances (because this process or the crawler wrote), the mirror reloads. This
+# replaces the file-mtime check the JSON store used for cross-process freshness.
+
+def get_index_generation(session):
+    return int(get_meta_number(session, "index_generation", 0))
+
+
+def bump_index_generation(session):
+    new_value = get_index_generation(session) + 1
+    set_meta(session, "index_generation", new_value)
+    return new_value
