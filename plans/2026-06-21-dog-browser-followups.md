@@ -1,7 +1,9 @@
 # /dog Browser — Review Findings & Follow-ups
 
-**Date:** 2026-06-21 (revised 2026-06-21 after judge-data investigation)
+**Date:** 2026-06-21 (revised 2026-06-22 after Phases C + D shipped)
 **Context:** Functionality + UX review of the `/dog` Showlink browser (frontend `frontend/features/dog/`, backend `app/dog_show/` + `app/api/dog.py`). The scraping is polite and sound. This file records what shipped, the agreed direction, and the design detail for the next phases.
+
+**Status at a glance:** Phases A–D shipped. Phase C's off-peak backfill is now running nightly on the NUC and historical data is filling in oldest-first; Phase D's judge views light up across shows as that data lands. Phase E (cross-entity dog/judge/kennel profiles) is the remaining roadmap item and depends on the backfill having indexable history.
 
 ---
 
@@ -66,9 +68,17 @@ Moved dog persistence from JSON files to SQLite so the full-data backfill has so
 
 **Risk:** this is the large piece. `tests/test_dog.py` leans heavily on the JSON `_show_index` shape; budget time for the test port. Preserve all `/api/dog/*` response shapes.
 
-### Phase C — All-shows full-data off-peak backfill
+### Phase C — All-shows full-data off-peak backfill  ✅ DONE (shipped 2026-06-22)
 
-After Phase B. A crawler mode that backfills full results for shows beyond the live/7-day window.
+**Shipped in `3730b06b` (feature) + `3229709d` (compose wiring).** Captures everything a result page offers in one pass, plus a polite off-peak crawler mode that backfills historical shows oldest-first before they age off Showlink's rolling window.
+
+- **Full-data capture:** parsers now extract per-dog competitive placement (PU/PN, `cells[4]`, previously dropped) and split the breed honor-roll into `{type, text, name, owner}`. Schema: new `DogResult.competitive_placement` column + new `DogBreedAward` table (ROP/VSP/SERT/veteran/junior/breeder winners with owner/kennel). `result_cache.py` threads the new fields through; `sqlstore.py` reads/writes them (omitting `competitive_placement` when empty so the pre-Phase-C migrated docs round-trip clean).
+- **Backfill mode** (`result_cache.crawl_backfill_once`, wired into `scripts/dog_crawl.py --backfill`, enabled permanently in the `dog-crawler` compose service): Finnish 00:00–06:00 window (tz-correct via `utils._local_dt`; container is UTC), oldest-first selection of not-yet-captured result-bearing shows, single worker + `DOG_BACKFILL_DELAY` (2 s spacing) so it is never bursty, and it yields while any user/live result job is queued or running. Captured shows are permanent and never re-crawled; goes idle when the window is fully backfilled. New `DOG_BACKFILL_*` config knobs.
+- **Migration:** `scripts/migrate_dog_phase_c.py` — idempotent additive `ALTER` for the new column + `create_all` for the new table; preserves existing rows.
+- **Tests:** 8 new (parser values, owner split, window/wrap-around gating, jobs-yield, oldest-first + skip-captured + skip-resultless selection, end-to-end persistence). 73 dog + 296 backend green. Validated on real data (PU1–PU4 + honor-roll owner splits, doc round-trips, an aged-out June-2024 show handled as complete/0-results).
+- **Feasibility unknowns:** confirmed enough to ship — Showlink exposes a crawlable rolling history window and `reg_id` from `reg_url` is the cross-show anchor for Phase E. Depth of history is now being measured empirically as the nightly backfill walks oldest-first.
+
+*Original design intent (for reference):* A crawler mode that backfills full results for shows beyond the live/7-day window.
 
 - **Quiet-hours gate:** only run between **00:00–06:00 Europe/Helsinki** (`DOG_RESULT_TIMEZONE`). New knobs analogous to the existing `DOG_RESULT_SHOW_MORNING_HOUR` window.
 - **Strictly polite, never bursty — this is a hard rule, even at 3am.** Steady, paced request flow with a low ceiling; no concurrency spikes, no firing a whole show's breeds back-to-back. Pace it so we make measured progress over many nights rather than hammering Showlink — but not so slow it would take a decade. Tune the per-request delay / nightly cap to a deliberate middle ground (e.g. a fixed inter-request spacing and a nightly request budget), and prefer raising the delay over raising concurrency if Showlink ever slows.
@@ -80,13 +90,13 @@ After Phase B. A crawler mode that backfills full results for shows beyond the l
   - How **stable is the dog id** in `reg_url` (`jalostus.kennelliitto.fi`)? It's the cross-show anchor for Phase E.
 - **Storage budget:** ~1–5 GB for a few years — fine on the NUC.
 
-### Phase D — Show detail grouping UI + front-page judge search  ◑ grouping UI DONE (this session); judge-search verification pending backfill data
+### Phase D — Show detail grouping UI + front-page judge search  ✅ grouping UI DONE (shipped 2026-06-22, `836eda44`); judge-search lighting up as backfill data lands
 
-Frontend-first; degrades gracefully as data fills (FCI grouping works today from group numbers; judge views light up as judges land).
+Frontend-first; degrades gracefully as data fills (FCI grouping works today from group numbers; judge views light up as judges land via the now-live Phase C backfill).
 
-**Shipped (grouping UI):** breed-list mode tabs (`Ryhmä` / `Tuomari` / `Aakkoset`, default FCI) in `DogShowDetailView.vue`. Pure partition `groupShowBreedGroups()` + `fciGroupLabel()` + `FCI_GROUP_NAMES` in `dogResults.js` (preserves breed order within a section; orders FCI sections numerically with unknown last, judge sections alphabetically with "Tuomari ei tiedossa" last). Tabs only render at ≥2 breeds; below that the list falls back to flat. `showGroupMode` is a sticky in-memory preference in `useDogBrowser.js`, not route state. Unit tests in `dogResults.test.js` + grouping E2E in `dog.spec.js`.
+**Shipped (grouping UI), `836eda44`:** breed-list mode tabs (`Ryhmä` / `Tuomari` / `Aakkoset`, default FCI) in `DogShowDetailView.vue`. Pure partition `groupShowBreedGroups()` + `fciGroupLabel()` + `FCI_GROUP_NAMES` in `dogResults.js` (preserves breed order within a section; orders FCI sections numerically with unknown last, judge sections alphabetically with "Tuomari ei tiedossa" last). Tabs only render at ≥2 breeds; below that the list falls back to flat. **Collapsible accordion sections** — per-section disclosure header (WAI-ARIA `<h2>`-wraps-`<button>` so heading + button roles coexist) starting expanded, plus a `Sulje kaikki` / `Avaa kaikki` toggle; collapsed state (`collapsedBreedSections`) resets per show. `showGroupMode` is a sticky in-memory preference in `useDogBrowser.js`, not route state. Unit tests in `dogResults.test.js` (36 dogResults / 151 vitest) + grouping E2E in `dog.spec.js` (6 dog E2E).
 
-**Judge search (verified, no code change):** `search.py` already matches judges from both index breeds and cached result breeds and back-fills index judges; `DogShowListView.vue` renders judge matches with a "Tuomari" tag + names. This lights up across all shows as the Phase C backfill populates per-breed judges. Deferred: surface `judge_match_count` ("N rotua") and revisit ranking once real judge data has landed.
+**Judge search (verified, no code change):** `search.py` already matches judges from both index breeds and cached result breeds and back-fills index judges; `DogShowListView.vue` renders judge matches with a "Tuomari" tag + names. This lights up across all shows as the now-running Phase C backfill populates per-breed judges. Deferred: surface `judge_match_count` ("N rotua") and revisit ranking once enough real judge data has landed.
 
 - **Show detail page grouping** (`frontend/features/dog/components/DogShowDetailView.vue` + helpers): three modes, **default = FCI group**.
   - **FCI group (default):** group breeds under FCI ryhmä 1–10 with proper Finnish group names (add the 10-name map).
