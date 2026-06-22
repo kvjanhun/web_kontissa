@@ -1599,6 +1599,134 @@
 }
 
 /* ═══ Show-wide results ═══ */
+.dog-breed-list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0 0 0.85rem;
+}
+.dog-breed-mode-tabs {
+  display: inline-flex;
+  gap: 0.2rem;
+  padding: 0.2rem;
+  background: var(--dog-surface-el);
+  border: 1px solid var(--dog-border);
+  border-radius: var(--dog-radius-md);
+}
+.dog-breed-collapse-all {
+  appearance: none;
+  border: 1px solid var(--dog-border);
+  background: var(--dog-surface);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--dog-text-muted);
+  cursor: pointer;
+  padding: 0.35rem 0.7rem;
+  border-radius: var(--dog-radius-sm);
+  transition: background 0.12s, color 0.12s, border-color 0.12s;
+}
+.dog-breed-collapse-all:hover {
+  color: var(--dog-accent);
+  border-color: var(--dog-border-strong);
+}
+.dog-breed-collapse-all:focus-visible {
+  outline: 2px solid var(--dog-accent);
+  outline-offset: 1px;
+}
+.dog-breed-mode-tab {
+  appearance: none;
+  border: none;
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--dog-text-muted);
+  cursor: pointer;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--dog-radius-sm);
+  transition: background 0.12s, color 0.12s, box-shadow 0.12s;
+}
+.dog-breed-mode-tab:hover {
+  color: var(--dog-text);
+}
+.dog-breed-mode-tab-active {
+  background: var(--dog-surface);
+  color: var(--dog-accent);
+  box-shadow: var(--dog-shadow-soft);
+}
+.dog-breed-mode-tab:focus-visible {
+  outline: 2px solid var(--dog-accent);
+  outline-offset: 1px;
+}
+
+.dog-breed-sections {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+.dog-breed-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+.dog-breed-section-head {
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+}
+.dog-breed-section-heading {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin: 0;
+  padding: 0 0.15rem 0.35rem;
+  border: none;
+  border-bottom: 1px dashed var(--dog-border);
+  background: transparent;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  color: var(--dog-text);
+  text-align: left;
+  cursor: pointer;
+}
+.dog-breed-section-heading:hover {
+  color: var(--dog-accent);
+}
+.dog-breed-section-heading:focus-visible {
+  outline: 2px solid var(--dog-accent);
+  outline-offset: 2px;
+}
+.dog-breed-section-title {
+  flex: 1 1 auto;
+}
+.dog-breed-section-count {
+  flex: 0 0 auto;
+  min-width: 1.5rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: var(--dog-surface-el);
+  color: var(--dog-text-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-align: center;
+}
+.dog-breed-section-chevron {
+  flex: 0 0 auto;
+  width: 1rem;
+  height: 1rem;
+  color: var(--dog-text-muted);
+  transform: rotate(-90deg);
+  transition: transform 0.15s ease;
+}
+.dog-breed-section-chevron-open {
+  transform: rotate(0deg);
+}
+
 .dog-breed-group-list {
   display: flex;
   flex-direction: column;

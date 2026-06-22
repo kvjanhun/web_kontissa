@@ -240,6 +240,100 @@ export function createShowBreedGroups({
   return values
 }
 
+// FCI ryhmä names as used by the Finnish Kennel Club. The show index stores the
+// group only as its number; the detail page maps it to a readable heading.
+export const FCI_GROUP_NAMES = {
+  '1': 'Lammas- ja karjakoirat',
+  '2': 'Pinserit, snautserit, molossityyppiset ja sveitsinpaimenkoirat',
+  '3': 'Terrierit',
+  '4': 'Mäyräkoirat',
+  '5': 'Pystykorvat ja alkukantaiset koirat',
+  '6': 'Ajavat ja jäljestävät koirat',
+  '7': 'Kanakoirat',
+  '8': 'Noutajat, ylösajavat koirat ja vesikoirat',
+  '9': 'Seura- ja kääpiökoirat',
+  '10': 'Vinttikoirat',
+}
+
+export const SHOW_GROUP_MODES = ['fci', 'judge', 'alpha']
+
+export function fciGroupLabel(group) {
+  const key = String(group ?? '').trim()
+  if (FCI_GROUP_NAMES[key]) return `Ryhmä ${key} – ${FCI_GROUP_NAMES[key]}`
+  if (/^\d+$/.test(key)) return `Ryhmä ${key}`
+  return 'Muu ryhmä'
+}
+
+function breedGroupFciKey(item) {
+  return String(item?.breed?.group ?? '').trim()
+}
+
+function breedGroupJudge(item) {
+  return String(item?.judge || item?.breed?.judge || '').trim()
+}
+
+function partitionBreedGroups(breedGroups, { keyOf, labelOf, missingLabel, compare }) {
+  const sections = new Map()
+  for (const item of breedGroups) {
+    const key = keyOf(item)
+    if (!sections.has(key)) {
+      sections.set(key, {
+        key: `section:${key || 'unknown'}`,
+        rawKey: key,
+        label: key ? labelOf(key) : missingLabel,
+        missing: !key,
+        breeds: [],
+      })
+    }
+    sections.get(key).breeds.push(item)
+  }
+
+  return [...sections.values()]
+    .sort((a, b) => {
+      if (a.missing !== b.missing) return a.missing ? 1 : -1
+      return compare(a, b)
+    })
+    .map(({ key, label, breeds }) => ({ key, label, breeds }))
+}
+
+function compareFciSections(a, b) {
+  const an = Number(a.rawKey)
+  const bn = Number(b.rawKey)
+  const aNumeric = Number.isFinite(an)
+  const bNumeric = Number.isFinite(bn)
+  if (aNumeric && bNumeric) return an - bn
+  if (aNumeric !== bNumeric) return aNumeric ? -1 : 1
+  return String(a.rawKey).localeCompare(String(b.rawKey), 'fi')
+}
+
+// Wrap the flat breed-group list from createShowBreedGroups() into ordered
+// sections for the show detail page. Breed order within a section is preserved
+// (so the live "Tuloksia saaneet" recency sort still holds); only the section
+// ordering is imposed. 'alpha' keeps the current single flat list.
+export function groupShowBreedGroups(breedGroups = [], mode = 'fci') {
+  if (!breedGroups.length) return []
+
+  if (mode === 'alpha') {
+    return [{ key: 'all', label: '', breeds: breedGroups }]
+  }
+
+  if (mode === 'judge') {
+    return partitionBreedGroups(breedGroups, {
+      keyOf: breedGroupJudge,
+      labelOf: judge => judge,
+      missingLabel: 'Tuomari ei tiedossa',
+      compare: (a, b) => String(a.label).localeCompare(String(b.label), 'fi'),
+    })
+  }
+
+  return partitionBreedGroups(breedGroups, {
+    keyOf: breedGroupFciKey,
+    labelOf: fciGroupLabel,
+    missingLabel: 'Muu ryhmä',
+    compare: compareFciSections,
+  })
+}
+
 export function splitAwards(value) {
   return (value || '').split(',').map(item => item.trim()).filter(Boolean)
 }

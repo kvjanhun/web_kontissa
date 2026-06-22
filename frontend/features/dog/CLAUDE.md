@@ -14,7 +14,7 @@ For backend crawling, cache formats, Showlink parsing, and operational tuning, r
 | Pure filtering, grouping, formatting, and URL helpers | `dogResults.js` |
 | Dog-only styling | `dog.css` |
 | List/search screen | `components/DogShowListView.vue` |
-| Show-detail screen and whole-show filters | `components/DogShowDetailView.vue` and `components/DogShowTools.vue` |
+| Show-detail screen, breed-grouping tabs, and whole-show filters | `components/DogShowDetailView.vue` and `components/DogShowTools.vue` |
 | Single-breed result screen | `components/DogBreedResultsView.vue` |
 | Result card rendering | `components/DogResultCard.vue` |
 | Shared loading/error/empty rows | `components/DogStateBlock.vue` |
@@ -58,6 +58,7 @@ The frontend must not fan out across all breed result pages. Any full-show filte
 - Opening a show resets whole-show result state and breed-result state.
 - Opening `Koirat & Tulokset` loads `/all-results`; partial cache progress is visible and resilient across deploys.
 - Show-wide filters apply only after all-dogs data has loaded.
+- The breed list (`Rotuluettelo`) can be grouped three ways via the mode tabs: by FCI group (default), by judge, or alphabetically (flat). Grouping is a pure partition in `dogResults.js` (`groupShowBreedGroups`) that preserves breed order within each section; the tabs only show when the show has two or more breeds. `showGroupMode` is a sticky view preference, not route state.
 - Breed result filters and whole-show filters keep `HYL`, `EVA`, and `POISSA` separate.
 - Back/forward navigation is source-of-truth route navigation, not private component state.
 - Programmatic navigation scrolls `/dog` back to the top after link-style transitions.

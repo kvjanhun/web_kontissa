@@ -41,6 +41,14 @@ const {
   expandedCritiques,
   showSearchPlaceholder,
   showBreedGroups,
+  showGroupMode,
+  showBreedSections,
+  breedGroupingAvailable,
+  breedSectionsCollapsible,
+  allBreedSectionsCollapsed,
+  isBreedSectionCollapsed,
+  toggleBreedSection,
+  toggleAllBreedSections,
   availableShowGrades,
   availableShowClasses,
   availableShowAwards,
@@ -129,6 +137,7 @@ watch(pageTitle, (title) => {
         v-model:dog-grade-filter="dogGradeFilter"
         v-model:dog-class-filter="dogClassFilter"
         v-model:dog-award-filter="dogAwardFilter"
+        v-model:show-group-mode="showGroupMode"
         :show-detail="showDetail"
         :detail-loading="detailLoading"
         :detail-error="detailError"
@@ -146,6 +155,11 @@ watch(pageTitle, (title) => {
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
         :show-breed-groups="showBreedGroups"
+        :show-breed-sections="showBreedSections"
+        :breed-grouping-available="breedGroupingAvailable"
+        :breed-sections-collapsible="breedSectionsCollapsible"
+        :all-breed-sections-collapsed="allBreedSectionsCollapsed"
+        :is-breed-section-collapsed="isBreedSectionCollapsed"
         :show-award-result-groups="showAwardResultGroups"
         :breed-empty-text="breedEmptyText"
         :expanded-critiques="expandedCritiques"
@@ -156,6 +170,8 @@ watch(pageTitle, (title) => {
         @breed-group-click="onBreedGroupClick"
         @open-breed="openBreed"
         @toggle-critique="toggleCritique"
+        @toggle-breed-section="toggleBreedSection"
+        @toggle-all-breed-sections="toggleAllBreedSections"
       />
 
       <DogBreedResultsView

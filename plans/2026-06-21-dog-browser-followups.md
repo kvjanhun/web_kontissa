@@ -80,9 +80,13 @@ After Phase B. A crawler mode that backfills full results for shows beyond the l
   - How **stable is the dog id** in `reg_url` (`jalostus.kennelliitto.fi`)? It's the cross-show anchor for Phase E.
 - **Storage budget:** ~1–5 GB for a few years — fine on the NUC.
 
-### Phase D — Show detail grouping UI + front-page judge search
+### Phase D — Show detail grouping UI + front-page judge search  ◑ grouping UI DONE (this session); judge-search verification pending backfill data
 
 Frontend-first; degrades gracefully as data fills (FCI grouping works today from group numbers; judge views light up as judges land).
+
+**Shipped (grouping UI):** breed-list mode tabs (`Ryhmä` / `Tuomari` / `Aakkoset`, default FCI) in `DogShowDetailView.vue`. Pure partition `groupShowBreedGroups()` + `fciGroupLabel()` + `FCI_GROUP_NAMES` in `dogResults.js` (preserves breed order within a section; orders FCI sections numerically with unknown last, judge sections alphabetically with "Tuomari ei tiedossa" last). Tabs only render at ≥2 breeds; below that the list falls back to flat. `showGroupMode` is a sticky in-memory preference in `useDogBrowser.js`, not route state. Unit tests in `dogResults.test.js` + grouping E2E in `dog.spec.js`.
+
+**Judge search (verified, no code change):** `search.py` already matches judges from both index breeds and cached result breeds and back-fills index judges; `DogShowListView.vue` renders judge matches with a "Tuomari" tag + names. This lights up across all shows as the Phase C backfill populates per-breed judges. Deferred: surface `judge_match_count` ("N rotua") and revisit ranking once real judge data has landed.
 
 - **Show detail page grouping** (`frontend/features/dog/components/DogShowDetailView.vue` + helpers): three modes, **default = FCI group**.
   - **FCI group (default):** group breeds under FCI ryhmä 1–10 with proper Finnish group names (add the 10-name map).

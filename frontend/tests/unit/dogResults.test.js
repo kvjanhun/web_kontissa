@@ -6,11 +6,13 @@ import {
   buildDogQuery,
   createShowBreedGroups,
   dogMatchesShowFilters,
+  fciGroupLabel,
   filterDogResults,
   formatShowFullDate,
   getShowResultAvailability,
   gradeMatchesFilter,
   groupResultsByAwardFilter,
+  groupShowBreedGroups,
   isOvernightResultWindow,
   parseShowDateRange,
   showStatItems,
@@ -607,6 +609,70 @@ describe('sortBreedAwards', () => {
       // 6. KP
       'KP',
     ])
+  })
+})
+
+describe('fciGroupLabel', () => {
+  it('maps known FCI groups to their Finnish names', () => {
+    expect(fciGroupLabel('3')).toBe('Ryhmä 3 – Terrierit')
+    expect(fciGroupLabel('10')).toBe('Ryhmä 10 – Vinttikoirat')
+  })
+
+  it('labels unknown numeric groups generically and non-numeric as "Muu ryhmä"', () => {
+    expect(fciGroupLabel('11')).toBe('Ryhmä 11')
+    expect(fciGroupLabel('')).toBe('Muu ryhmä')
+    expect(fciGroupLabel(null)).toBe('Muu ryhmä')
+    expect(fciGroupLabel('pentu')).toBe('Muu ryhmä')
+  })
+})
+
+describe('groupShowBreedGroups', () => {
+  const makeBreedGroup = (overrides = {}) => ({
+    key: overrides.key || `${overrides.group || '0'}:${overrides.breedName || 'x'}`,
+    breedName: overrides.breedName || 'Rotu',
+    judge: overrides.judge ?? '',
+    breed: { group: overrides.group ?? '', judge: overrides.judge ?? '' },
+  })
+
+  const breedGroups = [
+    makeBreedGroup({ breedName: 'Basenji', group: '6', judge: 'Kaarina Koski' }),
+    makeBreedGroup({ breedName: 'Akita', group: '5', judge: 'Antti Aalto' }),
+    makeBreedGroup({ breedName: 'Beagle', group: '6', judge: 'Antti Aalto' }),
+    makeBreedGroup({ breedName: 'Tuntematon', group: '', judge: '' }),
+  ]
+
+  it('returns a single unlabelled section in alpha mode preserving incoming order', () => {
+    const sections = groupShowBreedGroups(breedGroups, 'alpha')
+    expect(sections).toHaveLength(1)
+    expect(sections[0].label).toBe('')
+    expect(sections[0].breeds.map(b => b.breedName)).toEqual([
+      'Basenji', 'Akita', 'Beagle', 'Tuntematon',
+    ])
+  })
+
+  it('groups by FCI group, orders sections numerically, and puts unknown last', () => {
+    const sections = groupShowBreedGroups(breedGroups, 'fci')
+    expect(sections.map(s => s.label)).toEqual([
+      'Ryhmä 5 – Pystykorvat ja alkukantaiset koirat',
+      'Ryhmä 6 – Ajavat ja jäljestävät koirat',
+      'Muu ryhmä',
+    ])
+    // Order within a section is preserved (Basenji indexed before Beagle).
+    expect(sections[1].breeds.map(b => b.breedName)).toEqual(['Basenji', 'Beagle'])
+  })
+
+  it('groups by judge alphabetically and collects judge-less breeds at the end', () => {
+    const sections = groupShowBreedGroups(breedGroups, 'judge')
+    expect(sections.map(s => s.label)).toEqual([
+      'Antti Aalto',
+      'Kaarina Koski',
+      'Tuomari ei tiedossa',
+    ])
+    expect(sections[0].breeds.map(b => b.breedName)).toEqual(['Akita', 'Beagle'])
+  })
+
+  it('returns no sections for an empty breed list', () => {
+    expect(groupShowBreedGroups([], 'fci')).toEqual([])
   })
 })
 

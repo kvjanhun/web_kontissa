@@ -29,7 +29,7 @@ Standalone `/dog` browser for Showlink data. Read `features/dog/AGENTS.md` befor
 - **Route entry**: `pages/dog/index.vue` only sets page metadata/layout and renders `features/dog/DogBrowser.vue`.
 - **Feature module**: Dog-specific components, `useDogBrowser.js`, `dogResults.js`, and `dog.css` live under `features/dog/`; do not move them into shared components unless another route genuinely reuses them.
 - **Route state**: `?show=<id>` opens a show; `?show=<id>&group=<group>&breed=<breed>` opens a breed result page.
-- **Show detail tabs**: `Rotuluettelo` lists breeds; `Koirat & Tulokset` loads the whole-show cache and filters all dogs.
+- **Show detail tabs**: `Rotuluettelo` lists breeds; `Koirat & Tulokset` loads the whole-show cache and filters all dogs. The breed list groups by FCI group (default), judge, or alphabetically via mode tabs.
 - **Whole-show loading**: A `202` warming response keeps the animated progress card visible and polls using the backend `retry_after` value.
 - **Filters**: Whole-show and breed result filters support text, grade, class, and awards. `HYL`, `EVA`, and `POISSA` are intentionally separate grade filters.
 - **Search**: Breed search uses the backend persisted index and polls index stats while indexing is incomplete.

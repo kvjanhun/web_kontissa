@@ -16,6 +16,7 @@ import {
   gradeBorderClass,
   gradeClasses,
   groupResultsByAwardFilter,
+  groupShowBreedGroups,
   groupResultsByGenderAndClass,
   hasShowStats,
   isNumericString,
@@ -64,6 +65,9 @@ export function useDogBrowser() {
   const breedSearchQuery = ref('')
   const debouncedBreedSearch = ref('')
   const resultBreedsOnly = ref(false)
+  // Show-detail breed grouping: 'fci' (default), 'judge', or 'alpha'. A sticky
+  // view preference, not part of the route state.
+  const showGroupMode = ref('fci')
   const dogSearchQuery = ref('')
   const dogGradeFilter = ref('')
   const dogClassFilter = ref('')
@@ -78,6 +82,9 @@ export function useDogBrowser() {
   const collapsedMonths = ref(new Set())
   const expandedCritiques = ref(new Set())
   const expandedBreedGroups = ref(new Set())
+  // Breed-list sections (FCI group / judge headings) start expanded; collapsing
+  // is opt-in per section, keyed by section key.
+  const collapsedBreedSections = ref(new Set())
 
   let searchTimer = null
   let breedSearchTimer = null
@@ -158,6 +165,7 @@ export function useDogBrowser() {
     resultsError.value = ''
     expandedCritiques.value = new Set()
     expandedBreedGroups.value = new Set()
+    collapsedBreedSections.value = new Set()
     breedSearchQuery.value = ''
     clearTimeout(breedSearchTimer)
     debouncedBreedSearch.value = ''
@@ -289,6 +297,24 @@ export function useDogBrowser() {
       award: dogAwardFilter.value,
     },
   }))
+
+  // Grouping is only worth offering once there is more than one breed to sort.
+  // Below that, fall back to a flat list so a single breed never gets a lone
+  // FCI/judge heading with no way to change it.
+  const breedGroupingAvailable = computed(() => (showDetail.value?.breeds?.length || 0) >= 2)
+  const effectiveShowGroupMode = computed(() => (
+    breedGroupingAvailable.value ? showGroupMode.value : 'alpha'
+  ))
+  const showBreedSections = computed(() => (
+    groupShowBreedGroups(showBreedGroups.value, effectiveShowGroupMode.value)
+  ))
+  // Only labelled sections (FCI/judge modes) can collapse; the flat alpha list
+  // has a single unlabelled section.
+  const breedSectionsCollapsible = computed(() => showBreedSections.value.some(section => section.label))
+  const allBreedSectionsCollapsed = computed(() => (
+    breedSectionsCollapsible.value
+    && showBreedSections.value.every(section => collapsedBreedSections.value.has(section.key))
+  ))
 
   const availableShowGrades = computed(() => (
     availableGradesFromResults(allDogsResults.value || [], dogGradeFilter.value)
@@ -454,6 +480,7 @@ export function useDogBrowser() {
     allDogsResults.value = []
     allDogsProgress.value = null
     expandedBreedGroups.value = new Set()
+    collapsedBreedSections.value = new Set()
     clearLiveDetailPoll()
     if (openingDifferentShow) {
       resultBreedsOnly.value = resultBreedFilterAvailable.value
@@ -624,6 +651,23 @@ export function useDogBrowser() {
     if (groups.has(key)) groups.delete(key)
     else groups.add(key)
     expandedBreedGroups.value = groups
+  }
+
+  function isBreedSectionCollapsed(key) {
+    return collapsedBreedSections.value.has(key)
+  }
+
+  function toggleBreedSection(key) {
+    const sections = new Set(collapsedBreedSections.value)
+    if (sections.has(key)) sections.delete(key)
+    else sections.add(key)
+    collapsedBreedSections.value = sections
+  }
+
+  function toggleAllBreedSections() {
+    collapsedBreedSections.value = allBreedSectionsCollapsed.value
+      ? new Set()
+      : new Set(showBreedSections.value.map(section => section.key))
   }
 
   const filteredShows = computed(() => {
@@ -853,6 +897,14 @@ export function useDogBrowser() {
     expandedCritiques,
     showSearchPlaceholder,
     showBreedGroups,
+    showGroupMode,
+    showBreedSections,
+    breedGroupingAvailable,
+    breedSectionsCollapsible,
+    allBreedSectionsCollapsed,
+    isBreedSectionCollapsed,
+    toggleBreedSection,
+    toggleAllBreedSections,
     availableShowGrades,
     availableShowClasses,
     availableShowAwards,

@@ -498,4 +498,79 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     expect(allResultsCalled).toBe(false)
   })
+
+  test('breed list can be grouped by FCI group, judge, or alphabetically', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 14050,
+              date: '14.03.',
+              name: 'Ryhmänäyttely',
+              month: 'maaliskuu 2026',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14050',
+              stats: { indexed: true, breed_count: 2, show_state: 'past' },
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14050', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14050,
+          title: 'Ryhmänäyttely 2026',
+          breeds: [
+            { name: 'Beagle', count: 4, group: '6', breed_id: '201', has_results: true, judge: 'Antti Aalto' },
+            { name: 'Akita', count: 2, group: '5', breed_id: '202', has_results: true, judge: 'Kaarina Koski' },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14050',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByRole('button', { name: /maaliskuu 2026/i }).click()
+    await page.getByRole('button', { name: /Ryhmänäyttely/ }).click()
+    await expect(page).toHaveURL(/\/dog\?show=14050$/)
+
+    // Default = FCI grouping: numeric group headings, group 5 before group 6.
+    await expect(page.getByRole('tab', { name: 'Ryhmä' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.getByRole('heading', { name: /Ryhmä 5/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Ryhmä 6/ })).toBeVisible()
+
+    // Sections are collapsible: collapsing group 6 hides its breed.
+    await expect(page.getByRole('button', { name: /Beagle/ })).toBeVisible()
+    await page.getByRole('button', { name: /Ryhmä 6/ }).click()
+    await expect(page.getByRole('button', { name: /Beagle/ })).not.toBeVisible()
+    await expect(page.getByRole('button', { name: /Akita/ })).toBeVisible()
+
+    // Collapse all / expand all toggle.
+    await page.getByRole('button', { name: 'Sulje kaikki' }).click()
+    await expect(page.getByRole('button', { name: /Akita/ })).not.toBeVisible()
+    await page.getByRole('button', { name: 'Avaa kaikki' }).click()
+    await expect(page.getByRole('button', { name: /Beagle/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Akita/ })).toBeVisible()
+
+    // Switch to judge grouping.
+    await page.getByRole('tab', { name: 'Tuomari' }).click()
+    await expect(page.getByRole('heading', { name: /Antti Aalto/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Kaarina Koski/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Ryhmä 6/ })).toHaveCount(0)
+
+    // Alphabetical = flat, no section headings, breeds still listed.
+    await page.getByRole('tab', { name: 'Aakkoset' }).click()
+    await expect(page.getByRole('heading', { name: /Ryhmä 5/ })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: /Antti Aalto/ })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Beagle/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: /Akita/ })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Sulje kaikki' })).toHaveCount(0)
+  })
 })
