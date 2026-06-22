@@ -168,7 +168,7 @@ SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py             # re-crawl
 SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py --limit 5   # oldest 5 only
 ```
 
-It is idempotent: once a show has the new fields it no longer matches the selector.
+Unlike the continuous `--backfill` (deliberately 1 worker / 2s for weeks-long unattended running), this watched one-off **defaults to the live result-crawl rate** (`--workers 3 --delay 0.4`, one request per breed) — the same rate Showlink already tolerates from this site and within the crawler's worker ceiling, so it stays polite without out-muscling the loop's other passes. Lower `--workers` / raise `--delay` to be gentler. It is idempotent: once a show has the new fields it no longer matches the selector.
 
 ## Public Crawler Identity
 

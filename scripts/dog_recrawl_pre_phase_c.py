@@ -8,8 +8,12 @@ automatic: complete result caches that have result rows but zero non-empty
 competitive_placement and zero `dog_breed_award` rows (the pre-Phase-C signature).
 
 Polite and safe:
-- single worker, BACKFILL_DELAY spacing, oldest-first (races Showlink's rolling
-  window, securing the most at-risk history first);
+- defaults to the same request rate as the live result crawl (3 workers, 0.4s
+  between request starts — one request per breed, not per dog), which Showlink
+  already tolerates from this site and which stays within the crawler's worker
+  ceiling so it does not out-muscle the loop's other passes. Tunable via
+  --workers / --delay. Oldest-first (races Showlink's rolling window, securing the
+  most at-risk history first);
 - before forcing each show it fetches the live Showlink detail page and only
   re-crawls if the show still serves result-bearing breeds. A show that has aged
   out of Showlink's window is skipped and its captured data is left intact, rather
@@ -75,7 +79,8 @@ def _still_serves_results(show_id):
 def main():
     parser = argparse.ArgumentParser(description="Re-crawl pre-Phase-C dog shows for the new full-data fields")
     parser.add_argument("--limit", type=int, default=None, help="Re-crawl only the oldest N matching shows")
-    parser.add_argument("--delay", type=float, default=config.BACKFILL_DELAY, help="Seconds between breed-result requests (default: config BACKFILL_DELAY)")
+    parser.add_argument("--delay", type=float, default=config.RESULT_CRAWL_DEFAULT_DELAY, help="Seconds between breed-result request starts (default matches the live result crawl; raise to be gentler)")
+    parser.add_argument("--workers", type=int, default=config.RESULT_CRAWL_DEFAULT_WORKERS, help="Concurrent breed-result requests per show (default matches the live result crawl; one request per breed, not per dog). Lower to be gentler.")
     parser.add_argument("--dry-run", action="store_true", help="List the selected shows without crawling")
     args = parser.parse_args()
 
@@ -108,7 +113,7 @@ def main():
             skipped += 1
             continue
 
-        summary = crawl_result_cache_for_show(sid, delay=args.delay, force=True, source="recrawl", workers=1)
+        summary = crawl_result_cache_for_show(sid, delay=args.delay, force=True, source="recrawl", workers=args.workers)
         status = summary.get("status")
         progress = summary.get("progress") or {}
         print(f"  {str(status).upper()} {sid}: dogs={progress.get('total_dogs')} breeds={progress.get('fetched_breeds')}")
