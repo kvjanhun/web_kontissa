@@ -41,16 +41,22 @@ X-Forwarded-For trust problem.
 | `kontissa-nginx-probe` | 3 scanner-probe hits in 10m (excl. `/logs/`) | 1d (escalates to 1w) | 21 |
 | `kontissa-nginx-auth` | 5× 401/403 on auth/admin in 10m | 1h | 18,21 |
 | `kontissa-nginx-429` | 20× 429 in 5m (excl. `/logs/`) | 1h | 21 |
+| `kontissa-grafana-auth` | 5× failed Grafana logins (POST `/logs/login` → 401) in 10m | 1h | 18 |
 | `nginx-limit-req` | _disabled_ — its only zone is `grafana_limit` (the `/logs/` dashboard = you) | — | — |
 | `sshd` | 4 SSH auth failures | 1h | — (see note) |
 | `recidive` | banned 5× in a day | 1w | 18 |
 
-All three web filters exclude the Grafana `/logs/` subpath, because Grafana legitimately
-serves asset URLs containing `/plugins/`, `/vendor/`, and bursts that trip the
-`grafana_limit` rate limit — none of which should ever be treated as an attack. Relying
-on `ignoreip` is not enough here: your dashboard traffic can reach nginx as a non-LAN
-address (remote access, or hairpin NAT presenting your public IP), so the *filters*
-themselves must not match it.
+The probe and 429 filters **exclude** the Grafana `/logs/` subpath, because Grafana
+legitimately serves asset URLs containing `/plugins/`, `/vendor/`, and bursts that trip
+the `grafana_limit` rate limit — none of which should ever be treated as an attack.
+Relying on `ignoreip` is not enough here: your dashboard traffic can reach nginx as a
+non-LAN address (remote access, or hairpin NAT / a privacy relay presenting a shared
+egress IP), so the *filters* themselves must not match it.
+
+`kontissa-grafana-auth` is the deliberate exception: it targets only the Grafana **login
+endpoint** (`/logs/login` POST → 401), so the broad `/logs/` exclusion above doesn't
+leave Grafana credential brute force uncovered. Asset loads and successful logins never
+match it, so it can't reproduce the dashboard false positives.
 
 `ignoreip` covers `127.0.0.1/8 ::1 172.16.0.0/12 <LAN_CIDR>` — the Docker bridges
 (`172.16.0.0/12`) keep container health checks and the dog crawler from ever being
