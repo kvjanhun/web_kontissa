@@ -71,10 +71,24 @@ before reaching the SPA fallback.
 
 **Deployed to:** `/etc/nginx/conf.d/sanakenno.fi.conf`
 
+### `fail2ban/` + `abuseipdb-blocklist.sh`
+Automated intrusion response for **both** sites (host fail2ban service + AbuseIPDB
+reporting and blocklist consumption). fail2ban watches the nginx JSON logs and the
+journal, bans abusive IPs in the host iptables `INPUT` chain, and reports them to
+AbuseIPDB; `abuseipdb-blocklist.sh` pulls AbuseIPDB's blocklist into an ipset and drops
+those IPs pre-emptively. Bans flow to Grafana via the existing journal scrape (no
+Telegram). Full operations notes, jail table, firewall-backend check, and verification:
+**`server/fail2ban/README.md`**.
+
+**Deployed to:** `/etc/fail2ban/{fail2ban.d,jail.d,filter.d}/…` and
+`/home/kvjanhun/scripts/abuseipdb-blocklist.sh`
+**Secret:** `ABUSEIPDB_API_KEY` in `site-alerts.env` + host-only
+`/etc/fail2ban/action.d/abuseipdb.local` (never committed)
+
 ### `backup-configs.sh`
-Backs up server configuration files (nginx, crontab, systemd services, iptables
-rules) to the same Backblaze B2 bucket used for database backups. Uses `rclone`
-with a remote named `b2`.
+Backs up server configuration files (nginx, **fail2ban** minus the AbuseIPDB key,
+kvjanhun + **root** crontabs, systemd services, **iptables and ipset** rules) to the same
+Backblaze B2 bucket used for database backups. Uses `rclone` with a remote named `b2`.
 
 **Deployed to:** `/home/kvjanhun/scripts/backup-configs.sh`
 **Scheduled via:** `crontab -l` (runs as root)
@@ -98,6 +112,7 @@ credentials. This file lives only on the server and is never committed to the re
 # /home/kvjanhun/.config/site-alerts.env
 TELEGRAM_BOT_TOKEN="..."
 TELEGRAM_CHAT_ID="..."
+ABUSEIPDB_API_KEY="..."   # used by abuseipdb-blocklist.sh and the fail2ban abuseipdb action
 ```
 
 ## Database Backup & Restore
@@ -158,4 +173,10 @@ scp server/backup-configs.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/backup-conf
 sudo scp server/nginx-observability.conf kvjanhun@erez.ac:/etc/nginx/conf.d/00-observability.conf
 sudo scp server/erez.ac.conf kvjanhun@erez.ac:/etc/nginx/conf.d/erez.ac.conf && sudo nginx -t && sudo systemctl reload nginx
 sudo scp server/sanakenno.fi.conf kvjanhun@erez.ac:/etc/nginx/conf.d/sanakenno.fi.conf && sudo nginx -t && sudo systemctl reload nginx
+
+# fail2ban (see server/fail2ban/README.md for the one-time setup + firewall-backend check)
+sudo scp server/fail2ban/fail2ban.d/logging.conf kvjanhun@erez.ac:/etc/fail2ban/fail2ban.d/logging.conf
+sudo scp server/fail2ban/jail.d/kontissa.conf kvjanhun@erez.ac:/etc/fail2ban/jail.d/kontissa.conf
+sudo scp server/fail2ban/filter.d/*.conf kvjanhun@erez.ac:/etc/fail2ban/filter.d/ && sudo fail2ban-client reload
+scp server/abuseipdb-blocklist.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/abuseipdb-blocklist.sh
 ```

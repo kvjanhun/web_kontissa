@@ -36,7 +36,7 @@ All services run in Docker Compose except node_exporter, which runs directly on 
 
 **Top row** — Gauges: CPU %, Memory %, Disk %, Uptime
 **Middle rows** — Time series: CPU & Memory over time, Network I/O, Disk I/O, Filesystem free space
-**Bottom rows** — Logs: Nginx traffic, erez.ac errors/warnings (Flask JSON logs, unstructured web container errors, nginx 5xx/error logs), Security events (failed logins, auth/admin 401/403/429, scanner probes, rate limits, SSH, Grafana)
+**Bottom rows** — Logs: Nginx traffic, erez.ac errors/warnings (Flask JSON logs, unstructured web container errors, nginx 5xx/error logs), Security events (failed logins, auth/admin 401/403/429, scanner probes, rate limits, SSH, Grafana), Fail2ban activity (bans/unbans/AbuseIPDB reports from the `fail2ban.service` journal unit)
 
 Refresh interval: 60s. Default time range: 6h.
 
@@ -67,9 +67,10 @@ Refresh interval: 60s. Default time range: 24h.
   - Shared unexpected nginx error-log burst detection for `erez.ac` and `sanakenno.fi`
   - Shared upstream failure detection from nginx error logs, excluding Grafana `/logs/` restart noise. Uses a `[2m]` count window with `for: 3m` so a brief web-container restart during deploy (upstream down < ~1 min) does not page, while a sustained outage still alerts within ~3 min.
   - Shared 5xx spike detection from JSON nginx access logs grouped by extracted `vhost`, excluding Grafana `/logs/`. Same `[2m]` / `for: 3m` deploy tolerance as the upstream rule (502/503s from a deploy restart are ignored).
-  - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`, excluding Grafana `/logs/`
+  - Shared scanner-burst detection grouped by extracted `vhost` and `remote_addr`, excluding Grafana `/logs/`. Threshold raised to >2000/5m — a backstop for mass campaigns, since host fail2ban (`server/fail2ban/`) now auto-bans routine scanners.
   - Shared auth/admin suspicious-response detection for 401/403/429 on app auth/admin paths
-  - Shared 429 burst detection grouped by extracted `vhost` and `remote_addr`
+  - Shared 429 burst detection grouped by extracted `vhost` and `remote_addr`. Threshold raised to >100/5m — a backstop, since fail2ban now bans repeat 429 abusers.
+  - fail2ban bans/unbans/AbuseIPDB reports are surfaced as a dashboard panel (System Overview → Fail2ban Activity, querying the `fail2ban.service` journal unit), not as alerts — routine bans are dashboard-only by design.
 - Rules: `alerting/system-alerts.yaml`
   - Host root disk free space below 15% for 10 minutes
 - The Grafana Compose service loads `/home/kvjanhun/.config/site-alerts.env` directly through `env_file`, so production deploys pass the existing Telegram alert secrets into Grafana without committing them or exposing them to app containers.

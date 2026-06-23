@@ -452,6 +452,38 @@
       ],
       "title": "Security Events",
       "type": "logs"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "loki_ds_1" },
+      "fieldConfig": { "defaults": {}, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 35 },
+      "id": 100,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": false,
+        "fontSize": "small",
+        "prettifyLogMessage": false,
+        "showControls": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "unwrappedColumns": false,
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "12.4.1",
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "loki_ds_1" },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{job=\"systemd\", unit=\"fail2ban.service\"} |~ \"Ban|Unban|reported\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Fail2ban Activity (bans / unbans / AbuseIPDB reports)",
+      "type": "logs"
     }
   ],
   "preload": false,
@@ -464,6 +496,6 @@
   "timezone": "browser",
   "title": "System Overview",
   "uid": "6e374828-400e-497a-aa30-a22bbee3fa0d",
-  "version": 4,
+  "version": 5,
   "weekStart": ""
 }

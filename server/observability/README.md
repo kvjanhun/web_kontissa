@@ -86,14 +86,17 @@ Provisioned alerts:
 | Nginx unexpected error log burst | Loki nginx error logs | More than 5 non-scanner nginx error-log lines in 5 minutes, sustained for 5 minutes |
 | Nginx upstream failure | Loki nginx error logs | nginx logs upstream connection/timeout failures outside Grafana `/logs/` |
 | Nginx 5xx spike | Loki nginx JSON access logs | More than 2 non-Grafana 5xx responses per vhost in 5 minutes |
-| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than 300 common scanner/probe requests outside `/logs/` to one vhost in 5 minutes, sustained for 5 minutes |
+| Nginx scanner burst | Loki nginx JSON access logs | One IP sends more than **2000** common scanner/probe requests outside `/logs/` to one vhost in 5 minutes, sustained for 5 minutes (raised to a backstop — fail2ban now bans routine scanners) |
 | Auth/admin suspicious response | Loki nginx JSON access logs | Any 401, 403, or 429 on app auth/admin paths |
-| Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than 5 rate-limit responses from one vhost in 5 minutes |
+| Nginx 429 burst | Loki nginx JSON access logs | One IP receives more than **100** rate-limit responses from one vhost in 5 minutes (raised to a backstop — fail2ban now bans repeat 429 abusers) |
 | Host root disk free space low | Prometheus node_exporter | `/` free space stays below 15% for 10 minutes |
 
-Scanner alerts include the source IP in the alert labels/description and add
-lookup links for Shodan, Censys Search, and AbuseIPDB. No external enrichment API
-is called by Grafana.
+The scanner-burst and 429-burst thresholds are deliberately high: fail2ban (host
+service, see `server/fail2ban/`) auto-bans the IPs behind routine scanning and
+rate-limit abuse, so these Grafana rules only page on a mass campaign. fail2ban bans
+themselves are dashboard-only (System Overview → **Fail2ban Activity** panel), not
+alerts. Scanner alerts include the source IP and add lookup links for Shodan, Censys
+Search, and AbuseIPDB. No external enrichment API is called by Grafana.
 
 ## Dashboard
 
@@ -113,6 +116,7 @@ this shared Loki instance.
 | Nginx traffic | Loki | nginx access/error logs |
 | Erez.ac errors/warnings | Loki | Flask structured JSON logs, unstructured web container errors, nginx 5xx responses, nginx warn/error logs |
 | Security events | Loki | Failed logins, auth/admin 401/403/429 responses, scanner probes, rate limits, SSH, Grafana |
+| Fail2ban activity | Loki | fail2ban bans/unbans and AbuseIPDB reports, from the `fail2ban.service` journal unit |
 | Dog Show Logs | Loki | `/dog` API request logs, dog-crawler pass logs, Showlink requests, result-cache jobs, dog warnings/errors |
 
 ## Configuration

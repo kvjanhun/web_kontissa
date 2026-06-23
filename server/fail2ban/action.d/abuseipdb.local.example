@@ -1,0 +1,23 @@
+# EXAMPLE — do NOT commit the real key, and do NOT deploy this .example file.
+#
+# On the host, create /etc/fail2ban/action.d/abuseipdb.local from this template
+# with the real key. fail2ban loads "*.local" overrides on top of the packaged
+# action.d/abuseipdb.conf, so the secret stays out of the repo while the jails
+# (server/fail2ban/jail.d/kontissa.conf) reference the action with only a
+# category.
+#
+#   sudo install -m 600 -o root -g root /dev/null /etc/fail2ban/action.d/abuseipdb.local
+#   # then edit it to contain the [Init] block below with your real key
+#
+# Get the key reused for the consume script too (it reads ABUSEIPDB_API_KEY from
+# /home/kvjanhun/.config/site-alerts.env). Keep both in sync.
+#
+# Privacy: confirm the installed action.d/abuseipdb.conf does not publish the
+# raw matched request line. On fail2ban builds where the report comment is the
+# matched log line, override actionban here to send a generic comment instead
+# (e.g. "fail2ban: banned for <name> on web server") so request query strings
+# are never sent to AbuseIPDB. Never report private IPs (ignoreip handles this,
+# and AbuseIPDB rejects private ranges anyway).
+
+[Init]
+abuseipdb_apikey = REPLACE_WITH_REAL_ABUSEIPDB_API_KEY

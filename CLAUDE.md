@@ -119,6 +119,7 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 - **Network**: Container port 8080 on localhost only. Nginx handles TLS.
 - **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx. CSP in report-only mode. Config: `server/erez.ac.conf`.
 - **Webhook**: Token-validated, runs as unprivileged user.
+- **Intrusion response**: host fail2ban service bans scanners / auth-brute-force / 429 abusers (across both vhosts) in the iptables `INPUT` chain and reports them to AbuseIPDB; a daily cron consumes AbuseIPDB's blocklist into an ipset for pre-emptive drops. Bans surface in Grafana (no Telegram). Config + runbook: `server/fail2ban/` and `server/abuseipdb-blocklist.sh`.
 
 When making changes: Does this introduce a new input vector? Does this expose internal state? Does this weaken the network boundary?
 

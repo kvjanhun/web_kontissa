@@ -269,7 +269,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 300
+                      - 2000
                     type: gt
                   operator:
                     type: and
@@ -293,7 +293,7 @@ groups:
         for: 5m
         annotations:
           summary: Scanner burst from {{ $labels.remote_addr }} against {{ $labels.vhost }}
-          description: '{{ $labels.remote_addr }} sent more than 300 common probe requests to {{ $labels.vhost }} in 5 minutes, sustained for 5 minutes. Lookup: https://www.shodan.io/host/{{ $labels.remote_addr }} | https://search.censys.io/hosts/{{ $labels.remote_addr }} | https://www.abuseipdb.com/check/{{ $labels.remote_addr }}'
+          description: 'Backstop for mass campaigns — fail2ban auto-bans routine scanners. {{ $labels.remote_addr }} sent more than 2000 common probe requests to {{ $labels.vhost }} in 5 minutes, sustained for 5 minutes. Lookup: https://www.shodan.io/host/{{ $labels.remote_addr }} | https://search.censys.io/hosts/{{ $labels.remote_addr }} | https://www.abuseipdb.com/check/{{ $labels.remote_addr }}'
         labels:
           severity: warning
           service: nginx
@@ -415,7 +415,7 @@ groups:
               conditions:
                 - evaluator:
                     params:
-                      - 5
+                      - 100
                     type: gt
                   operator:
                     type: and
@@ -439,7 +439,7 @@ groups:
         for: 1m
         annotations:
           summary: 429 burst from {{ $labels.remote_addr }} against {{ $labels.vhost }}
-          description: '{{ $labels.remote_addr }} received more than 5 rate-limit responses from {{ $labels.vhost }} in 5 minutes.'
+          description: 'Backstop for mass campaigns — fail2ban auto-bans repeat 429 abusers. {{ $labels.remote_addr }} received more than 100 rate-limit responses from {{ $labels.vhost }} in 5 minutes.'
         labels:
           severity: warning
           service: nginx
