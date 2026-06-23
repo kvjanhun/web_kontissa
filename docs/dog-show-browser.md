@@ -205,6 +205,7 @@ The web container is started with `DOG_NO_CRAWLER=true`; it does not run the lon
 ## Politeness And Failure Behavior
 
 - Crawling is server-side; the frontend never fans out across all breed result pages.
+- All Showlink fetches go through one shared keep-alive `requests.Session` (`showlink._SESSION`), so the many breed-page requests in a single show reuse one TCP + TLS connection instead of handshaking per request — lighter on the NUC and on Showlink, and gentler on the origin. The connection pool is sized above the result crawler's worker count.
 - Whole-show result crawling saves progress after every breed, so partial work can resume.
 - Queued jobs are persisted in `dog.db` (`dog_result_job`) so deploys and restarts do not lose user-requested cache work.
 - Failed queued jobs are deferred with backoff, capped at 1 hour.

@@ -195,7 +195,7 @@ def seed_index_show(show_id, show):
     dog_store._save_index()
     dog_store._load_index(force=True)
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_fetch_page_advertises_crawler_identity(mock_get):
     mock_resp = MagicMock()
     mock_resp.text = "<html><body>ok</body></html>"
@@ -207,7 +207,7 @@ def test_fetch_page_advertises_crawler_identity(mock_get):
         "erez.ac-dog-show-browser/1.0 (+https://erez.ac/dog/about-crawler)"
     )
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_shows(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
@@ -228,7 +228,7 @@ def test_get_shows(mock_get, client):
     assert data["index"]["total_show_count"] == 2
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_shows_enriches_cached_index_stats(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -472,7 +472,7 @@ def test_show_result_availability_handles_showlink_today_section():
     assert availability["end_date"] == "2026-06-21"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -492,7 +492,7 @@ def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client)
     assert "stats" not in data["shows"][0]
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_show_detail(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
@@ -516,7 +516,7 @@ def test_get_show_detail(mock_get, client):
     assert data["fetched_at_iso"]
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_recent_show_detail_cache_expires(mock_get, client):
     _show_detail_cache[14042] = {
         "data": {"id": 14042, "title": "stale", "breeds": []},
@@ -534,7 +534,7 @@ def test_recent_show_detail_cache_expires(mock_get, client):
     mock_get.assert_called_once()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_old_show_detail_cache_is_reused(mock_get, client):
     seed_index_show("14042", {"month": "tammikuu 2000", "breeds": []})
     _show_detail_cache[14042] = {
@@ -549,7 +549,7 @@ def test_old_show_detail_cache_is_reused(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -572,7 +572,7 @@ def test_show_detail_uses_persisted_index_without_fetching(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock_get, monkeypatch, client):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
     seed_index_show("13771", {
@@ -625,7 +625,7 @@ def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get, monkeypatch, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -658,7 +658,7 @@ def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get,
     mock_get.assert_called_once()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, client):
     seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
@@ -686,7 +686,7 @@ def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, 
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, client):
     seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
@@ -788,7 +788,7 @@ def test_persist_show_detail_preserves_cached_result_flags(client):
     assert breed["judge"] == "Pietro Marino"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     _show_detail_cache[13992] = {
         "data": {
@@ -846,7 +846,7 @@ def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_cached_show_detail_merges_index_judges(mock_get, client):
     _show_detail_cache[14042] = {
         "data": {
@@ -962,7 +962,7 @@ SAMPLE_AGGREGATE_SHOW_BREEDS_HTML = """
 """
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_show_detail_general(mock_get, client):
     mock_resp_main = MagicMock()
     mock_resp_main.text = SAMPLE_GENERAL_SHOW_MAIN_HTML
@@ -998,7 +998,7 @@ def test_get_show_detail_general(mock_get, client):
     assert data["breeds"][1]["has_results"] is False
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     seed_index_show("13934", {
         "title": "stale empty index",
@@ -1034,7 +1034,7 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     assert "empty_breed_list_confirmed" not in dog_module._show_index["shows"]["13934"]
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeypatch):
     seed_index_show("14042", {
         "title": "stale empty index",
@@ -1072,7 +1072,7 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch):
     seed_index_show("14042", {
         "title": "stale empty index",
@@ -1112,7 +1112,7 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_breed_results(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
@@ -1144,7 +1144,7 @@ def test_get_breed_results(mock_get, client):
     assert data["fetched_at_iso"]
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     seed_index_show("13763", {
         "title": "18.-19.04.2026 Vaasa KV",
@@ -1175,7 +1175,7 @@ def test_get_breed_results_strips_glued_judge_label(mock_get, client):
     assert dog_module._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
     seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
@@ -1206,7 +1206,7 @@ def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
     assert dog_module._show_index["shows"]["13771"]["breeds"][0]["has_results"] is True
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_future_breed_results_return_not_ready_without_fetching(mock_get, client):
     seed_index_show("15001", {
         "title": "20.06.2999 Future Show",
@@ -1227,7 +1227,7 @@ def test_future_breed_results_return_not_ready_without_fetching(mock_get, client
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_future_show_all_results_return_not_ready_without_queueing(mock_get, client):
     seed_index_show("15001", {
         "title": "20.06.2999 Future Show",
@@ -1249,7 +1249,7 @@ def test_future_show_all_results_return_not_ready_without_queueing(mock_get, cli
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -1276,7 +1276,7 @@ def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client
     assert jobs["jobs"]["14042"]["reason"] == "user"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeypatch, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -1300,7 +1300,7 @@ def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeyp
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monkeypatch, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -1339,7 +1339,7 @@ def test_show_all_results_poll_does_not_refresh_running_job_clock(mock_get, monk
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
@@ -1695,7 +1695,7 @@ def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, c
     assert [candidate["show_id"] for candidate in candidates] == [13771]
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_result_flags(mock_get, monkeypatch, client):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -1742,7 +1742,7 @@ def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_resul
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, client):
     seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
@@ -1785,7 +1785,7 @@ def test_show_all_results_rebuilds_empty_single_breed_specialty_cache(mock_get, 
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
     seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
@@ -1831,7 +1831,7 @@ def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_cached_breed_results_backfill_index_judge(mock_get, client):
     seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
@@ -1882,7 +1882,7 @@ def test_cached_breed_results_backfill_index_judge(mock_get, client):
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monkeypatch, client):
     seed_index_show("14042", {
         "title": "14.06.2000 Basenji",
@@ -1920,7 +1920,7 @@ def test_crawl_result_cache_for_show_persists_results_with_delay(mock_get, monke
     mock_get.assert_not_called()
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results(mock_get, monkeypatch):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -1961,7 +1961,7 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
     assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_get, monkeypatch):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
     seed_index_show("13771", {
@@ -2018,7 +2018,7 @@ def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_
     assert set(doc["completed_breeds"]) == {"5:3", "5:4"}
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
     now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
     seed_index_show("13771", {
@@ -2066,7 +2066,7 @@ def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
     assert doc["live_probe_cursor"] == 1
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(mock_get, monkeypatch):
     seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",
@@ -2105,7 +2105,7 @@ def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(m
     assert doc["results"][0]["name"] == "Ajibu You Are My Thrill"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatch):
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
@@ -2140,7 +2140,7 @@ def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatc
     assert doc["status"] == "complete"
     assert doc["results"][0]["name"] == "Old Cached Dog"
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_shows(mock_get, client):
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_LIST_HTML
@@ -2156,7 +2156,7 @@ def test_search_shows(mock_get, client):
     assert data["results"][0]["breed"] is None
     assert data["results"][0]["match"] == "show"
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_shows_by_breed(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -2183,7 +2183,7 @@ def test_search_shows_by_breed(mock_get, client):
     assert data["results"][0]["match"] == "breed"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_indexed_show_name_without_breed_match(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -2226,7 +2226,7 @@ def test_breed_results_invalid_params(client):
     resp = client.get("/api/dog/shows/14042/results?group=5&breed=0")
     assert resp.status_code == 400
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_shows_by_judge(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -2255,7 +2255,7 @@ def test_search_shows_by_judge(mock_get, client):
     assert data["results"][0]["match"] == "judge"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -2293,7 +2293,7 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
     assert data["results"][0]["match"] == "judge"
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
@@ -2522,7 +2522,7 @@ def test_backfill_candidates_oldest_first_skips_captured_and_resultless():
     assert candidates == [12754, 13500]  # oldest first; captured (14042) and resultless (13600) excluded
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_backfill_crawls_oldest_and_persists_phase_c_fields(mock_get, monkeypatch):
     from sqlalchemy import select
     from app.dog_show import db as _dog_db
@@ -2687,7 +2687,7 @@ def test_complete_result_cache_show_ids_only_complete():
         assert sqlstore.complete_result_cache_show_ids(session) == {300}
 
 
-@patch("app.dog_show.showlink.requests.get")
+@patch("app.dog_show.showlink._SESSION.get")
 def test_backfill_breed_budget_spans_passes(mock_get, monkeypatch):
     """A show larger than the per-pass breed budget is captured across multiple
     passes and marked complete only when every breed is crawled."""
