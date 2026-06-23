@@ -196,7 +196,13 @@ test.describe('Dog Show Browser', () => {
 
     await page.getByRole('button', { name: /Basenji/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
-    await expect(page.locator('.dog-back-link span').filter({ hasText: 'Näyttelyt' })).toBeVisible()
+    // Back-to-list affordance: at this mobile width the label collapses to just
+    // the chevron, so assert the button (named via aria-label) and that its
+    // text label is hidden rather than expecting the label to be visible.
+    await expect(page.getByRole('button', { name: 'Näyttelyt', exact: true })).toBeVisible()
+    await expect(page.locator('.dog-back-link span')).toBeHidden()
+    // The persistent /dog brand stays visible on the show page.
+    await expect(page.getByRole('link', { name: '/dog' })).toBeVisible()
     await expect(page.locator('.dog-top-title')).toHaveCSS('text-overflow', 'ellipsis')
     await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
     const resultBreedsOnly = page.getByRole('checkbox', { name: 'Tuloksia saaneet' })
@@ -581,5 +587,66 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: /Beagle/ })).toBeVisible()
     await expect(page.getByRole('button', { name: /Akita/ })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sulje kaikki' })).toHaveCount(0)
+  })
+
+  test('persistent /dog brand returns to the show list in-app', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 14042,
+              date: '14.06.',
+              name: 'Basenji',
+              month: 'kesäkuu 2026',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+              stats: { indexed: true, breed_count: 1, show_state: 'past' },
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14042,
+          title: 'Basenji Show 2026',
+          breeds: [
+            {
+              name: 'Basenji',
+              count: 3,
+              group: '6',
+              breed_id: '123',
+              has_results: true,
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042&R=6&RO=123',
+            },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+
+    const brand = page.getByRole('link', { name: '/dog' })
+    await expect(brand).toBeVisible()
+
+    // Open a show, then jump back to the list via the brand.
+    await page.getByRole('button', { name: /Basenji/ }).click()
+    await expect(page).toHaveURL(/\/dog\?show=14042$/)
+    await expect(brand).toBeVisible()
+
+    // Marker proves the brand navigates in-app: a full page reload would wipe it.
+    await page.evaluate(() => { window.__dogSpaMarker = true })
+    await brand.click()
+    await expect(page).toHaveURL(/\/dog$/)
+    await expect(page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')).toBeVisible()
+    expect(await page.evaluate(() => window.__dogSpaMarker)).toBe(true)
   })
 })

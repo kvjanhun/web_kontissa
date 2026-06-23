@@ -13,6 +13,10 @@ useHead({
     { property: 'og:description', content: 'Selaa koiranäyttelyiden tuloksia.' },
     { property: 'og:url', content: 'https://erez.ac/dog' },
   ],
+  // /dog gets its own rosette favicon, overriding the site-wide favicon.ico.
+  link: [
+    { rel: 'icon', type: 'image/svg+xml', href: '/favicon-dog.svg' },
+  ],
 })
 </script>
 
