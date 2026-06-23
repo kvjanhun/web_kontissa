@@ -919,8 +919,9 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         if _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
     # Bounded pass: crawl at most max_breeds this call; the rest resume next pass.
+    pending_before_budget = len(pending_breeds)
     bounded_incomplete = (
-        max_breeds is not None and 0 <= max_breeds < len(pending_breeds)
+        max_breeds is not None and 0 <= max_breeds < pending_before_budget
     )
     if bounded_incomplete:
         pending_breeds = pending_breeds[:max_breeds]
@@ -961,7 +962,9 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "dog_result_cache_bounded_pause",
             show_id=show_id,
             source=source,
+            max_breeds=max_breeds,
             crawled_breeds=len(pending_breeds),
+            pending_remaining=pending_before_budget - len(pending_breeds),
             completed_breeds=len(doc.get("completed_breeds", {})),
             total_breeds=len(breeds_with_results),
         )
