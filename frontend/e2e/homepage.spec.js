@@ -1,29 +1,51 @@
 import { test, expect } from './fixtures/base.js'
 
 test.describe('Homepage', () => {
-  test('shows ASCII banner and interactive terminal', async ({ page }) => {
+  test('shows the hero, work, stack and terminal sections', async ({ page }) => {
     await page.goto('/')
-    // ASCII banner has aria-label "erez.ac"
-    await expect(page.getByLabel('erez.ac', { exact: true })).toBeVisible()
-    // Interactive terminal prompt should appear
-    await expect(page.locator('text=konsta@erez.ac')).toBeVisible({ timeout: 10000 })
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Selected work/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /The stack/i })).toBeVisible()
+    // Stack layers rendered from the locale array
+    await expect(page.getByText('Bare metal', { exact: true })).toBeVisible()
+    // Interactive terminal frame
+    await expect(page.getByText('konsta@erez.ac', { exact: false }).first()).toBeVisible({ timeout: 10000 })
   })
 
-  test('shows the info cards and project gallery', async ({ page }) => {
+  test('expands a collapsed project on click', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByText('// whoami', { exact: true })).toBeVisible()
-    await expect(page.getByText('// projects', { exact: true })).toBeVisible()
-    await expect(page.getByText('// ping', { exact: true })).toBeVisible()
-    await expect(page.getByText('// gallery', { exact: true })).toBeVisible()
+    const tool = page.getByRole('button', { name: /Sanakenno Tool/ })
+    await expect(tool).toHaveAttribute('aria-expanded', 'false')
+    await tool.click()
+    await expect(tool).toHaveAttribute('aria-expanded', 'true')
+    await expect(page.getByText('A custom admin suite', { exact: false })).toBeVisible()
   })
 
-  test('gallery switches highlighted project when a thumbnail is clicked', async ({ page }) => {
+  test('language toggle switches copy EN <-> FI', async ({ page }) => {
     await page.goto('/')
-    const gallery = page.getByRole('region', { name: 'Project gallery' })
-    await expect(gallery.getByRole('heading', { name: 'Sanakenno' })).toBeVisible()
-    await expect(gallery.getByRole('link', { name: /live/i })).toHaveAttribute('href', 'https://sanakenno.fi')
-    await gallery.getByRole('tab', { name: 'erez.ac admin' }).click()
-    await expect(gallery.getByRole('heading', { name: 'erez.ac admin' })).toBeVisible()
+    const h1 = page.getByRole('heading', { level: 1 })
+    await expect(h1).toContainText('From the silicon up')
+    await page.getByRole('button', { name: 'Switch language' }).click()
+    await expect(h1).toContainText('Raudasta ulkoasuun')
+  })
+
+  test('theme toggle flips the dark class on <html>', async ({ page }) => {
+    await page.goto('/')
+    const html = page.locator('html')
+    const wasDark = ((await html.getAttribute('class')) || '').includes('dark')
+    await page.getByRole('button', { name: /Switch to (light|dark) mode/ }).click()
+    if (wasDark) {
+      await expect(html).not.toHaveClass(/dark/)
+    } else {
+      await expect(html).toHaveClass(/dark/)
+    }
+  })
+
+  test('footer links to GitHub and sanakenno.fi', async ({ page }) => {
+    await page.goto('/')
+    const footer = page.locator('footer')
+    await expect(footer.getByRole('link', { name: /GitHub/ })).toHaveAttribute('href', 'https://github.com/kvjanhun')
+    await expect(footer.getByRole('link', { name: /sanakenno\.fi/ })).toHaveAttribute('href', 'https://sanakenno.fi')
   })
 
   test('has correct page title', async ({ page }) => {
