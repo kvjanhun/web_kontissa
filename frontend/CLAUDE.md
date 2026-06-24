@@ -15,12 +15,18 @@
 
 ## Components
 
-- **SectionBlock.vue**: Handles `quote` (blockquote, no card), `currently` (label:value rows), `pills` (3-col grid), and a default `text` branch (v-html via `renderMarkdown`). Card types have orange accent bar. The current standalone home route handles `intro` and `project` sections directly in `pages/index.vue`.
-- **AboutSectionCard.vue**: Used for `project` (name|url|description|icon lines), `currently`, `text`, and other card types in the about bento layout.
-- **GitStatsSection.vue**: Fetches `/api/project-stats` (GitHub API, cached 6h in `utils.py`) and renders commit count, repo age, size, and languages.
-- **TimelineSection.vue**: Parses `date|title|description` lines; auto-scrolling marquee animation.
-- **TerminalWindow.vue**: Interactive shell with commands (help, about, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions. On first load it auto-runs a looping choreography (`help → about → weather → date | cowsay -f tux → clear`); any user keystroke aborts the loop via `stopChoreography()`.
+- **TerminalWindow.vue**: Interactive shell with commands (help, about, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions. On first load it auto-runs a looping choreography (`help → about → weather → date | cowsay -f tux → clear`); any user keystroke aborts the loop via `stopChoreography()`. Reused inside the homepage terminal frame.
+- **home/**: Homepage redesign sections — see Homepage below.
 - **admin/**: AdminSections, AdminPageViews, AdminRecipes, AdminHealth.
+
+## Homepage (`pages/index.vue` + `components/home/`)
+
+The main page (`/`) is a self-contained landing page (the only public page — `/about` and `/contact` `redirect: '/'`). It uses the `standalone` layout and its own header/footer, **not** `AppHeader`/`AppFooter`.
+
+- **Content is locale-driven, not DB-driven (Stage 1).** All copy lives under the `home.*` keys in `locales/{en,fi}.json`. Scalars use `t('home.…')`; structured lists (`home.projects`, `home.stack.layers`, `home.footer.connectLinks`/`siteLinks`) use the i18n store's `tm()` raw accessor and are kept structurally identical across locales. Stage 2 will move this content into the database + admin editor.
+- **Components** (in `components/home/`; names carry the `Home` directory prefix per Nuxt auto-import, like `admin/Admin*`): `HomeHeader` (sticky/blurred bar, `#work`/`#stack`/`#terminal` anchors, lang + theme toggles wired directly to `useI18nStore`/`useDarkModeStore`, mobile hamburger drawer), `HomeHero`, `HomeWork` (expandable project accordion via `grid-template-rows` 0fr→1fr), `HomeStack` (L1→L7 layer table), `HomeTerminal` (mac-frame around the reused `TerminalWindow`), `HomeFooter`.
+- **Palette/fonts are scoped** to a `.home-dc` wrapper (see Design). The page does not call `/api/sections`.
+- **Reveal-on-scroll**: `useScrollReveal()` returns a `v-reveal` directive (IntersectionObserver fade-up; skipped under `prefers-reduced-motion` / no-JS — content stays visible).
 
 ## Dog Show Frontend (`features/dog/`)
 
@@ -40,7 +46,8 @@ All in `frontend/composables/` (auto-imported):
 
 - `useGameTimer.js` — elapsed timer with pause/resume on `visibilitychange`/`blur`/`pagehide`
 - `useHintData.js` — pure computeds for hint panels: `letterMap`, `unfoundLengths`, `pangramStats`, `lengthDistribution`, `pairMap`
-- `useMarkdown.js` — wraps `marked` + isomorphic DOMPurify; exported as `renderMarkdown(source)`
+- `useMarkdown.js` — wraps `marked` + isomorphic DOMPurify; exported as `renderMarkdown(source)` (retained for Stage 2 admin-authored content rendering; no current caller)
+- `useScrollReveal.js` — returns a `v-reveal` IntersectionObserver fade-up directive for the homepage (reduced-motion / no-JS safe)
 - `useSafeHtml.js` — shared safe URL, HTML escaping, sanitization, and inline link helpers
 - `useNavLinks.js` — shared nav link list consumed by `AppHeader` and `AppFooter`
 - `usePageView.js` — fires `POST /api/pageview` on route change (used in `pageview.global.js`)
@@ -59,8 +66,8 @@ All in `frontend/composables/` (auto-imported):
 
 ## Design
 
-- Warm stone-grey palette with orange accent (#ff643e)
-- Dark/light mode via `.dark` class on `<html>` with CSS custom property overrides
-- Fonts: DM Sans (body), Commit Mono (terminal / all monospace)
+- **Site-wide**: warm stone-grey palette with orange accent (#ff643e); fonts DM Sans (body) + Commit Mono (monospace).
+- **Homepage**: its own cooler near-black/cream palette + IBM Plex Sans/Mono typography, all **scoped to the `.home-dc` wrapper** in `assets/style.css` (`--bg`/`--panel`/`--line`/`--tx`/`--accent` etc.). IBM Plex woff2 (latin subset) is self-hosted in `public/fonts/`. The rest of the site is unaffected.
+- Dark/light mode via `.dark` class on `<html>` with CSS custom property overrides (one toggle/store/flash-prevention drives both palettes)
 - Mobile-first: always-hamburger nav
 - Accessibility: skip-to-content, `:focus-visible` rings, `aria-expanded` menu, `aria-live` announcer, and `prefers-reduced-motion` respected
