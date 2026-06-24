@@ -21,7 +21,9 @@ const hiddenInput = ref(null)
 const scrollContainer = ref(null)
 
 function focusInput() {
-  hiddenInput.value?.focus()
+  // preventScroll: focusing the hidden input must not yank the viewport down to
+  // the terminal (it now sits below the hero/work/stack sections on the homepage).
+  hiddenInput.value?.focus({ preventScroll: true })
 }
 
 async function handleEnter() {
