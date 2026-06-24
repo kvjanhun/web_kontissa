@@ -4,7 +4,7 @@ test.describe('Homepage', () => {
   test('shows the hero, work, stack and terminal sections', async ({ page }) => {
     await page.goto('/')
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
-    await expect(page.getByRole('heading', { name: /Selected work/i })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Selected projects/i })).toBeVisible()
     await expect(page.getByRole('heading', { name: /The stack/i })).toBeVisible()
     // Stack layers rendered from the locale array
     await expect(page.getByText('Bare metal', { exact: true })).toBeVisible()
@@ -14,11 +14,11 @@ test.describe('Homepage', () => {
 
   test('expands a collapsed project on click', async ({ page }) => {
     await page.goto('/')
-    const tool = page.getByRole('button', { name: /Sanakenno Tool/ })
+    const tool = page.getByRole('button', { name: /Sanakenno Admin tools/ })
     await expect(tool).toHaveAttribute('aria-expanded', 'false')
     await tool.click()
     await expect(tool).toHaveAttribute('aria-expanded', 'true')
-    await expect(page.getByText('A custom admin suite', { exact: false })).toBeVisible()
+    await expect(page.getByText('A custom-made admin suite', { exact: false })).toBeVisible()
   })
 
   test('language toggle switches copy EN <-> FI', async ({ page }) => {
