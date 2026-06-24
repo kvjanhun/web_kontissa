@@ -44,6 +44,43 @@ describe('useI18nStore — t()', () => {
   })
 })
 
+describe('useI18nStore — tm()', () => {
+  it('returns a raw array for structured content', () => {
+    const i18n = useI18nStore()
+    const projects = i18n.tm('home.projects')
+    expect(Array.isArray(projects)).toBe(true)
+    expect(projects.length).toBeGreaterThan(0)
+    expect(projects[0]).toHaveProperty('name')
+    expect(Array.isArray(projects[0].tech)).toBe(true)
+  })
+
+  it('returns localized structured content when locale is fi', () => {
+    const i18n = useI18nStore()
+    i18n.setLocale('fi')
+    const layers = i18n.tm('home.stack.layers')
+    expect(Array.isArray(layers)).toBe(true)
+    // L1 layer kicker is translated to Finnish ("Rauta")
+    expect(layers[layers.length - 1].layer).toBe('Rauta')
+  })
+
+  it('falls back to the active-locale value for string keys', () => {
+    const i18n = useI18nStore()
+    i18n.setLocale('fi')
+    expect(i18n.tm('home.skipToContent')).toBe('Siirry sisältöön')
+  })
+
+  it('returns undefined for a key absent in both locales', () => {
+    const i18n = useI18nStore()
+    expect(i18n.tm('nonexistent.key.xyz')).toBeUndefined()
+  })
+
+  it('does not interpolate params (raw passthrough)', () => {
+    const i18n = useI18nStore()
+    // footer.lastUpdated contains a {date} placeholder; tm returns it untouched
+    expect(i18n.tm('footer.lastUpdated')).toContain('{date}')
+  })
+})
+
 describe('useI18nStore — setLocale', () => {
   it('changes locale', () => {
     const i18n = useI18nStore()
