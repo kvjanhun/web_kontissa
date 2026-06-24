@@ -2,7 +2,7 @@ import os
 from flask import Blueprint, jsonify, redirect, request, url_for, Response, send_from_directory
 from flask_login import current_user
 from .models import db, Section
-from .utils import get_latest_commit_date, get_project_stats
+from .utils import get_latest_commit_date
 from .decorators import admin_required
 from datetime import datetime
 from . import limiter
@@ -38,14 +38,6 @@ def api_sections():
         query = query.filter_by(locale=locale)
     sections = query.order_by(Section.position.asc(), Section.id.asc()).all()
     return jsonify([s.to_dict() for s in sections])
-
-@core_bp.route("/api/project-stats")
-def api_project_stats():
-    stats = get_project_stats()
-    if stats is None:
-        return jsonify({"error": "Stats unavailable"}), 503
-    return jsonify(stats)
-
 
 @core_bp.route("/api/meta")
 def api_meta():

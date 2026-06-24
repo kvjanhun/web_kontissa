@@ -25,7 +25,6 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 | POST | `/api/logout` | Login | End session |
 | GET | `/api/me` | Public | Current user or 401 |
 | GET | `/api/meta` | Public | Site metadata |
-| GET | `/api/project-stats` | Public | GitHub repo stats (commits, size, languages; cached 6h) |
 | GET | `/api/recipes` | Login | List (optional `?q=&category=`) |
 | GET/POST/PUT/DELETE | `/api/recipes[/<slug\|id>]` | Login | CRUD recipes |
 | GET | `/api/recipes/categories` | Login | Category list |
