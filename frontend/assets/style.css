@@ -62,6 +62,67 @@
   src: url('/fonts/commit-mono-latin-600.woff2') format('woff2');
 }
 
+/* IBM Plex Sans + IBM Plex Mono — self-hosted (OFL-1.1), latin subset only.
+   Finnish ä/ö/å live in U+0000-00FF (latin), so latin-ext is not needed.
+   Scoped to the homepage via the .home-dc wrapper; the rest of the site keeps
+   DM Sans / Commit Mono. */
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-300.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Sans';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-sans-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-400.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-500.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'IBM Plex Mono';
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url('/fonts/ibm-plex-mono-latin-600.woff2') format('woff2');
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
 @variant dark (&:where(.dark, .dark *));
 
 @theme {
@@ -105,8 +166,47 @@
   --color-header-border: #ff643e;
 }
 
+/* Homepage redesign palette — scoped to the .home-dc wrapper so the rest of the
+   site keeps its warm-stone tokens. Light is the default; dark is keyed off the
+   existing `.dark` class (same toggle / persistence / flash-prevention). Variable
+   names mirror the Claude Design mockup (--bg / --panel / --line / --tx / --accent). */
+.home-dc {
+  --bg: #f4f2ee;
+  --bg-2: #eceae4;
+  --panel: #ffffff;
+  --panel-2: #f7f5f1;
+  --line: rgba(20, 18, 15, 0.12);
+  --line-2: rgba(20, 18, 15, 0.07);
+  --tx: #1a1b1d;
+  --tx-2: #5b5e64;
+  --tx-3: #9a9da3;
+  --accent: #e8501f;
+  --accent-dim: rgba(232, 80, 31, 0.10);
+  --grid: rgba(20, 18, 15, 0.025);
+  --font-plex-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-plex-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+.dark .home-dc {
+  --bg: #0b0c0e;
+  --bg-2: #101216;
+  --panel: #131519;
+  --panel-2: #16191e;
+  --line: rgba(255, 255, 255, 0.09);
+  --line-2: rgba(255, 255, 255, 0.05);
+  --tx: #e9eaec;
+  --tx-2: #9a9da3;
+  --tx-3: #62656c;
+  --accent: #ff6a3d;
+  --accent-dim: rgba(255, 106, 61, 0.14);
+  --grid: rgba(255, 255, 255, 0.022);
+}
+
 /* Base resets */
 @layer base {
+  html {
+    scroll-behavior: smooth;
+  }
+
   body {
     @apply font-sans font-light m-0 p-0 w-full box-border;
     background-color: var(--color-bg-primary);
