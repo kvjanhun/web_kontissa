@@ -31,6 +31,13 @@ useHead({
 <style scoped>
 .home-dc {
   min-height: 100vh;
+  /* Clip horizontal overflow: the readability plates (.home-plate::before) feather
+     ~0.9em past their text box, which exceeds the page's 18px mobile padding on the
+     large hero title and pokes a few transparent px past the viewport — producing a
+     phantom horizontal scroll that reveals nothing. overflow-x: clip (not hidden)
+     removes it without creating a scroll container, so the sticky header and the
+     terminal's inner scroll are unaffected; only the invisible feather tail is cut. */
+  overflow-x: clip;
   background: var(--bg);
   color: var(--tx);
   font-family: var(--font-plex-sans);
