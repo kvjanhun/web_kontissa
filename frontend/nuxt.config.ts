@@ -30,7 +30,28 @@ export default defineNuxtConfig({
   },
 
   // Modules
-  modules: ['@pinia/nuxt'],
+  modules: ['@pinia/nuxt', '@nuxt/icon'],
+
+  // Iconify icons (Solar for UI chrome, Flat Color Icons reserved for the admin panel).
+  // Bundled at build time with no runtime fallback to api.iconify.design — keeps the
+  // SSG output fully self-hosted (no external requests from visitors' browsers).
+  icon: {
+    // CSS mode (mask + background-color: currentColor) renders reliably under SSG
+    // hydration; svg mode dropped the inlined paths on the client, leaving the icon
+    // stuck black/invisible regardless of the theme's text color.
+    mode: 'css',
+    fallbackToApi: false,
+    clientBundle: {
+      scan: true,
+      icons: [
+        'solar:sun-2-bold',
+        'solar:moon-bold',
+        'solar:hamburger-menu-bold',
+        'solar:close-square-bold',
+        'solar:alt-arrow-down-bold',
+      ],
+    },
+  },
 
   // Tailwind CSS 4 via Vite plugin
   vite: {

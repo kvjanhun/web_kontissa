@@ -87,10 +87,7 @@ function handleNavClick(link) {
             aria-haspopup="true"
             aria-controls="main-nav"
           >
-            <svg aria-hidden="true" xmlns="http://www.w3.org/2000/svg" class="size-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-              <path v-if="!menuOpen" stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
-              <path v-else stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-            </svg>
+            <Icon class="size-6" :name="menuOpen ? 'solar:close-square-bold' : 'solar:hamburger-menu-bold'" aria-hidden="true" />
           </button>
         </div>
       </div>

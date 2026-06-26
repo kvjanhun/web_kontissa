@@ -101,15 +101,14 @@ onUnmounted(() => {
           <h2 class="text-base font-semibold tracking-wide uppercase m-0" :style="{ color: 'var(--color-accent, #ff643e)' }">
             {{ title }}
           </h2>
-          <svg
+          <Icon
             v-if="expandable"
+            name="solar:alt-arrow-down-bold"
+            aria-hidden="true"
             class="shrink-0 transition-transform duration-300"
             :class="{ 'rotate-180': isOpen }"
-            width="14" height="14" viewBox="0 0 16 16" fill="none"
-            :style="{ color: 'var(--color-text-tertiary)' }"
-          >
-            <path d="M4 6l4 4 4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
+            :style="{ color: 'var(--color-text-tertiary)', fontSize: '14px' }"
+          />
         </div>
         <p
           v-if="expandable && !isOpen && summary"

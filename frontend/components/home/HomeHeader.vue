@@ -48,7 +48,7 @@ function toggleLang() {
           {{ langLabel }}
         </button>
         <button class="btn-mono btn-mono--icon" type="button" :aria-label="themeLabel" :aria-pressed="isDark" @click="darkMode.toggleDark">
-          {{ isDark ? '☾' : '☀' }}
+          <Icon class="btn-mono__icon" :name="isDark ? 'solar:moon-bold' : 'solar:sun-2-bold'" aria-hidden="true" />
         </button>
         <button
           class="btn-mono btn-mono--menu"
@@ -153,7 +153,14 @@ function toggleLang() {
   transition: color 0.15s ease, border-color 0.15s ease;
 }
 .btn-mono:hover { color: var(--tx); border-color: var(--tx-3); }
-.btn-mono--icon { min-width: 34px; padding: 6px 9px; }
+.btn-mono--icon {
+  min-width: 34px;
+  padding: 6px 9px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.btn-mono__icon { font-size: 16px; }
 .btn-mono--menu {
   display: none;
   flex-direction: column;
