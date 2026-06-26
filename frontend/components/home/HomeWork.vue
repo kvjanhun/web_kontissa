@@ -17,8 +17,8 @@ function projNum(i) {
 <template>
   <section id="work" class="work">
     <div class="sec-head">
-      <h2 class="sec-head__label">01 — {{ t('home.work.label') }}</h2>
-      <span class="sec-head__aside">{{ t('home.work.count', { count: projects.length }) }}</span>
+      <h2 class="sec-head__label home-plate">01 — {{ t('home.work.label') }}</h2>
+      <span class="sec-head__aside home-plate">{{ t('home.work.count', { count: projects.length }) }}</span>
     </div>
 
     <div class="proj-list" v-reveal>
@@ -31,7 +31,7 @@ function projNum(i) {
           @click="toggle(i)"
         >
           <span class="proj__num">{{ projNum(i) }}</span>
-          <span class="proj__head">
+          <span class="proj__head home-plate">
             <span class="proj__title-row">
               <span class="proj__name">{{ p.name }}</span>
               <span class="proj__kind">{{ p.kind }}</span>
@@ -44,7 +44,7 @@ function projNum(i) {
         <div :id="`proj-panel-${i}`" class="proj__panel" :class="{ 'proj__panel--open': openIndex === i }">
           <div class="proj__panel-inner">
             <span class="proj__spacer" aria-hidden="true"></span>
-            <div class="proj__detail">
+            <div class="proj__detail home-plate">
               <p class="proj__desc">{{ p.description }}</p>
               <div class="proj__tech">
                 <span v-for="tech in p.tech" :key="tech" class="tech-tag">{{ tech }}</span>

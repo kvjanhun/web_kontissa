@@ -41,9 +41,9 @@ onBeforeUnmount(() => {
   <section class="hero">
     <div class="hero__eyebrow">
       <span class="hero__dot" aria-hidden="true"></span>
-      <span class="hero__eyebrow-text">{{ t('home.hero.eyebrow') }}</span>
+      <span class="hero__eyebrow-text home-plate">{{ t('home.hero.eyebrow') }}</span>
     </div>
-    <h1 class="hero__title">
+    <h1 class="hero__title home-plate">
       <span class="hero__tagline-track">
         <Transition name="tagline" mode="out-in">
           <span :key="index" class="hero__tagline-text">{{ taglineBody }}<span class="hero__accent">{{ taglineDot }}</span></span>
@@ -51,7 +51,7 @@ onBeforeUnmount(() => {
       </span>
       <span class="hero__line2">{{ t('home.hero.titleLine2') }}</span>
     </h1>
-    <p class="hero__body">{{ t('home.hero.body') }}</p>
+    <p class="hero__body home-plate">{{ t('home.hero.body') }}</p>
     <div class="hero__cta">
       <a href="#work" class="cta cta--primary">{{ t('home.hero.ctaPrimary') }} <span aria-hidden="true">→</span></a>
       <a href="#stack" class="cta cta--ghost">{{ t('home.hero.ctaSecondary') }}</a>

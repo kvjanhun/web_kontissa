@@ -9,10 +9,10 @@ const layers = computed(() => tm('home.stack.layers') || [])
 <template>
   <section id="stack" class="stack">
     <div class="sec-head">
-      <h2 class="sec-head__label">02 — {{ t('home.stack.label') }}</h2>
-      <span class="sec-head__aside">{{ t('home.stack.tag') }}</span>
+      <h2 class="sec-head__label home-plate">02 — {{ t('home.stack.label') }}</h2>
+      <span class="sec-head__aside home-plate">{{ t('home.stack.tag') }}</span>
     </div>
-    <p class="stack__intro">{{ t('home.stack.intro') }}</p>
+    <p class="stack__intro home-plate">{{ t('home.stack.intro') }}</p>
 
     <div class="stack__table" v-reveal>
       <div v-for="layer in layers" :key="layer.z" class="layer">
@@ -25,7 +25,7 @@ const layers = computed(() => tm('home.stack.layers') || [])
       </div>
     </div>
 
-    <p class="stack__footnote">{{ t('home.stack.footnote') }}</p>
+    <p class="stack__footnote home-plate">{{ t('home.stack.footnote') }}</p>
   </section>
 </template>
 

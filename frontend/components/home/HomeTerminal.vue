@@ -5,8 +5,8 @@ const { t } = useI18nStore()
 <template>
   <section id="terminal" class="terminal">
     <div class="sec-head">
-      <h2 class="sec-head__label">03 — {{ t('home.terminal.label') }}</h2>
-      <span class="sec-head__aside">{{ t('home.terminal.tag') }}</span>
+      <h2 class="sec-head__label home-plate">03 — {{ t('home.terminal.label') }}</h2>
+      <span class="sec-head__aside home-plate">{{ t('home.terminal.tag') }}</span>
     </div>
 
     <div class="term-frame">
@@ -87,7 +87,7 @@ const { t } = useI18nStore()
 .term-footnote {
   margin: 16px 2px 0;
   font-size: 13px;
-  color: var(--tx-3);
+  color: var(--tx-2);
   font-family: var(--font-plex-mono);
 }
 

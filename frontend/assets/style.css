@@ -201,6 +201,32 @@
   --grid: rgba(255, 255, 255, 0.022);
 }
 
+/* Readability plate for text that sits directly on the grid texture. A solid
+   --bg fill (same colour as the page background, so it only hides the faint grid
+   lines locally and never reads as a coloured box) that feathers to transparent
+   on every edge — the intersection of a horizontal and a vertical linear mask.
+   Glyphs sit on clean background while the texture re-emerges around the block. */
+.home-dc .home-plate {
+  position: relative;
+  isolation: isolate;
+}
+.home-dc .home-plate::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: -0.35em -0.9em;
+  background: var(--bg);
+  -webkit-mask-image:
+    linear-gradient(to right, transparent, #000 1.15em, #000 calc(100% - 1.15em), transparent),
+    linear-gradient(to bottom, transparent, #000 0.5em, #000 calc(100% - 0.5em), transparent);
+  mask-image:
+    linear-gradient(to right, transparent, #000 1.15em, #000 calc(100% - 1.15em), transparent),
+    linear-gradient(to bottom, transparent, #000 0.5em, #000 calc(100% - 0.5em), transparent);
+  -webkit-mask-composite: source-in;
+  mask-composite: intersect;
+  pointer-events: none;
+}
+
 /* Base resets */
 @layer base {
   html {
