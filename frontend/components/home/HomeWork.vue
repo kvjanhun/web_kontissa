@@ -3,6 +3,8 @@ const i18n = useI18nStore()
 const { t, tm } = i18n
 const vReveal = useScrollReveal()
 
+const { linkIcon } = useLinkIcon()
+
 const projects = computed(() => tm('home.projects') || [])
 const openIndex = ref(0)
 
@@ -51,7 +53,7 @@ function projNum(i) {
               </div>
               <div class="proj__links">
                 <a v-for="l in p.links" :key="l.label" :href="l.href" class="proj__link">
-                  {{ l.label }} <span class="proj__link-arrow" aria-hidden="true">→</span>
+                  <Icon class="proj__link-icon" :name="linkIcon(l.href)" aria-hidden="true" />{{ l.label }}
                 </a>
               </div>
             </div>
@@ -216,8 +218,13 @@ function projNum(i) {
   border-bottom: 1px solid var(--accent);
   padding-bottom: 2px;
 }
-.proj__link-arrow { color: var(--accent); transition: transform 0.15s ease; }
-.proj__link:hover .proj__link-arrow { transform: translateX(2px); }
+.proj__link-icon {
+  font-size: 15px;
+  color: var(--accent);
+  flex: none;
+  transition: transform 0.15s ease;
+}
+.proj__link:hover .proj__link-icon { transform: translateX(2px); }
 .proj__shot {
   position: relative;
   aspect-ratio: 16 / 10;

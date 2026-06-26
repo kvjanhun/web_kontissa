@@ -49,6 +49,11 @@ export default defineNuxtConfig({
         'solar:hamburger-menu-bold',
         'solar:close-square-bold',
         'solar:alt-arrow-down-bold',
+        // Link-type icons resolved dynamically by useLinkIcon() (scan can't see them)
+        'solar:letter-bold',
+        'solar:arrow-right-up-bold',
+        'simple-icons:github',
+        'simple-icons:linkedin',
       ],
     },
   },

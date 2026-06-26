@@ -2,6 +2,8 @@
 const i18n = useI18nStore()
 const { t, tm } = i18n
 
+const { linkIcon } = useLinkIcon()
+
 const connectLinks = computed(() => tm('home.footer.connectLinks') || [])
 const siteLinks = computed(() => tm('home.footer.siteLinks') || [])
 
@@ -27,7 +29,7 @@ function isExternal(href) {
           class="ftr__link"
           :target="isExternal(l.href) ? '_blank' : undefined"
           :rel="isExternal(l.href) ? 'noopener noreferrer' : undefined"
-        >{{ l.label }} →</a>
+        ><Icon class="ftr__link-icon" :name="linkIcon(l.href)" aria-hidden="true" />{{ l.label }}</a>
       </div>
 
       <div class="ftr__col">
@@ -39,7 +41,7 @@ function isExternal(href) {
           class="ftr__link"
           :target="isExternal(l.href) ? '_blank' : undefined"
           :rel="isExternal(l.href) ? 'noopener noreferrer' : undefined"
-        >{{ l.label }} →</a>
+        ><Icon class="ftr__link-icon" :name="linkIcon(l.href)" aria-hidden="true" />{{ l.label }}</a>
         <span class="ftr__nuc">{{ t('home.footer.nuc') }}</span>
       </div>
     </div>
@@ -91,9 +93,19 @@ function isExternal(href) {
   color: var(--tx);
   text-decoration: none;
   width: fit-content;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
   transition: color 0.15s ease;
 }
 .ftr__link:hover { color: var(--accent); }
+.ftr__link-icon {
+  font-size: 15px;
+  color: var(--tx-3);
+  flex: none;
+  transition: color 0.15s ease;
+}
+.ftr__link:hover .ftr__link-icon { color: var(--accent); }
 .ftr__nuc {
   font-size: 13px;
   color: var(--tx-3);

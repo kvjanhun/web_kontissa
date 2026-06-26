@@ -21,6 +21,7 @@
   },
   "devDependencies": {
     "@iconify-json/flat-color-icons": "^1.2.3",
+    "@iconify-json/simple-icons": "^1.2.87",
     "@iconify-json/solar": "^1.2.5",
     "@playwright/test": "^1.58.2",
     "@tailwindcss/vite": "^4.3.1",
