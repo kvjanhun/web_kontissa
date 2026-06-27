@@ -13,6 +13,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY scripts/ ./scripts/
+# Seed source for the one-off home-content migration (scripts/seed_home_content.py).
+# The rest of frontend/ is not in the runtime image, so copy this file explicitly.
+COPY frontend/locales/home-content.snapshot.json ./frontend/locales/home-content.snapshot.json
 COPY run.py .
 COPY --from=frontend /src/frontend/.output/public/ ./app/static/dist/
 
