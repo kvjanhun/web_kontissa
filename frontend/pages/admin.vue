@@ -11,7 +11,7 @@ useHead({
 })
 
 const authStore = useAuthStore()
-const { user } = storeToRefs(authStore)
+const { user, isAdmin } = storeToRefs(authStore)
 
 const nav = [
   { key: 'dashboard', label: 'Dashboard', icon: 'flat-color-icons:home', component: resolveComponent('AdminDashboard') },
@@ -44,7 +44,16 @@ const userInitials = computed(() => {
 </script>
 
 <template>
-  <div class="admin-shell">
+  <!--
+    Keep the entire admin chrome out of the DOM until an admin session is confirmed
+    client-side. This is a static SPA route (served via 200.html), and the global auth
+    middleware redirects asynchronously (it round-trips /api/me), so Nuxt would otherwise
+    mount this shell for one frame before bouncing a non-admin to /login. The v-if closes
+    that flash. Note: this is purely cosmetic — the real boundary is server-side, where
+    every /api/admin/* endpoint requires an admin session (@admin_required), so this panel
+    has no data and can perform no action without one.
+  -->
+  <div v-if="isAdmin" class="admin-shell">
     <!-- SIDEBAR -->
     <aside class="as-sidebar">
       <div class="as-brand">
