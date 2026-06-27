@@ -317,7 +317,7 @@ export function useDogBrowser() {
   ))
 
   const availableShowGrades = computed(() => (
-    availableGradesFromResults(allDogsResults.value || [], dogGradeFilter.value)
+    availableGradesFromResults(allDogsResults.value || [])
   ))
   const availableShowClasses = computed(() => availableClassesFromResults(allDogsResults.value || []))
   const availableShowAwards = computed(() => availableAwardsFromResults(allDogsResults.value || []))
@@ -752,7 +752,7 @@ export function useDogBrowser() {
   }))
 
   const availableGrades = computed(() => (
-    availableGradesFromResults(breedResults.value?.results || [], dogGradeFilter.value)
+    availableGradesFromResults(breedResults.value?.results || [])
   ))
   const availableClasses = computed(() => availableClassesFromResults(breedResults.value?.results || []))
   const availableAwards = computed(() => availableAwardsFromResults(breedResults.value?.results || []))

@@ -1116,6 +1116,12 @@
   border-color: var(--dog-accent);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--dog-accent) 15%, transparent);
 }
+/* Grades that nobody received: still listed, but a bit greyed so the "0" rows
+   read as inactive. Native <option> honors color in Firefox and most engines;
+   Chrome greys disabled options on its own. */
+.dog-grade-option-empty {
+  color: var(--dog-text-muted, #94a3b8);
+}
 .dog-filter-search,
 .dog-breed-search {
   margin-bottom: 0;

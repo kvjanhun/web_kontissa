@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   availableAwardsFromResults,
   availableGradesFromResults,
+  gradeOptionLabel,
   awardMatchesFilter,
   buildDogQuery,
   createShowBreedGroups,
@@ -39,23 +40,39 @@ describe('gradeMatchesFilter', () => {
 })
 
 describe('availableGradesFromResults', () => {
-  it('returns only the grades present, keeping HYL/EVA/POISSA distinct and "all" first', () => {
+  it('returns every grade with its count, keeping HYL/EVA/POISSA distinct and "all" first', () => {
     const options = availableGradesFromResults([
+      { grade: 'ERI' },
       { grade: 'ERI' },
       { grade: 'EH' },
       { grade: 'HYL' },
       { grade: '' },
     ])
-    expect(options.map(option => option.value)).toEqual(['', 'eri', 'eh', 'hyl'])
+    expect(options.map(option => option.value)).toEqual([
+      '', 'eri', 'eh', 'h', 't', 'kp', 'hyl', 'eva', 'poissa',
+    ])
+    const byValue = Object.fromEntries(options.map(option => [option.value, option.count]))
+    expect(byValue['']).toBeNull()
+    expect(byValue.eri).toBe(2)
+    expect(byValue.eh).toBe(1)
+    expect(byValue.hyl).toBe(1)
+    expect(byValue.h).toBe(0)
+    expect(byValue.poissa).toBe(0)
   })
 
-  it('retains the currently selected grade even when no result has it', () => {
-    const options = availableGradesFromResults([{ grade: 'ERI' }], 'poissa')
-    expect(options.map(option => option.value)).toEqual(['', 'eri', 'poissa'])
+  it('returns all grades with zero counts for empty results', () => {
+    const options = availableGradesFromResults([])
+    expect(options.map(option => option.value)).toEqual([
+      '', 'eri', 'eh', 'h', 't', 'kp', 'hyl', 'eva', 'poissa',
+    ])
+    expect(options.filter(option => option.value).every(option => option.count === 0)).toBe(true)
   })
+})
 
-  it('returns just the "all" option for empty results', () => {
-    expect(availableGradesFromResults([]).map(option => option.value)).toEqual([''])
+describe('gradeOptionLabel', () => {
+  it('appends the count when present and leaves the "all" option bare', () => {
+    expect(gradeOptionLabel({ label: 'ERI (Erinomainen)', count: 80 })).toBe('ERI (Erinomainen) — 80')
+    expect(gradeOptionLabel({ label: 'Kaikki arvostelut', count: null })).toBe('Kaikki arvostelut')
   })
 })
 

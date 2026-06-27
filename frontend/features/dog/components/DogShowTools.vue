@@ -1,7 +1,7 @@
 <script setup>
 import { computed } from 'vue'
 import DogSearchClearButton from './DogSearchClearButton.vue'
-import { DOG_GRADE_OPTIONS } from '../dogResults.js'
+import { DOG_GRADE_OPTIONS, gradeOptionLabel } from '../dogResults.js'
 
 const props = defineProps({
   breedSearchQuery: {
@@ -147,8 +147,14 @@ const gradeOptions = computed(() => (
           class="dog-filter-select"
           @change="$emit('update:dogGradeFilter', $event.target.value)"
         >
-          <option v-for="option in gradeOptions" :key="option.value" :value="option.value">
-            {{ option.label }}
+          <option
+            v-for="option in gradeOptions"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.count === 0 && option.value !== dogGradeFilter"
+            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+          >
+            {{ gradeOptionLabel(option) }}
           </option>
         </select>
       </div>

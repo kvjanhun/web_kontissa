@@ -677,16 +677,27 @@ export function availableClassesFromResults(results = []) {
   })
 }
 
-export function availableGradesFromResults(results = [], keepValue = '') {
-  const present = new Set()
+export function availableGradesFromResults(results = []) {
+  const counts = new Map()
   for (const dog of results) {
     if (!normalizeGrade(dog.grade)) continue
     for (const option of DOG_GRADE_OPTIONS) {
-      if (option.value && gradeMatchesFilter(dog.grade, option.value)) present.add(option.value)
+      if (option.value && gradeMatchesFilter(dog.grade, option.value)) {
+        counts.set(option.value, (counts.get(option.value) || 0) + 1)
+      }
     }
   }
-  if (keepValue) present.add(keepValue)
-  return DOG_GRADE_OPTIONS.filter(option => option.value === '' || present.has(option.value))
+  // Always expose every grade, annotated with how many dogs received it. The "all"
+  // option carries no count; zero-count grades stay listed (greyed out in the UI).
+  return DOG_GRADE_OPTIONS.map(option => ({
+    ...option,
+    count: option.value ? (counts.get(option.value) || 0) : null,
+  }))
+}
+
+export function gradeOptionLabel(option) {
+  if (!option || option.count == null) return option?.label || ''
+  return `${option.label} — ${option.count}`
 }
 
 export function availableAwardsFromResults(results = []) {
