@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timezone
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import UserMixin
@@ -28,32 +29,100 @@ class User(UserMixin, db.Model):
         }
 
 
-class Section(db.Model):
+class HomeContent(db.Model):
+    """Editable home-page text block. One row per (key, locale).
+
+    `value` holds a JSON-encoded scalar string or array, matching the shape the
+    home components already expect for that `home.*` key (a plain string for the
+    intro/taglines line, an array for taglines / stack layers / footer links).
+    Pattern #1 (locale column on the same table): these are pure translatable
+    values with no language-independent attributes, so a locale column is the
+    right amount of structure.
+    """
+    __tablename__ = "home_content"
+
     id = db.Column(db.Integer, primary_key=True)
-    slug = db.Column(db.String, nullable=False)
-    title = db.Column(db.String, nullable=False)
-    content = db.Column(db.Text, nullable=False)
-    section_type = db.Column(db.String, nullable=False, default='text')
-    position = db.Column(db.Integer, nullable=True, default=0)
-    collapsible = db.Column(db.Boolean, nullable=False, default=False)
-    locale = db.Column(db.String(5), nullable=False, default='en')
-    hidden = db.Column(db.Boolean, nullable=False, default=False)
+    key = db.Column(db.String(80), nullable=False)
+    locale = db.Column(db.String(5), nullable=False, default="en")
+    value = db.Column(db.Text, nullable=False)  # JSON-encoded scalar or array
 
     __table_args__ = (
-        db.UniqueConstraint('slug', 'locale', name='uq_section_slug_locale'),
+        db.UniqueConstraint("key", "locale", name="uq_home_content_key_locale"),
+    )
+
+    def to_dict(self):
+        return {"key": self.key, "locale": self.locale, "value": json.loads(self.value)}
+
+
+class Project(db.Model):
+    """A portfolio project — the one home-content collection (add/remove/hide/reorder).
+
+    Language-independent attributes (order, visibility, image path) live here so
+    they are stored once and the EN/FI views can never drift. Translatable text
+    lives in ProjectTranslation, one row per locale (pattern #2: translations table).
+    """
+    id = db.Column(db.Integer, primary_key=True)
+    position = db.Column(db.Integer, nullable=False, default=0)
+    hidden = db.Column(db.Boolean, nullable=False, default=False)
+    image = db.Column(db.String, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    translations = db.relationship(
+        "ProjectTranslation", backref="project",
+        cascade="all, delete-orphan", lazy="selectin",
+    )
+
+    def _translation(self, locale):
+        by_locale = {t.locale: t for t in self.translations}
+        return by_locale.get(locale) or by_locale.get("en") or (self.translations[0] if self.translations else None)
+
+    def to_public_dict(self, locale="en"):
+        """The exact shape `home.projects` expects, for a single locale."""
+        t = self._translation(locale)
+        data = t.to_dict() if t else {
+            "name": "", "kind": "", "tagline": "", "description": "", "shot": "", "tech": [], "links": [],
+        }
+        data["image"] = self.image
+        return data
+
+    def to_admin_dict(self):
+        """Parent fields plus all translations keyed by locale, for the editor."""
+        return {
+            "id": self.id,
+            "position": self.position,
+            "hidden": self.hidden,
+            "image": self.image,
+            "translations": {t.locale: t.to_dict() for t in self.translations},
+        }
+
+
+class ProjectTranslation(db.Model):
+    __tablename__ = "project_translation"
+
+    id = db.Column(db.Integer, primary_key=True)
+    project_id = db.Column(db.Integer, db.ForeignKey("project.id"), nullable=False)
+    locale = db.Column(db.String(5), nullable=False, default="en")
+    name = db.Column(db.String(200), nullable=False)
+    kind = db.Column(db.String(120), nullable=True)
+    tagline = db.Column(db.String, nullable=True)
+    description = db.Column(db.Text, nullable=True)
+    shot = db.Column(db.String, nullable=True)
+    tech = db.Column(db.Text, nullable=False, default="[]")   # JSON array of strings
+    links = db.Column(db.Text, nullable=False, default="[]")  # JSON array of {label, href}
+
+    __table_args__ = (
+        db.UniqueConstraint("project_id", "locale", name="uq_project_translation_locale"),
     )
 
     def to_dict(self):
         return {
-            "id": self.id,
-            "slug": self.slug,
-            "title": self.title,
-            "content": self.content,
-            "section_type": self.section_type,
-            "position": self.position,
-            "collapsible": self.collapsible,
-            "locale": self.locale,
-            "hidden": self.hidden,
+            "name": self.name,
+            "kind": self.kind or "",
+            "tagline": self.tagline or "",
+            "description": self.description or "",
+            "shot": self.shot or "",
+            "tech": json.loads(self.tech or "[]"),
+            "links": json.loads(self.links or "[]"),
         }
 
 

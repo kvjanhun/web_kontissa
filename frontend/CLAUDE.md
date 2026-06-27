@@ -18,15 +18,16 @@
 
 - **TerminalWindow.vue**: Interactive shell with commands (help, about, fetch, weather, cowsay, etc.), fuzzy "Did you mean" suggestions. On first load it auto-runs a looping choreography (`help → about → weather → date | cowsay -f tux → clear`); any user keystroke aborts the loop via `stopChoreography()`. Reused inside the homepage terminal frame.
 - **home/**: Homepage redesign sections — see Homepage below.
-- **admin/**: AdminSections, AdminPageViews, AdminRecipes, AdminHealth.
+- **admin/**: AdminDashboard (greeting + Grafana link to `/logs/` + light stats), AdminHomeContent (fixed home text blocks, EN/FI), AdminProjects (the add/remove/hide/reorder collection with a drawer editor), AdminPageViews, AdminRecipes, AdminHealth. The admin shell (`pages/admin.vue`, `standalone` layout) is a sidebar/topbar app using Flat Color Icons (`flat-color-icons:*` — canonical prefix, not the `fc:` alias, so the client-bundle resolver finds them).
 
 ## Homepage (`pages/index.vue` + `components/home/`)
 
 The main page (`/`) is a self-contained landing page (the only public page — `/about` and `/contact` `redirect: '/'`). It uses the `standalone` layout and its own header/footer, **not** `AppHeader`/`AppFooter`.
 
-- **Content is locale-driven, not DB-driven (Stage 1).** All copy lives under the `home.*` keys in `locales/{en,fi}.json`. Scalars use `t('home.…')`; structured lists (`home.projects`, `home.stack.layers`, `home.footer.connectLinks`/`siteLinks`) use the i18n store's `tm()` raw accessor and are kept structurally identical across locales. Stage 2 will move this content into the database + admin editor.
+- **Content is database-driven (Stage 2).** The editable home copy (hero rolling phrases + line + intro, stack label/tag/intro/footnote/layers, footer blurb/nuc/copyright/links, and the projects collection) lives in the DB and is served by `/api/home-content` (backend `app/home_content.py`). Components are unchanged — they still read `t('home.…')` / `tm('home.…')`; the i18n store overlays the DB content over the bundled fallbacks for `home.*` keys. Pure chrome `home.*` keys (nav labels, `home.work.label/count`, meta, terminal, footer column labels) stay in `locales/{en,fi}.json`.
+  - **SSG freshness = build snapshot + runtime fetch.** `stores/i18n.js` imports `locales/home-content.snapshot.json` (`{ en, fi }`, the same shape `/api/home-content` returns) as the initial overlay so the statically-generated page paints correct content immediately; `pages/index.vue` calls `loadHomeContent()` on mount and on locale change to swap in live DB values (no rebuild needed; falls back to the snapshot on fetch failure). The snapshot is a generated build cache, not an editable source — refreshed from the DB at deploy (`scripts/export_home_content.py`, wired into `server/deploy-site.sh`) and seeded by `scripts/seed_home_content.py`. Editing happens in the admin (`Home content` + `Projects`), never by hand in the snapshot.
 - **Components** (in `components/home/`; names carry the `Home` directory prefix per Nuxt auto-import, like `admin/Admin*`): `HomeHeader` (sticky/blurred bar, `#work`/`#stack`/`#terminal` anchors, lang + theme toggles wired directly to `useI18nStore`/`useDarkModeStore`, mobile hamburger drawer), `HomeHero`, `HomeWork` (expandable project accordion via `grid-template-rows` 0fr→1fr), `HomeStack` (L1→L7 layer table), `HomeTerminal` (mac-frame around the reused `TerminalWindow`), `HomeFooter`.
-- **Palette/fonts are scoped** to a `.home-dc` wrapper (see Design). The page does not call `/api/sections`.
+- **Palette/fonts are scoped** to a `.home-dc` wrapper (see Design). The page calls `/api/home-content` on mount/locale-change.
 - **Reveal-on-scroll**: `useScrollReveal()` returns a `v-reveal` directive (IntersectionObserver fade-up; skipped under `prefers-reduced-motion` / no-JS — content stays visible).
 
 ## Dog Show Frontend (`features/dog/`)

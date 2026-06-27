@@ -10,7 +10,7 @@ os.environ["DOG_DATABASE_URI"] = "sqlite://"
 
 
 from app import app as flask_app, limiter
-from app.models import db, User, Section, Recipe, Ingredient, Step
+from app.models import db, User, Recipe, Ingredient, Step
 from werkzeug.security import generate_password_hash
 
 
@@ -72,15 +72,6 @@ def logged_in_user(client, regular_user):
         "password": regular_user["password"],
     })
     return client
-
-
-@pytest.fixture()
-def sample_section(app):
-    with app.app_context():
-        section = Section(title="Test Section", slug="test", content="<p>Hello</p>")
-        db.session.add(section)
-        db.session.commit()
-        return {"id": section.id, "slug": "test"}
 
 
 @pytest.fixture()

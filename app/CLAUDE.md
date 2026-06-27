@@ -18,9 +18,11 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 
 | Method | Endpoint | Auth | Purpose |
 |--------|----------|------|---------|
-| GET | `/api/sections` | Public | List sections (ordered by position) |
-| POST/PUT/DELETE | `/api/sections[/<id>]` | Admin | CRUD sections |
-| PUT | `/api/sections/reorder` | Admin | Reorder (`{"order": [id, ...]}`) |
+| GET | `/api/home-content?locale=` | Public | DB-backed home content overlay map (fixed text blocks + assembled `home.projects`); limiter-exempt |
+| GET/PUT | `/api/admin/home-content` | Admin | List both locales / upsert one field (`{key, locale, value}`) |
+| GET/POST | `/api/admin/projects` | Admin | List (incl. hidden) / create a project |
+| PUT/DELETE | `/api/admin/projects/<id>` | Admin | Update (parent + translations) / delete |
+| PUT | `/api/admin/projects/reorder` | Admin | Reorder (`{"order": [id, ...]}`) |
 | POST | `/api/login` | Public | Authenticate |
 | POST | `/api/logout` | Login | End session |
 | GET | `/api/me` | Public | Current user or 401 |
@@ -44,7 +46,9 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 
 ## Models
 
-`User`, `Section` (with `section_type`: text/pills/quote/currently/intro/project/git_stats/timeline), `Recipe`, `Ingredient`, `Step`, `PageView`, `PageViewEvent`
+`User`, `HomeContent` (editable home `home.*` text blocks; one row per `key`+`locale`, JSON-encoded `value`), `Project` + `ProjectTranslation` (the home "Selected projects" collection — language-independent `position`/`hidden`/`image` on the parent, translatable text per locale in the child), `Recipe`, `Ingredient`, `Step`, `PageView`, `PageViewEvent`.
+
+Home content is served from the DB (`app/home_content.py`), not the locale files. `HOME_CONTENT_FIELDS` in that module is the allow-list of editable keys and their shapes (string / string[] / layer[] / link[]); the frontend admin editor mirrors it. New tables are created by the idempotent `db.create_all()`; initial data is loaded by `scripts/seed_home_content.py` (from the committed `frontend/locales/home-content.snapshot.json`).
 
 ## Dog Shows Backend (`api/dog.py`, `dog_show/`)
 

@@ -7,10 +7,12 @@ from sqlalchemy.exc import IntegrityError
 from werkzeug.security import generate_password_hash, check_password_hash
 
 from app.models import (
+    HomeContent,
     Ingredient,
     PageViewEvent,
+    Project,
+    ProjectTranslation,
     Recipe,
-    Section,
     Step,
     User,
     db,
@@ -77,65 +79,110 @@ class TestUser:
 
 
 # ---------------------------------------------------------------------------
-# Section
+# HomeContent
 # ---------------------------------------------------------------------------
 
-class TestSection:
-    def test_defaults(self, app):
+class TestHomeContent:
+    def test_key_locale_unique_constraint(self, app):
         with app.app_context():
-            s = Section(slug="intro", title="Intro", content="Hello")
-            db.session.add(s)
+            db.session.add(HomeContent(key="home.hero.body", locale="en", value='"a"'))
             db.session.commit()
-            assert s.section_type == "text"
-            assert s.position == 0
-            assert s.collapsible is False
-            assert s.locale == "en"
-            assert s.hidden is False
-
-    def test_slug_locale_unique_constraint(self, app):
-        with app.app_context():
-            s1 = Section(slug="about", title="About", content="c", locale="en")
-            db.session.add(s1)
-            db.session.commit()
-
-            s2 = Section(slug="about", title="About EN dup", content="c", locale="en")
-            db.session.add(s2)
+            db.session.add(HomeContent(key="home.hero.body", locale="en", value='"b"'))
             with pytest.raises(IntegrityError):
                 db.session.commit()
             db.session.rollback()
 
-    def test_same_slug_different_locale_is_allowed(self, app):
+    def test_same_key_different_locale_allowed(self, app):
         with app.app_context():
-            s_en = Section(slug="about", title="About", content="c", locale="en")
-            s_fi = Section(slug="about", title="Tietoa", content="c", locale="fi")
-            db.session.add_all([s_en, s_fi])
+            en = HomeContent(key="home.hero.body", locale="en", value='"hi"')
+            fi = HomeContent(key="home.hero.body", locale="fi", value='"hei"')
+            db.session.add_all([en, fi])
             db.session.commit()
-            assert s_en.id != s_fi.id
+            assert en.id != fi.id
 
-    def test_to_dict_returns_all_fields(self, app):
+    def test_to_dict_parses_json_value(self, app):
         with app.app_context():
-            s = Section(
-                slug="work",
-                title="Work",
-                content="content body",
-                section_type="pills",
-                position=5,
-                collapsible=True,
-                locale="fi",
-                hidden=True,
-            )
-            db.session.add(s)
+            row = HomeContent(key="home.hero.taglines", locale="en", value='["a", "b"]')
+            db.session.add(row)
             db.session.commit()
-            d = s.to_dict()
-            assert d["slug"] == "work"
-            assert d["title"] == "Work"
-            assert d["content"] == "content body"
-            assert d["section_type"] == "pills"
-            assert d["position"] == 5
-            assert d["collapsible"] is True
-            assert d["locale"] == "fi"
-            assert d["hidden"] is True
-            assert "id" in d
+            d = row.to_dict()
+            assert d["key"] == "home.hero.taglines"
+            assert d["locale"] == "en"
+            assert d["value"] == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Project + ProjectTranslation
+# ---------------------------------------------------------------------------
+
+class TestProject:
+    def _project(self, **kwargs):
+        p = Project(position=kwargs.get("position", 0), hidden=kwargs.get("hidden", False),
+                    image=kwargs.get("image", "/x.webp"))
+        p.translations.append(ProjectTranslation(
+            locale="en", name="Sanakenno", kind="product", tagline="t", description="d",
+            shot="s", tech='["React"]', links='[{"label": "site", "href": "https://x"}]',
+        ))
+        p.translations.append(ProjectTranslation(locale="fi", name="Sanakenno", kind="tuote"))
+        return p
+
+    def test_defaults(self, app):
+        with app.app_context():
+            p = Project()
+            db.session.add(p)
+            db.session.commit()
+            assert p.position == 0
+            assert p.hidden is False
+
+    def test_translation_unique_per_locale(self, app):
+        with app.app_context():
+            p = Project()
+            p.translations.append(ProjectTranslation(locale="en", name="A"))
+            p.translations.append(ProjectTranslation(locale="en", name="B"))
+            db.session.add(p)
+            with pytest.raises(IntegrityError):
+                db.session.commit()
+            db.session.rollback()
+
+    def test_delete_cascades_to_translations(self, app):
+        with app.app_context():
+            p = self._project()
+            db.session.add(p)
+            db.session.commit()
+            pid = p.id
+            db.session.delete(p)
+            db.session.commit()
+            assert db.session.query(ProjectTranslation).filter_by(project_id=pid).count() == 0
+
+    def test_to_public_dict_matches_home_shape(self, app):
+        with app.app_context():
+            p = self._project()
+            db.session.add(p)
+            db.session.commit()
+            d = p.to_public_dict("en")
+            assert d["name"] == "Sanakenno"
+            assert d["kind"] == "product"
+            assert d["tech"] == ["React"]
+            assert d["links"] == [{"label": "site", "href": "https://x"}]
+            assert d["image"] == "/x.webp"
+
+    def test_to_public_dict_falls_back_to_en(self, app):
+        with app.app_context():
+            p = Project(image="/x.webp")
+            p.translations.append(ProjectTranslation(locale="en", name="Only EN"))
+            db.session.add(p)
+            db.session.commit()
+            # No 'fi' translation -> falls back to en
+            assert p.to_public_dict("fi")["name"] == "Only EN"
+
+    def test_to_admin_dict_includes_both_translations(self, app):
+        with app.app_context():
+            p = self._project()
+            db.session.add(p)
+            db.session.commit()
+            d = p.to_admin_dict()
+            assert set(d["translations"].keys()) == {"en", "fi"}
+            assert d["image"] == "/x.webp"
 
 
 # ---------------------------------------------------------------------------

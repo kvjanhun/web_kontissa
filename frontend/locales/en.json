@@ -5,12 +5,9 @@
   "nav.login": "Login",
   "nav.logout": "Logout",
   "nav.toggleMenu": "Toggle menu",
-
   "theme.switchToLight": "Switch to light mode",
   "theme.switchToDark": "Switch to dark mode",
-
   "footer.lastUpdated": "Last updated: {date}",
-
   "home.metaTitle": "erez.ac — Konsta Janhunen",
   "home.metaDescription": "Konsta Janhunen — Konsta Janhunen — full-stack & integration developer who likes to know how things work. From the bottom to the top of the stack.",
   "home.skipToContent": "Skip to content",
@@ -20,107 +17,13 @@
   "home.nav.work": "projects",
   "home.nav.stack": "stack",
   "home.nav.terminal": "terminal",
-
-  "home.hero.eyebrow": "Full-stack & integration developer",
-  "home.hero.taglines": [
-    "I make web.",
-    "Developing development.",
-    "Kode, koffee & Konsta.",
-    "Making computers do things.",
-    "Turning ideas into practice."
-  ],
-  "home.hero.titleLine2": "From the silicon up.",
-  "home.hero.body": "I design and develop end to end — bare-metal server, network, routing, observability, deployment, backend, frontend, and the side trails in between. Not because a project needs it, but because I want to know exactly how every layer works.",
-  "home.hero.ctaPrimary": "View the work",
-  "home.hero.ctaSecondary": "See the stack",
-
   "home.work.label": "Selected projects",
   "home.work.count": "{count} projects",
-  "home.projects": [
-    {
-      "name": "Sanakenno",
-      "kind": "product",
-      "tagline": "A daily Finnish word game for desktop and mobile.",
-      "description": "A curated Finnish word puzzle published fresh every day. Desktop and mobile apps that can be synced to one another, user statistics and sharing. Live at sanakenno.fi with thousands of plays.",
-      "tech": ["React", "Nuxt", "SQLite", "PWA", "CI/CD"],
-      "links": [
-        { "label": "sanakenno.fi", "href": "https://sanakenno.fi" },
-        { "label": "github", "href": "https://github.com/kvjanhun/sanakenno" }
-      ],
-      "shot": "Sanakenno.fi · app screenshot",
-      "image": "/projects/sanakenno/cover.webp"
-    },
-    {
-      "name": "Sanakenno Admin tools",
-      "kind": "internal · AI",
-      "tagline": "LLM-assisted puzzle creation and analytics.",
-      "description": "A custom-made admin suite for building daily puzzles, managing word lists and reading player stats. LLM-filtered recommendations propose puzzles to approve or reject; puzzles can also be assembled by searching the space of valid combinations directly.",
-      "tech": ["GPT", "React", "TypeScript", "Analytics"],
-      "links": [
-        { "label": "github", "href": "https://github.com/kvjanhun/sanakenno" }
-      ],
-      "shot": "Sanakenno Admin tools · dashboard",
-      "image": "/projects/sanakenno-tool/cover.webp"
-    },
-    {
-      "name": "erez.ac",
-      "kind": "this site · infra",
-      "tagline": "Portfolio, CMS and a hand-built production platform.",
-      "description": "This site and its admin panel: i18n content management, a real-time monitoring dashboard with logs, Grafana and Loki. Built with Nuxt, Flask/Python and SQLite — and deployed onto my own server.",
-      "tech": ["Nuxt", "Flask", "SQLite", "nginx", "Grafana", "Loki"],
-      "links": [
-        { "label": "the stack", "href": "#stack" }
-      ],
-      "shot": "erez.ac · admin + observability",
-      "image": "/projects/erez-ac/cover.webp"
-    },
-    {
-      "name": "/dog",
-      "kind": "tool",
-      "tagline": "A fast search page for Finnish dog-show results.",
-      "description": "A more versatile search for Finnish dog-show results than the Kennelliitto's own service. Data is served from a server-side database, which is populated from the Showlink service.",
-      "tech": ["Nuxt", "Flask", "SQLite", "Scraping"],
-      "links": [
-        { "label": "open /dog", "href": "/dog" }
-      ],
-      "shot": "/dog · results search",
-      "image": "/projects/dog/cover.webp"
-    }
-  ],
-
-  "home.stack.label": "The stack",
-  "home.stack.tag": "self-hosted · self-built",
-  "home.stack.intro": "Instead of reaching for a managed platform, I built the whole pipeline myself — everything a professional production environment has, running on a mini-PC in my living room. Read it bottom to top.",
-  "home.stack.footnote": "// Because everything runs on my own machine, in my own home network, it has been even more important to understand what I am doing and why. This has guided me to make efficient and secure choices that do not depend on external services.",
-  "home.stack.layers": [
-    { "z": "L7", "layer": "Interface", "title": "Frontend", "detail": "Nuxt 3 SSG/SPA, i18n, dark/light, accessibility baked in — what you are looking at." },
-    { "z": "L6", "layer": "Application", "title": "Backend", "detail": "Flask/Python APIs, SQLite, auth with key-based sessions, content + analytics." },
-    { "z": "L5", "layer": "Delivery", "title": "CI/CD", "detail": "Automatic build, test and deploy pipeline — push to live only with the full suite green." },
-    { "z": "L4", "layer": "Quality", "title": "Test suite", "detail": "Unit, integration and end-to-end (Playwright) coverage across every level." },
-    { "z": "L3", "layer": "Operations", "title": "Observability", "detail": "Full metrics and logging with Loki, Prometheus and Grafana. Fail2Ban for additional security. Alerts live to Telegram." },
-    { "z": "L2", "layer": "Platform", "title": "Routing & containers", "detail": "Nginx reverse proxy, multi-container setup, iptables firewall on Red Hat Linux." },
-    { "z": "L1", "layer": "Hardware", "title": "Bare metal", "detail": "Intel NUC mini-PC at home; home network exposing only HTTP to internet, SSH locked to LAN." }
-  ],
-
   "home.terminal.label": "Terminal",
   "home.terminal.tag": "try it · type help",
   "home.terminal.footnote": "// Originally this site's main attraction. It earned its place here — just not the starring role.",
-
-  "home.footer.blurb": "Konsta Janhunen — full-stack & integration developer who likes to know how things work. From the bottom to the top of the stack.",
   "home.footer.connect": "Connect",
   "home.footer.site": "Site",
-  "home.footer.nuc": "All fine and dandy.",
-  "home.footer.copyright": "© 2026 Konsta Janhunen",
-  "home.footer.connectLinks": [
-    { "label": "GitHub", "href": "https://github.com/kvjanhun" },
-    { "label": "LinkedIn", "href": "https://www.linkedin.com/in/konsta-janhunen-263832165" },
-    { "label": "Email", "href": "mailto:hello@erez.ac" }
-  ],
-  "home.footer.siteLinks": [
-    { "label": "sanakenno.fi", "href": "https://sanakenno.fi" },
-    { "label": "/dog", "href": "/dog" }
-  ],
-
   "login.heading": "Login",
   "login.loggedIn": "Logged in",
   "login.signedInAs": "Signed in as",
@@ -128,10 +31,8 @@
   "login.password": "Password",
   "login.signingIn": "Signing in...",
   "login.signIn": "Sign in",
-
   "notFound.heading": "Page not found",
   "notFound.backHome": "Back to home",
-
   "admin.heading": "Admin",
   "admin.tab.sections": "Sections",
   "admin.tab.analytics": "Analytics",
@@ -155,7 +56,6 @@
   "admin.hide": "Hide",
   "admin.restore": "Restore",
   "admin.hiddenSections": "Hidden sections",
-
   "recipes.heading": "Recipes",
   "recipes.newRecipe": "New Recipe",
   "recipes.searchPlaceholder": "Search recipes or ingredients...",
@@ -163,7 +63,6 @@
   "recipes.loading": "Loading...",
   "recipes.noResults": "No recipes found.",
   "recipes.loadError": "Failed to load recipes",
-
   "recipe.edit": "Edit",
   "recipe.delete": "Delete",
   "recipe.ingredients": "Ingredients",
@@ -173,7 +72,6 @@
   "recipe.notFound": "Recipe not found",
   "recipe.loadError": "Failed to load recipe",
   "recipe.deleteError": "Failed to delete",
-
   "recipeForm.editHeading": "Edit Recipe",
   "recipeForm.newHeading": "New Recipe",
   "recipeForm.title": "Title",
@@ -193,7 +91,6 @@
   "recipeForm.cancel": "Cancel",
   "recipeForm.notFound": "Recipe not found",
   "recipeForm.saveError": "Failed to save recipe",
-
   "title.home": "Konsta Janhunen - erez.ac",
   "title.login": "Login - erez.ac",
   "title.admin": "Admin - erez.ac",

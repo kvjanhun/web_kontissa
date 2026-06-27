@@ -101,6 +101,7 @@ def _log_request(response):
 from .routes import core_bp
 from .auth import auth_bp
 from .recipes import recipes_bp
+from .home_content import home_content_bp
 from .api.cowsay import cowsay_bp
 from .api.weather import weather_bp
 from .api.pageviews import pageviews_bp
@@ -109,6 +110,7 @@ from .api.dog import dog_bp
 
 app.register_blueprint(auth_bp)
 app.register_blueprint(recipes_bp)
+app.register_blueprint(home_content_bp)
 app.register_blueprint(cowsay_bp)
 app.register_blueprint(weather_bp)
 app.register_blueprint(pageviews_bp)

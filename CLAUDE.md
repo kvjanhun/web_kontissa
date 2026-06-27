@@ -50,12 +50,13 @@ web_kontissa/
 │   └── tests/unit/         # Vitest unit tests
 ├── app/                    # Flask backend (see app/CLAUDE.md)
 │   ├── __init__.py         # App factory, LoginManager, Limiter
-│   ├── routes.py           # Sections CRUD, meta, sitemap, static serving
+│   ├── routes.py           # meta, sitemap, static serving (catch-all)
 │   ├── auth.py, recipes.py # Auth + recipe endpoints
+│   ├── home_content.py     # DB-backed home content: /api/home-content + admin home-content/projects
 │   ├── api/                # cowsay, weather, health, pageviews, dog
 │   └── models.py           # All SQLAlchemy models
 ├── tests/                  # Backend pytest
-├── scripts/                # seed_e2e.py, dog_crawl.py, etc.
+├── scripts/                # seed_e2e.py, seed_home_content.py, export_home_content.py, dog_crawl.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
     └── observability/      # Loki, Alloy, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```
@@ -114,7 +115,7 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 
 - **Passwords**: Werkzeug scrypt with random salt. Never logged or exposed.
 - **SQL injection**: SQLAlchemy parameterized queries throughout.
-- **XSS**: Vue auto-escapes `{{ }}`. `v-html` only on admin-authored section content.
+- **XSS**: Vue auto-escapes `{{ }}`. DB-backed home content (text blocks + projects) renders through `{{ }}`/`tm()`, never `v-html`.
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`).
 - **Network**: Container port 8080 on localhost only. Nginx handles TLS.
 - **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx. CSP in report-only mode. Config: `server/erez.ac.conf`.

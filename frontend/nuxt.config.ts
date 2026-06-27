@@ -54,6 +54,24 @@ export default defineNuxtConfig({
         'solar:arrow-right-up-bold',
         'simple-icons:github',
         'simple-icons:linkedin',
+        // Admin panel (Flat Color Icons). The nav/stat icons are bound dynamically
+        // (`:name="n.icon"` from JS arrays), so `scan` can't see them — list them here.
+        // The client-bundle resolver needs the canonical collection name
+        // (`flat-color-icons:`), not the `fc:` runtime alias used in components.
+        'flat-color-icons:home',
+        'flat-color-icons:document',
+        'flat-color-icons:gallery',
+        'flat-color-icons:news',
+        'flat-color-icons:combo-chart',
+        'flat-color-icons:services',
+        'flat-color-icons:export',
+        'flat-color-icons:globe',
+        'flat-color-icons:database',
+        'flat-color-icons:ok',
+        'flat-color-icons:no-idea',
+        'flat-color-icons:plus',
+        'flat-color-icons:edit-image',
+        'flat-color-icons:full-trash',
       ],
     },
   },

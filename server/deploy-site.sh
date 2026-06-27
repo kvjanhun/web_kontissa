@@ -44,6 +44,24 @@ export GIT_SSH_COMMAND="ssh -i /home/kvjanhun/.ssh/webhook_deploy_key -o Identit
 echo "Pulling latest changes from GitHub..."
 git pull origin main || fail "git pull"
 
+# Refresh the home-content snapshot from the live database so `nuxt generate`
+# (inside the Docker build) bakes current content for first paint / SEO. Runs in
+# the still-running web container, writing to the shared /app/data volume (which
+# is bind-mounted to ./app/data on the host). Best effort: on the first deploy of
+# this feature, or before the one-off DB migration, the tables may not exist yet
+# — in that case we keep the committed snapshot (the client also re-fetches live
+# content at runtime, so visitors always see current data either way).
+echo "Refreshing home-content snapshot from the database (best effort)..."
+if docker ps --format '{{.Names}}' | grep -q "^${WEB_CONTAINER}$" \
+   && docker exec "$WEB_CONTAINER" python scripts/export_home_content.py --out /app/data/home-content.snapshot.json \
+   && [ -s app/data/home-content.snapshot.json ]; then
+  mv app/data/home-content.snapshot.json frontend/locales/home-content.snapshot.json
+  echo "Snapshot refreshed from the database."
+else
+  rm -f app/data/home-content.snapshot.json
+  echo "Snapshot export skipped; using the committed snapshot."
+fi
+
 echo "Rebuilding Docker container..."
 docker compose up --build -d || fail "docker compose"
 

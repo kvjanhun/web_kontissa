@@ -1,10 +1,14 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { useI18nStore } from '~/stores/i18n.js'
 
 beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
+})
+
+afterEach(() => {
+  vi.unstubAllGlobals()
 })
 
 describe('useI18nStore — t()', () => {
@@ -78,6 +82,34 @@ describe('useI18nStore — tm()', () => {
     const i18n = useI18nStore()
     // footer.lastUpdated contains a {date} placeholder; tm returns it untouched
     expect(i18n.tm('footer.lastUpdated')).toContain('{date}')
+  })
+})
+
+describe('useI18nStore — loadHomeContent', () => {
+  it('swaps DB content over the baked snapshot', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ 'home.hero.body': 'From the database.' }),
+    }))
+    const i18n = useI18nStore()
+    await i18n.loadHomeContent('en')
+    expect(i18n.tm('home.hero.body')).toBe('From the database.')
+  })
+
+  it('keeps the snapshot when the fetch fails', async () => {
+    const baked = useI18nStore().tm('home.hero.body')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }))
+    const i18n = useI18nStore()
+    await i18n.loadHomeContent('en')
+    expect(i18n.tm('home.hero.body')).toBe(baked)
+  })
+
+  it('keeps the snapshot when the fetch throws', async () => {
+    const baked = useI18nStore().tm('home.hero.body')
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network')))
+    const i18n = useI18nStore()
+    await i18n.loadHomeContent('en')
+    expect(i18n.tm('home.hero.body')).toBe(baked)
   })
 })
 

@@ -4,7 +4,9 @@ definePageMeta({
   titleKey: 'title.home',
 })
 
-const { t } = useI18nStore()
+const i18n = useI18nStore()
+const { t, loadHomeContent } = i18n
+const { locale } = storeToRefs(i18n)
 
 useHead({
   title: computed(() => t('home.metaTitle')),
@@ -12,6 +14,11 @@ useHead({
     { name: 'description', content: computed(() => t('home.metaDescription')) },
   ],
 })
+
+// The page paints from the build snapshot, then swaps in the live DB content.
+// Re-fetch when the visitor switches language so the other locale is fresh too.
+onMounted(() => loadHomeContent())
+watch(locale, (loc) => loadHomeContent(loc))
 </script>
 
 <template>

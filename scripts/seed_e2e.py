@@ -3,7 +3,7 @@
 Usage:
     DATABASE_URI="sqlite:///$(pwd)/app/data/test-e2e.db" python3 scripts/seed_e2e.py
 
-Creates known users, sections, and a recipe.
+Creates known users, home content (fixed blocks + projects), and a recipe.
 """
 
 import os
@@ -18,7 +18,8 @@ os.environ["DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 
 from werkzeug.security import generate_password_hash
 from app import app
-from app.models import db, User, Section, Recipe, Ingredient, Step
+from app.models import db, User, Recipe, Ingredient, Step
+from scripts.seed_home_content import _load_snapshot, _seed_fixed_blocks, _seed_projects
 
 # Known test credentials (used by e2e/fixtures/auth.js)
 ADMIN_EMAIL = "admin@test.com"
@@ -51,26 +52,10 @@ def seed():
         user.password_hash = generate_password_hash(USER_PASSWORD, method="pbkdf2:sha256")
         db.session.add(user)
 
-        # --- Sections ---
-        sections = [
-            Section(title="Quote", slug="quote", content="Hello world",
-                    section_type="quote", position=0),
-            Section(title="Intro", slug="intro", content="Test intro text.",
-                    section_type="intro", position=1),
-            Section(title="Currently", slug="currently",
-                    content="Status: Testing\nMood: Focused",
-                    section_type="currently", position=20),
-            Section(title="Backend", slug="backend",
-                    content="Python",
-                    section_type="pills", position=3),
-            Section(title="Frontend", slug="frontend",
-                    content="JavaScript, Vue.js",
-                    section_type="pills", position=4),
-            Section(title="Projects", slug="projects",
-                    content="TestProject|/about|A test project",
-                    section_type="project", position=10),
-        ]
-        db.session.add_all(sections)
+        # --- Home content (fixed text blocks + projects) ---
+        snapshot = _load_snapshot()
+        blocks = _seed_fixed_blocks(snapshot)
+        projects = _seed_projects(snapshot)
 
         # --- Recipe ---
         recipe = Recipe(title="Test Pancakes", slug="test-pancakes",
@@ -89,7 +74,7 @@ def seed():
         print(f"Seeded E2E database at {DB_PATH}")
         print(f"  Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
         print(f"  User:  {USER_EMAIL} / {USER_PASSWORD}")
-        print(f"  Sections: {len(sections)}")
+        print(f"  Home content: {blocks} fixed fields, {projects} projects")
         print(f"  Recipes: 1")
 
 

@@ -1,0 +1,358 @@
+{
+  "en": {
+    "home.hero.eyebrow": "Full-stack & integration developer",
+    "home.hero.taglines": [
+      "I make web.",
+      "Developing development.",
+      "Kode, koffee & Konsta.",
+      "Making computers do things.",
+      "Turning ideas into practice."
+    ],
+    "home.hero.titleLine2": "From the silicon up.",
+    "home.hero.body": "I design and develop end to end — bare-metal server, network, routing, observability, deployment, backend, frontend, and the side trails in between. Not because a project needs it, but because I want to know exactly how every layer works.",
+    "home.hero.ctaPrimary": "View the work",
+    "home.hero.ctaSecondary": "See the stack",
+    "home.stack.label": "The stack",
+    "home.stack.tag": "self-hosted · self-built",
+    "home.stack.intro": "Instead of reaching for a managed platform, I built the whole pipeline myself — everything a professional production environment has, running on a mini-PC in my living room. Read it bottom to top.",
+    "home.stack.footnote": "// Because everything runs on my own machine, in my own home network, it has been even more important to understand what I am doing and why. This has guided me to make efficient and secure choices that do not depend on external services.",
+    "home.stack.layers": [
+      {
+        "z": "L7",
+        "layer": "Interface",
+        "title": "Frontend",
+        "detail": "Nuxt 3 SSG/SPA, i18n, dark/light, accessibility baked in — what you are looking at."
+      },
+      {
+        "z": "L6",
+        "layer": "Application",
+        "title": "Backend",
+        "detail": "Flask/Python APIs, SQLite, auth with key-based sessions, content + analytics."
+      },
+      {
+        "z": "L5",
+        "layer": "Delivery",
+        "title": "CI/CD",
+        "detail": "Automatic build, test and deploy pipeline — push to live only with the full suite green."
+      },
+      {
+        "z": "L4",
+        "layer": "Quality",
+        "title": "Test suite",
+        "detail": "Unit, integration and end-to-end (Playwright) coverage across every level."
+      },
+      {
+        "z": "L3",
+        "layer": "Operations",
+        "title": "Observability",
+        "detail": "Full metrics and logging with Loki, Prometheus and Grafana. Fail2Ban for additional security. Alerts live to Telegram."
+      },
+      {
+        "z": "L2",
+        "layer": "Platform",
+        "title": "Routing & containers",
+        "detail": "Nginx reverse proxy, multi-container setup, iptables firewall on Red Hat Linux."
+      },
+      {
+        "z": "L1",
+        "layer": "Hardware",
+        "title": "Bare metal",
+        "detail": "Intel NUC mini-PC at home; home network exposing only HTTP to internet, SSH locked to LAN."
+      }
+    ],
+    "home.footer.blurb": "Konsta Janhunen — full-stack & integration developer who likes to know how things work. From the bottom to the top of the stack.",
+    "home.footer.nuc": "All fine and dandy.",
+    "home.footer.copyright": "© 2026 Konsta Janhunen",
+    "home.footer.connectLinks": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/kvjanhun"
+      },
+      {
+        "label": "LinkedIn",
+        "href": "https://www.linkedin.com/in/konsta-janhunen-263832165"
+      },
+      {
+        "label": "Email",
+        "href": "mailto:hello@erez.ac"
+      }
+    ],
+    "home.footer.siteLinks": [
+      {
+        "label": "sanakenno.fi",
+        "href": "https://sanakenno.fi"
+      },
+      {
+        "label": "/dog",
+        "href": "/dog"
+      }
+    ],
+    "home.projects": [
+      {
+        "name": "Sanakenno",
+        "kind": "product",
+        "tagline": "A daily Finnish word game for desktop and mobile.",
+        "description": "A curated Finnish word puzzle published fresh every day. Desktop and mobile apps that can be synced to one another, user statistics and sharing. Live at sanakenno.fi with thousands of plays.",
+        "tech": [
+          "React",
+          "Nuxt",
+          "SQLite",
+          "PWA",
+          "CI/CD"
+        ],
+        "links": [
+          {
+            "label": "sanakenno.fi",
+            "href": "https://sanakenno.fi"
+          },
+          {
+            "label": "github",
+            "href": "https://github.com/kvjanhun/sanakenno"
+          }
+        ],
+        "shot": "Sanakenno.fi · app screenshot",
+        "image": "/projects/sanakenno/cover.webp"
+      },
+      {
+        "name": "Sanakenno Admin tools",
+        "kind": "internal · AI",
+        "tagline": "LLM-assisted puzzle creation and analytics.",
+        "description": "A custom-made admin suite for building daily puzzles, managing word lists and reading player stats. LLM-filtered recommendations propose puzzles to approve or reject; puzzles can also be assembled by searching the space of valid combinations directly.",
+        "tech": [
+          "GPT",
+          "React",
+          "TypeScript",
+          "Analytics"
+        ],
+        "links": [
+          {
+            "label": "github",
+            "href": "https://github.com/kvjanhun/sanakenno"
+          }
+        ],
+        "shot": "Sanakenno Admin tools · dashboard",
+        "image": "/projects/sanakenno-tool/cover.webp"
+      },
+      {
+        "name": "erez.ac",
+        "kind": "this site · infra",
+        "tagline": "Portfolio, CMS and a hand-built production platform.",
+        "description": "This site and its admin panel: i18n content management, a real-time monitoring dashboard with logs, Grafana and Loki. Built with Nuxt, Flask/Python and SQLite — and deployed onto my own server.",
+        "tech": [
+          "Nuxt",
+          "Flask",
+          "SQLite",
+          "nginx",
+          "Grafana",
+          "Loki"
+        ],
+        "links": [
+          {
+            "label": "the stack",
+            "href": "#stack"
+          }
+        ],
+        "shot": "erez.ac · admin + observability",
+        "image": "/projects/erez-ac/cover.webp"
+      },
+      {
+        "name": "/dog",
+        "kind": "tool",
+        "tagline": "A fast search page for Finnish dog-show results.",
+        "description": "A more versatile search for Finnish dog-show results than the Kennelliitto's own service. Data is served from a server-side database, which is populated from the Showlink service.",
+        "tech": [
+          "Nuxt",
+          "Flask",
+          "SQLite",
+          "Scraping"
+        ],
+        "links": [
+          {
+            "label": "open /dog",
+            "href": "/dog"
+          }
+        ],
+        "shot": "/dog · results search",
+        "image": "/projects/dog/cover.webp"
+      }
+    ]
+  },
+  "fi": {
+    "home.hero.eyebrow": "Full-stack- ja integraatiokehittäjä",
+    "home.hero.taglines": [
+      "Webin tekijä.",
+      "Kehittyvää kehitystä.",
+      "Konstailematonta koodia.",
+      "Laitan ATK:n tekemään asioita.",
+      "Ideoista käytäntöön."
+    ],
+    "home.hero.titleLine2": "Raudasta ulkoasuun.",
+    "home.hero.body": "Suunnittelen ja kehitän alusta loppuun — palvelin, verkko, reititys, valvonta, julkaisu, backend, frontend ja kaikki sivupolut siltä väliltä. Enkä edes siksi, että projekti sitä vaatisi, vaan koska haluan tietää tarkalleen, miten jokainen kerros toimii.",
+    "home.hero.ctaPrimary": "Katso mitä olen tehnyt",
+    "home.hero.ctaSecondary": "Tutustu pinoon",
+    "home.stack.label": "Pino",
+    "home.stack.tag": "itse hostattu · itse rakennettu",
+    "home.stack.intro": "Hallinnoidun pilvialustan sijaan rakensin myös alustani itse — kaiken, mitä ammattimaisessa tuotantoympäristössä on, pyörimään mini-PC:llä oman TV-tasoni alla. Lue alhaalta ylös.",
+    "home.stack.footnote": "// Koska kaikki pyörii omalla koneella, omassa kotiverkossa, on ollut entistä tärkeämpää ymmärtää mitä teen ja miksi. Tämä on ohjannut tekemään tehokkaita ja tietoturvallisia ratkaisuja, jotka eivät ole riippuvaisia ulkoisista palveluista.",
+    "home.stack.layers": [
+      {
+        "z": "L7",
+        "layer": "Käyttöliittymä",
+        "title": "Frontend",
+        "detail": "Nuxt 3 SSG/SPA, monikielisyys, tumma/vaalea, saavutettavuus sisäänrakennettuna — tämä, mitä luet ja näet."
+      },
+      {
+        "z": "L6",
+        "layer": "Sovellus",
+        "title": "Backend",
+        "detail": "Flask/Python-rajapinnat, SQLite, avainpohjaiset istunnot, sisältö + analytiikka."
+      },
+      {
+        "z": "L5",
+        "layer": "Toimitus",
+        "title": "CI/CD",
+        "detail": "Automaattinen käännös-, testaus- ja julkaisuputki — tuotantoon sysäys vain, kun koko testipatteri on vihreä."
+      },
+      {
+        "z": "L4",
+        "layer": "Laatu",
+        "title": "Testisarja",
+        "detail": "Yksikkö-, integraatio- ja end-to-end-kattavuus (Playwright) joka tasolla."
+      },
+      {
+        "z": "L3",
+        "layer": "Operointi",
+        "title": "Havainnointi",
+        "detail": "Täysi monitorointi ja lokitus Lokin, Prometheusin ja Grafanan voimin. Fail2Ban lisäämässä tietoturvaa. Hälytykset suoraan Telegramiin."
+      },
+      {
+        "z": "L2",
+        "layer": "Alusta",
+        "title": "Reititys & kontit",
+        "detail": "Nginx-käänteisproxy, monen kontin kokoonpano, iptables-palomuuri Red Hat Linuxilla."
+      },
+      {
+        "z": "L1",
+        "layer": "Rauta",
+        "title": "Fyysinen rauta",
+        "detail": "Intel NUC -minitietokone kotona; kotiverkko avaa vain HTTP:n internetiin, SSH lukittu lähiverkkoon."
+      }
+    ],
+    "home.footer.blurb": "Konsta Janhunen — full-stack- ja integraatiokehittäjä, joka haluaa tietää miten asiat toimivat. Pinon pohjalta aina sen huipulle asti.",
+    "home.footer.nuc": "Tässähän tää menettellööpi.",
+    "home.footer.copyright": "© 2026 Konsta Janhunen",
+    "home.footer.connectLinks": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/kvjanhun"
+      },
+      {
+        "label": "LinkedIn",
+        "href": "https://www.linkedin.com/in/konsta-janhunen-263832165"
+      },
+      {
+        "label": "Sähköposti",
+        "href": "mailto:hello@erez.ac"
+      }
+    ],
+    "home.footer.siteLinks": [
+      {
+        "label": "sanakenno.fi",
+        "href": "https://sanakenno.fi"
+      },
+      {
+        "label": "/dog",
+        "href": "/dog"
+      }
+    ],
+    "home.projects": [
+      {
+        "name": "Sanakenno",
+        "kind": "tuote",
+        "tagline": "Päivittäinen suomalainen sanapeli työpöydälle ja mobiiliin.",
+        "description": "Joka päivä julkaistaan tuore, käsin kuratoitu suomalainen sanapulma. Työpöytä- ja mobiilisovellukset saa synkronoitua ja edistymisensä tallennettua, käyttäjätilastot ja jakaminen. Käytössä osoitteessa sanakenno.fi, tuhansia pelikertoja.",
+        "tech": [
+          "React",
+          "Nuxt",
+          "SQLite",
+          "PWA",
+          "CI/CD"
+        ],
+        "links": [
+          {
+            "label": "sanakenno.fi",
+            "href": "https://sanakenno.fi"
+          },
+          {
+            "label": "github",
+            "href": "https://github.com/kvjanhun/sanakenno"
+          }
+        ],
+        "shot": "Sanakenno.fi · kuvakaappaus",
+        "image": "/projects/sanakenno/cover.webp"
+      },
+      {
+        "name": "Sanakenno Admin tools",
+        "kind": "sisäinen · AI",
+        "tagline": "LLM-avusteinen pulmien luonti ja analytiikka.",
+        "description": "Räätälöity hallintatyökalu päivittäisten pulmien rakentamiseen, sanalistojen hallintaan ja pelaajatilastojen lukemiseen. LLM-suodatetut suositukset ehdottavat pulmia hyväksyttäväksi tai hylättäväksi; pulmia voi koota myös hakemalla suoraan kelvollisten yhdistelmien joukosta.",
+        "tech": [
+          "GPT",
+          "React",
+          "TypeScript",
+          "Analytiikka"
+        ],
+        "links": [
+          {
+            "label": "github",
+            "href": "https://github.com/kvjanhun/sanakenno"
+          }
+        ],
+        "shot": "Sanakenno Admin tools · hallintapaneeli",
+        "image": "/projects/sanakenno-tool/cover.webp"
+      },
+      {
+        "name": "erez.ac",
+        "kind": "tämä sivu · infra",
+        "tagline": "Portfolio, julkaisujärjestelmä ja käsin rakennettu tuotantoalusta.",
+        "description": "Tämä sivusto ja sen hallintapaneeli: monikielinen sisällönhallinta, reaaliaikainen valvontanäkymä lokeineen, Grafana ja Loki. Rakennettu Nuxtilla, Flaskilla/Pythonilla ja SQLitellä — ja julkaistu omalla palvelimella.",
+        "tech": [
+          "Nuxt",
+          "Flask",
+          "SQLite",
+          "nginx",
+          "Grafana",
+          "Loki"
+        ],
+        "links": [
+          {
+            "label": "pino",
+            "href": "#stack"
+          }
+        ],
+        "shot": "erez.ac · hallinta + valvonta",
+        "image": "/projects/erez-ac/cover.webp"
+      },
+      {
+        "name": "/dog",
+        "kind": "työkalu",
+        "tagline": "Monipuolinen hakusivu suomalaisten koiranäyttelyiden tuloksiin.",
+        "description": "Kennelliiton omaa palvelua monipuolisempi haku koiranäyttelytulosten selaamiseen. Data tarjoillaan palvelimen tietokannasta, johon se on haettu Showlink-palvelusta. ",
+        "tech": [
+          "Nuxt",
+          "Flask",
+          "SQLite",
+          "Scraping"
+        ],
+        "links": [
+          {
+            "label": "avaa /dog",
+            "href": "/dog"
+          }
+        ],
+        "shot": "/dog · tuloshaku",
+        "image": "/projects/dog/cover.webp"
+      }
+    ]
+  }
+}

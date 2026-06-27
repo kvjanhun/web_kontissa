@@ -6,7 +6,7 @@ test.describe('Homepage', () => {
     await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
     await expect(page.getByRole('heading', { name: /Selected projects/i })).toBeVisible()
     await expect(page.getByRole('heading', { name: /The stack/i })).toBeVisible()
-    // Stack layers rendered from the locale array
+    // Stack layers rendered from the database-backed home content
     await expect(page.getByText('Bare metal', { exact: true })).toBeVisible()
     // Interactive terminal frame
     await expect(page.getByText('konsta@erez.ac', { exact: false }).first()).toBeVisible({ timeout: 10000 })

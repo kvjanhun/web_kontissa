@@ -1,9 +1,6 @@
 import os
-from flask import Blueprint, jsonify, redirect, request, url_for, Response, send_from_directory
-from flask_login import current_user
-from .models import db, Section
+from flask import Blueprint, jsonify, redirect, url_for, Response, send_from_directory
 from .utils import get_latest_commit_date
-from .decorators import admin_required
 from datetime import datetime
 from . import limiter
 
@@ -19,25 +16,6 @@ def index():
 @core_bp.route("/index.html")
 def legacy_index():
     return redirect(url_for("core.index"), code=301)
-
-VALID_SECTION_TYPES = ("text", "pills", "quote", "currently", "intro", "project", "git_stats", "timeline")
-
-@core_bp.route("/api/sections")
-def api_sections():
-    locale = request.args.get("locale", "en").strip()
-    include_hidden = request.args.get("include_hidden", "0").strip() == "1"
-
-    if include_hidden:
-        if not current_user.is_authenticated or current_user.role != "admin":
-            return jsonify({"error": "Admin required"}), 403
-        query = Section.query
-    else:
-        query = Section.query.filter_by(hidden=False)
-
-    if locale:
-        query = query.filter_by(locale=locale)
-    sections = query.order_by(Section.position.asc(), Section.id.asc()).all()
-    return jsonify([s.to_dict() for s in sections])
 
 @core_bp.route("/api/meta")
 def api_meta():
@@ -70,127 +48,6 @@ def generate_sitemap():
     xml = "\n".join(xml_parts)
 
     return Response(xml, mimetype="application/xml")
-
-@core_bp.route("/api/sections", methods=["POST"])
-@admin_required
-def api_create_section():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Missing JSON body"}), 400
-
-    title = data.get("title", "").strip()
-    slug = data.get("slug", "").strip()
-    content = data.get("content", "").strip()
-
-    section_type = data.get("section_type", "text").strip()
-    locale = data.get("locale", "en").strip()
-
-    # content is optional for git_stats (description only) but required for all other types
-    if not title or not slug or (not content and section_type != "git_stats"):
-        return jsonify({"error": "title, slug, and content are required"}), 400
-
-    if section_type not in VALID_SECTION_TYPES:
-        return jsonify({"error": f"section_type must be one of: {', '.join(VALID_SECTION_TYPES)}"}), 400
-
-    if locale not in ("en", "fi"):
-        return jsonify({"error": "locale must be 'en' or 'fi'"}), 400
-
-    if Section.query.filter_by(slug=slug, locale=locale).first():
-        return jsonify({"error": "A section with this slug and locale already exists"}), 409
-
-    position = data.get("position")
-    if position is not None:
-        if not isinstance(position, int) or position < 0 or position > 29:
-            return jsonify({"error": "position must be an integer 0–29"}), 400
-
-    collapsible = bool(data.get("collapsible", False))
-
-    section = Section(title=title, slug=slug, content=content, section_type=section_type, locale=locale, collapsible=collapsible)
-    if position is not None:
-        section.position = position
-    db.session.add(section)
-    db.session.commit()
-    return jsonify(section.to_dict()), 201
-
-
-@core_bp.route("/api/sections/<int:section_id>", methods=["PUT"])
-@admin_required
-def api_update_section(section_id):
-    section = db.session.get(Section, section_id)
-    if not section:
-        return jsonify({"error": "Section not found"}), 404
-
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "Missing JSON body"}), 400
-
-    if "title" in data:
-        section.title = data["title"].strip()
-    if "slug" in data:
-        section.slug = data["slug"].strip()
-    if "content" in data:
-        section.content = data["content"].strip()
-    if "section_type" in data:
-        section_type = data["section_type"].strip()
-        if section_type not in VALID_SECTION_TYPES:
-            return jsonify({"error": f"section_type must be one of: {', '.join(VALID_SECTION_TYPES)}"}), 400
-        section.section_type = section_type
-    if "locale" in data:
-        locale = data["locale"].strip()
-        if locale not in ("en", "fi"):
-            return jsonify({"error": "locale must be 'en' or 'fi'"}), 400
-        section.locale = locale
-    if "collapsible" in data:
-        section.collapsible = bool(data["collapsible"])
-    if "hidden" in data:
-        section.hidden = bool(data["hidden"])
-    if "position" in data:
-        position = data["position"]
-        if not isinstance(position, int) or position < 0 or position > 29:
-            return jsonify({"error": "position must be an integer 0–29"}), 400
-        section.position = position
-
-    db.session.commit()
-    return jsonify(section.to_dict())
-
-
-@core_bp.route("/api/sections/<int:section_id>", methods=["DELETE"])
-@admin_required
-def api_delete_section(section_id):
-    section = db.session.get(Section, section_id)
-    if not section:
-        return jsonify({"error": "Section not found"}), 404
-
-    db.session.delete(section)
-    db.session.commit()
-    return jsonify({"message": "Section deleted"})
-
-
-@core_bp.route("/api/sections/reorder", methods=["PUT"])
-@admin_required
-def api_reorder_sections():
-    data = request.get_json()
-    if not data or not isinstance(data.get("order"), list):
-        return jsonify({"error": "order (list of section IDs) required"}), 400
-
-    order = data["order"]
-    if not all(isinstance(i, int) for i in order):
-        return jsonify({"error": "order must be a list of integers"}), 400
-
-    locale = data.get("locale", "en")
-    sections = Section.query.filter_by(locale=locale).all()
-    section_map = {s.id: s for s in sections}
-
-    for sid in order:
-        if sid not in section_map:
-            return jsonify({"error": f"Section {sid} not found"}), 404
-
-    for position, sid in enumerate(order):
-        section_map[sid].position = position
-
-    db.session.commit()
-    return jsonify({"message": "Sections reordered"})
-
 
 @core_bp.route("/<path:path>")
 @limiter.exempt
