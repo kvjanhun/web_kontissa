@@ -11,9 +11,9 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _result_doc_live_bis_grace_finished,
+    _parse_show_date, _result_doc_last_result_at, _result_doc_live_bis_grace_finished,
     _result_doc_live_entry_completion_grace_finished, _show_age_days,
-    _show_date_state, _show_result_availability, _utc_iso,
+    _show_date_state, _show_live_phase, _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -166,7 +166,22 @@ def _show_stats_from_index(show_id, show=None, today=None):
         show_item,
         now=_stats_now_for_today(today) if today else None,
     )
-    is_live = show_state == "live" and availability.get("can_fetch", True)
+    is_live = False
+    is_paused = False
+    if show_state == "live":
+        # result_doc is loaded above whenever the date-state is live; a live show
+        # in its multi-day nightly/evening lull reads as "paused" (Jatkuu) rather
+        # than actively "Käynnissä".
+        phase = _show_live_phase(
+            show_item,
+            now=_stats_now_for_today(today) if today else None,
+            availability=availability,
+            last_result_at=_result_doc_last_result_at(result_doc),
+        )
+        if phase == "paused":
+            is_paused = True
+        else:
+            is_live = availability.get("can_fetch", True)
     stats = {
         "indexed": True,
         "breed_count": len(breeds),
@@ -174,6 +189,7 @@ def _show_stats_from_index(show_id, show=None, today=None):
         "result_breed_count": result_breed_count,
         "show_state": show_state,
         "is_live": is_live,
+        "is_paused": is_paused,
         "updated_at": updated or None,
         "updated_at_iso": _utc_iso(updated),
     }

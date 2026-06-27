@@ -790,6 +790,12 @@ export function showStatItems(show) {
       label: 'Käynnissä',
       live: true,
     })
+  } else if (stats.is_paused) {
+    items.push({
+      key: 'paused',
+      label: 'Jatkuu',
+      paused: true,
+    })
   }
   if (typeof stats.breed_count === 'number') {
     items.push({
@@ -798,7 +804,7 @@ export function showStatItems(show) {
     })
   }
   if (typeof stats.entry_count === 'number') {
-    if (stats.is_live && typeof stats.result_count === 'number') {
+    if ((stats.is_live || stats.is_paused) && typeof stats.result_count === 'number') {
       items.push({
         key: 'entries',
         label: `${formatStatNumber(stats.result_count)}/${formatStatNumber(stats.entry_count)} tulosta`,
@@ -823,9 +829,10 @@ export function showStatsLabel(show) {
   const stats = show?.stats || {}
   const parts = []
   if (stats.is_live) parts.push('käynnissä')
+  else if (stats.is_paused) parts.push('jatkuu')
   if (typeof stats.breed_count === 'number') parts.push(`${formatStatNumber(stats.breed_count)} rotua`)
   if (typeof stats.entry_count === 'number') {
-    if (stats.is_live && typeof stats.result_count === 'number') {
+    if ((stats.is_live || stats.is_paused) && typeof stats.result_count === 'number') {
       parts.push(`${formatStatNumber(stats.result_count)}/${formatStatNumber(stats.entry_count)} tulosta`)
     } else {
       parts.push(`${formatStatNumber(stats.entry_count)} ilmoittautunutta`)
@@ -838,6 +845,32 @@ export function formatShowDay(dateStr) {
   const match = String(dateStr || '').match(/\d{1,2}/)
   if (!match) return dateStr || ''
   return String(parseInt(match[0], 10))
+}
+
+const FINNISH_MONTHS_SHORT = [
+  'tammi', 'helmi', 'maalis', 'huhti', 'touko', 'kesä',
+  'heinä', 'elo', 'syys', 'loka', 'marras', 'joulu',
+]
+
+// Calendar-box parts for a list row: a single day ("13") or a same-month range
+// ("13–14"). Cross-month ranges (a rare month-boundary weekend) fall back to the
+// start day so the small square stays readable.
+export function showDateBadgeParts(show) {
+  const dateStr = show?.date || ''
+  const range = parseShowDateRange(dateStr, show?.month)
+  if (!range?.start) {
+    return { day: formatShowDay(dateStr), month: '' }
+  }
+
+  const { start, end } = range
+  const startMonth = FINNISH_MONTHS_SHORT[start.getMonth()] || ''
+  if (!end || datesAreSameDay(start, end)) {
+    return { day: String(start.getDate()), month: startMonth }
+  }
+  if (start.getMonth() === end.getMonth()) {
+    return { day: `${start.getDate()}–${end.getDate()}`, month: startMonth, range: true }
+  }
+  return { day: String(start.getDate()), month: startMonth }
 }
 
 function formatDatePart(date, includeYear = false) {

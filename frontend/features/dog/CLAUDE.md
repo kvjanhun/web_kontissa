@@ -54,7 +54,11 @@ The frontend must not fan out across all breed result pages. Any full-show filte
 
 - Empty list search browses by month; two or more characters uses backend indexed search.
 - While indexing is incomplete, the list polls `/api/dog/shows` for index stats.
-- Live rows display `Käynnissä` and result progress as `n/N tulosta` when available.
+- Live rows display `Käynnissä` and result progress as `n/N tulosta` when available. A
+  multi-day show in its nightly/evening lull (backend `stats.is_paused`) instead shows
+  `Jatkuu` while keeping the `n/N tulosta` count; the final day's wind-down stays `Käynnissä`.
+- The list calendar box shows a multi-day range (`13–14`) via `DogShowDateBadge.vue` /
+  `showDateBadgeParts`, not just the first day.
 - Opening a show resets whole-show result state and breed-result state.
 - Opening `Koirat & Tulokset` loads `/all-results`; partial cache progress is visible and resilient across deploys.
 - Show-wide filters apply only after all-dogs data has loaded.

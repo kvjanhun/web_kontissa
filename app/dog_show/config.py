@@ -28,6 +28,13 @@ RESULT_IMMEDIATE_WARMUP_DEFAULT = os.environ.get("DOG_RESULT_IMMEDIATE_WARMUP", 
 RESULT_SHOW_MORNING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_MORNING_HOUR", "6"))
 RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "21"))
 
+# A multi-day show enters the "Jatkuu" (paused) display state during its nightly
+# hiatus, or once its results have stalled for this long in the evening wind-down.
+# RESULT_PAUSE_EVENING_HOUR floors the stall trigger so a slow midday breed ring
+# (or crawler scheduling lag) can't fake a pause during active daytime judging.
+RESULT_PAUSE_STALL_SECONDS = int(os.environ.get("DOG_RESULT_PAUSE_STALL_SECONDS", "7200"))
+RESULT_PAUSE_EVENING_HOUR = int(os.environ.get("DOG_RESULT_PAUSE_EVENING_HOUR", "17"))
+
 # Max shows a single web-worker /api/dog/shows hit may background-index. Keeps a
 # cold/empty index from spawning hundreds of Showlink requests per request; the
 # dog-crawler service picks up the rest on its 15-minute crawl_index_once pass.

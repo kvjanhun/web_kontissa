@@ -18,6 +18,7 @@ import {
   parseShowDateRange,
   showAwardCritiqueKey,
   showBreedGroupCritiqueKey,
+  showDateBadgeParts,
   showStatItems,
   showStatsLabel,
   sortBreedAwards,
@@ -305,6 +306,60 @@ describe('showStatItems and showStatsLabel', () => {
       },
     ])
     expect(showStatsLabel(show)).toBe(`3 rotua, ${entryCount} ilmoittautunutta`)
+  })
+
+  it('renders a paused multi-day show as Jatkuu while keeping today’s result count', () => {
+    const show = {
+      stats: {
+        is_live: false,
+        is_paused: true,
+        breed_count: 2,
+        entry_count: 90,
+        result_count: 12,
+      },
+    }
+
+    expect(showStatItems(show)).toEqual([
+      { key: 'paused', label: 'Jatkuu', paused: true },
+      { key: 'breeds', label: '2 rotua' },
+      {
+        key: 'entries',
+        label: '12/90 tulosta',
+        title: '12/90 arvosteltua ilmoittautuneesta',
+      },
+    ])
+    expect(showStatsLabel(show)).toBe('jatkuu, 2 rotua, 12/90 tulosta')
+  })
+})
+
+describe('showDateBadgeParts', () => {
+  it('returns a single day for one-day shows', () => {
+    expect(showDateBadgeParts({ date: '14.06.', month: 'kesäkuu 2026' })).toEqual({
+      day: '14',
+      month: 'kesä',
+    })
+  })
+
+  it('returns a day range for same-month multi-day shows', () => {
+    expect(showDateBadgeParts({ date: '13.-14.06.', month: 'kesäkuu 2026' })).toEqual({
+      day: '13–14',
+      month: 'kesä',
+      range: true,
+    })
+  })
+
+  it('falls back to the start day for cross-month ranges', () => {
+    expect(showDateBadgeParts({ date: '31.01.-01.02.', month: 'helmikuu 2026' })).toEqual({
+      day: '31',
+      month: 'tammi',
+    })
+  })
+
+  it('degrades to the raw day when the date cannot be parsed', () => {
+    expect(showDateBadgeParts({ date: 'Tänään', month: 'kesäkuu 2026' })).toEqual({
+      day: 'Tänään',
+      month: '',
+    })
   })
 })
 

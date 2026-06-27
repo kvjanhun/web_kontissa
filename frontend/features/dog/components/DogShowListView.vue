@@ -1,30 +1,14 @@
 <script setup>
 import DogSearchClearButton from './DogSearchClearButton.vue'
+import DogShowDateBadge from './DogShowDateBadge.vue'
 import DogStateBlock from './DogStateBlock.vue'
 import {
   formatShowFullDate,
-  formatShowDay,
   formatTimestamp,
   hasShowStats,
   showStatItems,
   showStatsLabel,
 } from '../dogResults.js'
-
-const FINNISH_MONTHS_SHORT = [
-  'tammi', 'helmi', 'maalis', 'huhti', 'touko', 'kesä',
-  'heinä', 'elo', 'syys', 'loka', 'marras', 'joulu'
-]
-
-function getShowDateParts(dateStr) {
-  const match = String(dateStr || '').match(/(\d{1,2})\.(\d{1,2})\./)
-  if (match) {
-    const day = parseInt(match[1], 10)
-    const monthIndex = parseInt(match[2], 10) - 1
-    const month = FINNISH_MONTHS_SHORT[monthIndex] || ''
-    return { day, month }
-  }
-  return { day: formatShowDay(dateStr), month: '' }
-}
 
 defineProps({
   filterText: {
@@ -144,10 +128,7 @@ defineEmits([
           class="dog-show-row"
           @click="$emit('select-search-result', result)"
         >
-          <span class="dog-show-date">
-            <span class="dog-show-date-day">{{ getShowDateParts(result.show.date).day }}</span>
-            <span class="dog-show-date-month">{{ getShowDateParts(result.show.date).month }}</span>
-          </span>
+          <DogShowDateBadge :date="result.show.date" :month="result.show.month" />
           <div class="dog-search-result-info">
             <div class="dog-show-body">
               <span class="dog-show-name">{{ result.show.name }}</span>
@@ -155,10 +136,11 @@ defineEmits([
                 <span
                   v-for="stat in showStatItems(result.show)"
                   :key="stat.key"
-                  :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
+                  :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live', stat.paused && 'dog-show-stat-paused']"
                   :title="stat.title"
                 >
                   <span v-if="stat.live" class="dog-live-dot" />
+                  <span v-else-if="stat.paused" class="dog-paused-dot" />
                   {{ stat.label }}
                 </span>
               </span>
@@ -209,20 +191,18 @@ defineEmits([
             class="dog-show-row dog-show-row-featured"
             @click="$emit('open-show', show)"
           >
-            <span class="dog-show-date">
-              <span class="dog-show-date-day">{{ getShowDateParts(show.date).day }}</span>
-              <span class="dog-show-date-month">{{ getShowDateParts(show.date).month }}</span>
-            </span>
+            <DogShowDateBadge :date="show.date" :month="show.month" />
             <span class="dog-show-body">
               <span class="dog-show-name">{{ show.name }}</span>
               <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
                 <span
                   v-for="stat in showStatItems(show)"
                   :key="stat.key"
-                  :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
+                  :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live', stat.paused && 'dog-show-stat-paused']"
                   :title="stat.title"
                 >
                   <span v-if="stat.live" class="dog-live-dot" />
+                  <span v-else-if="stat.paused" class="dog-paused-dot" />
                   {{ stat.label }}
                 </span>
               </span>
@@ -264,20 +244,18 @@ defineEmits([
                 class="dog-show-row"
                 @click="$emit('open-show', show)"
               >
-                <span class="dog-show-date">
-                  <span class="dog-show-date-day">{{ getShowDateParts(show.date).day }}</span>
-                  <span class="dog-show-date-month">{{ getShowDateParts(show.date).month }}</span>
-                </span>
+                <DogShowDateBadge :date="show.date" :month="show.month" />
                 <span class="dog-show-body">
                   <span class="dog-show-name">{{ show.name }}</span>
                   <span v-if="hasShowStats(show)" class="dog-show-stats" :aria-label="showStatsLabel(show)">
                     <span
                       v-for="stat in showStatItems(show)"
                       :key="stat.key"
-                      :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live']"
+                      :class="['dog-show-stat', stat.soft && 'dog-show-stat-soft', stat.live && 'dog-show-stat-live', stat.paused && 'dog-show-stat-paused']"
                       :title="stat.title"
                     >
                       <span v-if="stat.live" class="dog-live-dot" />
+                      <span v-else-if="stat.paused" class="dog-paused-dot" />
                       {{ stat.label }}
                     </span>
                   </span>

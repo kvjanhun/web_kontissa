@@ -732,6 +732,11 @@
   font-weight: 800;
   color: var(--dog-accent);
 }
+/* Multi-day range ("13–14") needs a smaller glyph to fit the square box. */
+.dog-show-date-day-range {
+  font-size: 0.82rem;
+  letter-spacing: -0.02em;
+}
 .dog-show-date-month {
   font-size: 0.62rem;
   font-weight: 700;
@@ -801,6 +806,14 @@
   border-color: var(--dog-accent-2);
   background: var(--dog-accent-2);
   font-weight: 600;
+}
+/* "Jatkuu": a multi-day show paused for the night/evening. Calmer (outlined amber,
+   no pulse) than the active "Käynnissä" badge so it reads as resting, not live. */
+.dog-show-stat-paused {
+  color: var(--dog-accent-3);
+  border-color: color-mix(in srgb, var(--dog-accent-3) 40%, var(--dog-border));
+  background: color-mix(in srgb, var(--dog-accent-3) 12%, var(--dog-surface-el));
+  font-weight: 700;
 }
 .dog-search-full-date {
   display: block;
@@ -1928,6 +1941,18 @@
     transform: scale(0.95);
     box-shadow: 0 0 0 0 color-mix(in srgb, var(--dog-accent) 0%, transparent);
   }
+}
+
+/* Static (non-pulsing) counterpart to .dog-live-dot for the "Jatkuu" badge. */
+.dog-paused-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  background-color: var(--dog-accent-3);
+  border-radius: 50%;
+  margin-right: 0.35rem;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 /* ═══ Responsive ═══ */

@@ -10,7 +10,9 @@ from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import showlink as dog_showlink
 from app.dog_show import store as dog_store
 from app.dog_show import db as dog_db
-from app.dog_show.utils import _is_recent_show, _show_result_availability
+from app.dog_show.utils import (
+    _is_recent_show, _result_doc_last_result_at, _show_live_phase, _show_result_availability,
+)
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -306,6 +308,116 @@ def test_show_stats_include_live_result_progress(client):
     )
     assert uncached_live_stats["is_live"] is True
     assert "result_count" not in uncached_live_stats
+
+
+def _dt(year, month, day, hour, minute=0):
+    return dog_module.datetime.datetime(year, month, day, hour, minute)
+
+
+def test_show_live_phase_multiday_nightly_hiatus():
+    # Two-day show: Saturday 27th (start) → Sunday 28th (end, final day).
+    show = {"date": "27.-28.06.", "month": "kesäkuu 2026"}
+
+    # Active during each day's judging window.
+    assert _show_live_phase(show, now=_dt(2026, 6, 27, 12)) == "active"
+    assert _show_live_phase(show, now=_dt(2026, 6, 28, 12)) == "active"
+
+    # Paused through the Saturday→Sunday lull (evening, overnight, and the early
+    # Sunday morning that rolls past midnight before judging resumes).
+    assert _show_live_phase(show, now=_dt(2026, 6, 27, 22)) == "paused"
+    assert _show_live_phase(show, now=_dt(2026, 6, 28, 3)) == "paused"
+
+    # The first day's pre-dawn (show not started) and the final day's wind-down
+    # (no following day) both stay active rather than reading as "continues".
+    assert _show_live_phase(show, now=_dt(2026, 6, 27, 5)) == "active"
+    assert _show_live_phase(show, now=_dt(2026, 6, 28, 22)) == "active"
+
+
+def test_show_live_phase_evening_stall_only_on_non_final_day():
+    show = {"date": "27.-28.06.", "month": "kesäkuu 2026"}
+
+    # Saturday evening (>= 17:00) with no new results for over two hours: the day
+    # has wound down early and Sunday follows, so it reads as "paused".
+    stalled = _dt(2026, 6, 27, 18)
+    assert _show_live_phase(
+        show, now=stalled, last_result_at=_dt(2026, 6, 27, 15).timestamp()
+    ) == "paused"
+
+    # A fresh result keeps it active.
+    assert _show_live_phase(
+        show, now=stalled, last_result_at=_dt(2026, 6, 27, 17, 40).timestamp()
+    ) == "active"
+
+    # Midday stalls (before the evening floor) never flip — a slow big-breed ring
+    # or crawler lag must not fake a pause during active judging.
+    assert _show_live_phase(
+        show, now=_dt(2026, 6, 27, 13), last_result_at=_dt(2026, 6, 27, 9).timestamp()
+    ) == "active"
+
+    # On the final day an evening stall stays active (the show is wrapping up, not
+    # continuing); completion is handled separately by the live-finish grace.
+    assert _show_live_phase(
+        show, now=_dt(2026, 6, 28, 18), last_result_at=_dt(2026, 6, 28, 15).timestamp()
+    ) == "active"
+
+
+def test_show_live_phase_three_day_and_single_day():
+    three_day = {"date": "26.-28.06.", "month": "kesäkuu 2026"}  # Fri→Sun
+    assert _show_live_phase(three_day, now=_dt(2026, 6, 26, 22)) == "paused"  # Fri night
+    assert _show_live_phase(three_day, now=_dt(2026, 6, 27, 22)) == "paused"  # Sat night
+    assert _show_live_phase(three_day, now=_dt(2026, 6, 28, 22)) == "active"  # Sun (final)
+
+    single = {"date": "28.06.", "month": "kesäkuu 2026"}
+    assert _show_live_phase(single, now=_dt(2026, 6, 28, 22)) == "active"
+    assert _show_live_phase(single, now=_dt(2026, 6, 28, 3)) == "active"
+
+
+def test_result_doc_last_result_at_uses_result_bearing_breeds():
+    doc = {
+        "completed_breeds": {
+            "5:3": {"result_count": 5, "updated_at": 1000.0},
+            "5:4": {"result_count": 0, "updated_at": 9000.0},  # probed, no results
+            "9:296": {"result_count": 2, "updated_at": 1500.0},
+        },
+    }
+    assert _result_doc_last_result_at(doc) == 1500.0
+    assert _result_doc_last_result_at({}) is None
+    assert _result_doc_last_result_at({"completed_breeds": {"5:4": {"result_count": 0}}}) is None
+
+
+def test_show_stats_multiday_night_reads_as_paused(monkeypatch, client):
+    seed_index_show("13762", {
+        "title": "27.-28.06.2026 Turku KV",
+        "name": "Turku KV",
+        "date": "27.-28.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "villakoira", "count": 1, "group": "9", "breed_id": "296", "has_results": True},
+        ],
+    })
+    dog_module._save_result_cache_doc(13762, {
+        "status": "running",
+        "results": [{}, {}],
+        "completed_breeds": {"5:3": {"result_count": 2, "updated_at": 1000.0}},
+    })
+
+    # Saturday night, with Sunday still to come: nightly hiatus, not "Käynnissä".
+    night = _dt(2026, 6, 27, 22)
+    monkeypatch.setattr(dog_indexing, "_stats_now_for_today", lambda today: night)
+
+    stats = dog_module._show_stats_from_index(
+        13762,
+        show={"id": 13762, "date": "27.-28.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 27),
+    )
+
+    assert stats["show_state"] == "live"
+    assert stats["is_live"] is False
+    assert stats["is_paused"] is True
+    # Today's results are still reported overnight so the row keeps "n/N tulosta".
+    assert stats["entry_count"] == 3
+    assert stats["result_count"] == 2
 
 
 def test_show_stats_ignore_empty_single_breed_specialty_cache(client):

@@ -100,6 +100,49 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(0)
   })
 
+  test('paused multi-day show shows Jatkuu, today’s results, and a date range', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 13762,
+              date: '13.-14.06.',
+              name: 'Turku KV',
+              month: 'kesäkuu 2026',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=13762',
+              stats: {
+                indexed: true,
+                breed_count: 2,
+                entry_count: 90,
+                result_count: 12,
+                is_live: false,
+                is_paused: true,
+                show_state: 'live',
+              },
+            },
+          ],
+          index: {
+            indexed_show_count: 1,
+            total_show_count: 1,
+            last_updated: 1781431200,
+            last_updated_iso: '2026-06-14T10:00:00Z',
+          },
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+
+    await expect(page.getByRole('button', { name: /Turku KV/ })).toBeVisible({ timeout: 10000 })
+    await expect(page.getByText('Jatkuu')).toBeVisible()
+    await expect(page.getByText('Käynnissä')).toHaveCount(0)
+    await expect(page.getByText('12/90 tulosta')).toBeVisible()
+    // Calendar box renders the multi-day range, not just the first day.
+    await expect(page.getByText('13–14')).toBeVisible()
+  })
+
   test('browser back restores the previous dog page view', async ({ page }) => {
     await page.route('**/api/dog/shows', async route => {
       await route.fulfill({

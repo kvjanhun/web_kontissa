@@ -4,6 +4,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from .config import (
     FINNISH_MONTHS, RESULT_CACHE_BIS_FINAL_GRACE_SECONDS, RESULT_LOCAL_TIMEZONE,
+    RESULT_PAUSE_EVENING_HOUR, RESULT_PAUSE_STALL_SECONDS,
     RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
 )
 
@@ -165,6 +166,30 @@ def _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=None)
         return False
 
     return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+
+def _result_doc_last_result_at(doc):
+    """Unix timestamp of the most recent breed that actually produced results.
+
+    Each completed breed records the fetch time on `completed_breeds[*].updated_at`;
+    already-completed breeds are not re-fetched on live passes and re-probed
+    no-result breeds keep `result_count: 0`, so the max over result-bearing breeds
+    is the time new results were last available. Returns None when unknown."""
+    if not isinstance(doc, dict):
+        return None
+
+    latest = None
+    for entry in (doc.get("completed_breeds") or {}).values():
+        if not isinstance(entry, dict):
+            continue
+        try:
+            if int(entry.get("result_count") or 0) <= 0:
+                continue
+        except (TypeError, ValueError):
+            continue
+        ts = entry.get("updated_at")
+        if isinstance(ts, (int, float)) and (latest is None or ts > latest):
+            latest = ts
+    return latest
 
 def _month_year_from_label(month_str):
     if not month_str:
@@ -361,3 +386,59 @@ def _show_result_availability(
         "show_state": "past",
         "reason": "past_show",
     }
+
+def _show_live_phase(
+    show,
+    now=None,
+    availability=None,
+    last_result_at=None,
+    stall_seconds=RESULT_PAUSE_STALL_SECONDS,
+    stall_from_hour=RESULT_PAUSE_EVENING_HOUR,
+):
+    """For a show whose date-state is already "live", classify the moment as
+    "active" (Käynnissä) or "paused" (Jatkuu).
+
+    "paused" is the multi-day nightly/evening lull *before another show day*: the
+    21:00–06:00 quiet window, or a long result stall during the evening wind-down.
+    The first day's pre-dawn and the final day's wind-down stay "active" so the
+    show only reads as "continuing" when judging genuinely resumes later."""
+    now = now or _local_now()
+    if isinstance(now, datetime.date) and not isinstance(now, datetime.datetime):
+        now = datetime.datetime.combine(now, datetime.time(hour=12))
+
+    today = now.date()
+    start_date, end_date = _parse_show_date_range(show, today=today)
+    if not start_date or not end_date:
+        return "active"
+
+    availability = availability or _show_result_availability(show, now=now)
+    morning_hour = availability.get("morning_hour", RESULT_SHOW_MORNING_HOUR)
+    evening_hour = availability.get("evening_hour", RESULT_SHOW_EVENING_HOUR)
+
+    if now.hour < morning_hour:
+        # Overnight / early morning: the next active period is later today.
+        next_active_date = today
+        in_lull = True
+    elif now.hour >= evening_hour:
+        # Evening / overnight: the next active period is tomorrow.
+        next_active_date = today + datetime.timedelta(days=1)
+        in_lull = True
+    else:
+        # Daytime. Treat a long result stall in the evening wind-down as the day
+        # ending early; the next active period is then the following day.
+        next_active_date = today + datetime.timedelta(days=1)
+        in_lull = (
+            now.hour >= stall_from_hour
+            and last_result_at is not None
+            and (now.timestamp() - last_result_at) >= stall_seconds
+        )
+
+    if not in_lull:
+        return "active"
+
+    # Only a lull that another in-range show day follows is "Jatkuu". Excludes the
+    # pre-show first morning (next_active_date == start_date) and the final day's
+    # wind-down (next_active_date past end_date).
+    if start_date < next_active_date <= end_date:
+        return "paused"
+    return "active"
