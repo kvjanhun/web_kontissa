@@ -3,7 +3,7 @@ import { test, expect } from './fixtures/auth.js'
 test.describe('Recipes', () => {
   test('redirects to login when not authenticated', async ({ page }) => {
     await page.goto('/recipes')
-    await expect(page).toHaveURL('/login')
+    await expect(page).toHaveURL(/\/login\?redirect=/)
   })
 
   test('shows recipe list when authenticated', async ({ authenticatedPage }) => {

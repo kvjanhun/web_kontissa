@@ -8,10 +8,21 @@ useHead({
 })
 
 const router = useRouter()
+const route = useRoute()
 const authStore = useAuthStore()
-const { user, isAuthenticated } = storeToRefs(authStore)
+const { user, isAuthenticated, isAdmin } = storeToRefs(authStore)
 const { login, logout } = authStore
 const { t } = useI18nStore()
+
+// Where to land after sign-in: the path the auth guard bounced us from, if it is a
+// safe same-site path; otherwise admins go to the panel and everyone else home.
+// The `?redirect=` guard rejects protocol-relative (`//host`) and backslash tricks
+// so the param can never be used as an open redirect to another origin.
+function redirectTarget() {
+  const r = route.query.redirect
+  if (typeof r === 'string' && /^\/(?![/\\])/.test(r)) return r
+  return isAdmin.value ? '/admin' : '/'
+}
 
 const email = ref('')
 const password = ref('')
@@ -23,7 +34,7 @@ async function handleSubmit() {
   loading.value = true
   try {
     await login(email.value, password.value)
-    router.push('/')
+    router.push(redirectTarget())
   } catch (e) {
     error.value = e.message
   } finally {

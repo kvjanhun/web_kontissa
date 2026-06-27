@@ -9,10 +9,12 @@ export default defineNuxtRouteMiddleware(async (to) => {
   // (handles direct URL navigation and page refresh)
   if (!isAuthenticated.value) await authStore.checkAuth()
 
+  // Bounce to login, remembering where they were headed so we can return them
+  // there after a successful sign-in (see pages/login.vue).
   if (to.meta.requiresAdmin && !isAdmin.value) {
-    return navigateTo('/login')
+    return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
   }
   if (to.meta.requiresAuth && !isAuthenticated.value) {
-    return navigateTo('/login')
+    return navigateTo({ path: '/login', query: { redirect: to.fullPath } })
   }
 })

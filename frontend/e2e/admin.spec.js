@@ -3,7 +3,19 @@ import { test, expect } from './fixtures/auth.js'
 test.describe('Admin', () => {
   test('non-admin redirected from admin page', async ({ authenticatedPage }) => {
     await authenticatedPage.goto('/admin')
-    await expect(authenticatedPage).toHaveURL('/login', { timeout: 10000 })
+    await expect(authenticatedPage).toHaveURL(/\/login/, { timeout: 10000 })
+  })
+
+  test('admin is returned to the panel after logging in via the form', async ({ page }) => {
+    // The exact flow a fresh visitor hits: open /admin, get bounced to login,
+    // sign in, and land back on the panel (not the home page).
+    await page.goto('/admin')
+    await expect(page).toHaveURL(/\/login\?redirect=/, { timeout: 10000 })
+    await page.fill('input#email', 'admin@test.com')
+    await page.fill('input#password', 'adminpass123')
+    await page.click('button[type="submit"]')
+    await expect(page).toHaveURL('/admin', { timeout: 10000 })
+    await expect(page.locator('.as-nav')).toBeVisible({ timeout: 10000 })
   })
 
   test('admin can access admin page', async ({ adminPage }) => {
