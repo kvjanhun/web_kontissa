@@ -49,15 +49,31 @@ def generate_sitemap():
 
     return Response(xml, mimetype="application/xml")
 
+def _resolve_within_dist(path):
+    """Resolve `path` against the dist root, returning (dist_root, real_path).
+
+    `real_path` is None when the request escapes dist via traversal. The second
+    branch of catch_all passes a path-derived value as the *directory* argument to
+    send_from_directory, which only guards its filename argument — so we contain
+    the resolved path here instead of trusting that call.
+    """
+    dist_root = os.path.realpath(DIST_DIR)
+    requested = os.path.realpath(os.path.join(dist_root, path))
+    if requested == dist_root or requested.startswith(dist_root + os.sep):
+        return dist_root, requested
+    return dist_root, None
+
+
 @core_bp.route("/<path:path>")
 @limiter.exempt
 def catch_all(path):
     """Serve static file from dist/ if it exists, otherwise fall back to SPA shell for client-side routing."""
-    file_path = os.path.join(DIST_DIR, path)
-    if os.path.isfile(file_path):
-        return send_from_directory(DIST_DIR, path)
-    index_path = os.path.join(DIST_DIR, path, "index.html")
-    if os.path.isfile(index_path):
-        return send_from_directory(os.path.join(DIST_DIR, path), "index.html")
+    dist_root, requested = _resolve_within_dist(path)
+    if requested is not None:
+        if os.path.isfile(requested):
+            return send_from_directory(dist_root, os.path.relpath(requested, dist_root))
+        index_path = os.path.join(requested, "index.html")
+        if os.path.isfile(index_path):
+            return send_from_directory(requested, "index.html")
     # SPA fallback: 200.html is a generic Nuxt shell (not pre-rendered for any specific route)
-    return send_from_directory(DIST_DIR, "200.html")
+    return send_from_directory(dist_root, "200.html")

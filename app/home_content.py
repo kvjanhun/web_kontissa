@@ -9,6 +9,7 @@ Conventions mirror app/routes.py (sections) and app/recipes.py: JSON only,
 `@admin_required` on mutations, 400/403/404/409 status codes.
 """
 import json
+import re
 
 from flask import Blueprint, request, jsonify
 from .models import db, HomeContent, Project, ProjectTranslation
@@ -91,6 +92,25 @@ def _validate_field_value(kind, value):
     return None, "unknown field type"
 
 
+# Links render via `:href` in the home components, where Vue does NOT block a
+# `javascript:`/`data:` URL. Only an admin can write these, but we still allow-list
+# safe forms (relative/anchor or http/https/mailto/tel) so a stored link can never
+# become a script-execution vector. Control chars are stripped first so an
+# obfuscated scheme like "java\tscript:" can't slip past.
+_HREF_SCHEME_RE = re.compile(r"^([a-z][a-z0-9+.\-]*):")
+_HREF_ALLOWED_SCHEMES = ("http", "https", "mailto", "tel")
+
+
+def _is_safe_href(href):
+    stripped = re.sub(r"[\x00-\x20 ]+", "", href).lower()
+    if stripped.startswith(("/", "#", "./", "../")):
+        return True
+    match = _HREF_SCHEME_RE.match(stripped)
+    if not match:
+        return True  # no scheme → relative path
+    return match.group(1) in _HREF_ALLOWED_SCHEMES
+
+
 def _validate_links(value):
     if not isinstance(value, list):
         return None, "links must be a list"
@@ -104,6 +124,8 @@ def _validate_links(value):
         href = (item.get("href") or "").strip()
         if not label or not href:
             return None, f"link {i} needs a label and href"
+        if not _is_safe_href(href):
+            return None, f"link {i} href must be a relative path or http/https/mailto/tel URL"
         cleaned.append({"label": label, "href": href})
     return cleaned, None
 

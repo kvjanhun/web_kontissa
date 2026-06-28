@@ -118,7 +118,8 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 - **XSS**: Vue auto-escapes `{{ }}`. DB-backed home content (text blocks + projects) renders through `{{ }}`/`tm()`, never `v-html`.
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`).
 - **Network**: Container port 8080 on localhost only. Nginx handles TLS.
-- **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx. CSP in report-only mode. Config: `server/erez.ac.conf`.
+- **Proxy trust / rate limiting**: Flask sits behind exactly one trusted proxy (nginx), so `app.wsgi_app` is wrapped in `ProxyFix(x_for=1, x_proto=1)` in `app/__init__.py`. Without it `request.remote_addr` is the Docker bridge gateway and Flask-Limiter buckets every visitor together. nginx overwrites `X-Forwarded-For` with `$proxy_add_x_forwarded_for`, so the single rightmost hop is the real client and is not client-spoofable.
+- **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx (`server/erez.ac.conf`). The Content-Security-Policy is currently `Content-Security-Policy-Report-Only` (observed/reported, not enforced) and still allows `'unsafe-inline'` (Nuxt's inline `window.__NUXT__` payload + Tailwind). The plan is to trial a tighter `script-src` here, then promote it back to an enforcing header.
 - **Webhook**: Token-validated, runs as unprivileged user.
 - **Intrusion response**: host fail2ban service bans scanners / auth-brute-force / 429 abusers (across both vhosts) in the iptables `INPUT` chain and reports them to AbuseIPDB; a daily cron consumes AbuseIPDB's blocklist into an ipset for pre-emptive drops. Bans surface in Grafana (no Telegram). Config + runbook: `server/fail2ban/` and `server/abuseipdb-blocklist.sh`.
 

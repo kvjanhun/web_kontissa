@@ -6,6 +6,7 @@ from flask import Flask, request
 from flask_login import LoginManager
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 from .models import db, User
 
 structlog.configure(
@@ -24,6 +25,13 @@ structlog.configure(
 )
 
 app = Flask(__name__)
+# We sit behind exactly one trusted proxy (nginx), which overwrites
+# X-Forwarded-For with `$proxy_add_x_forwarded_for` (real client appended last).
+# Without this, request.remote_addr is the Docker bridge gateway, so the rate
+# limiter keys every visitor into one shared bucket. x_for=1 takes the single
+# rightmost (nginx-added) hop, so a client-supplied X-Forwarded-For can't spoof
+# it. x_proto=1 lets Flask see the original https scheme.
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 app.config["TESTING"] = os.environ.get("TESTING") in {"1", "true", "True"}
 app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
     "DATABASE_URI", "sqlite:////app/data/site.db"
@@ -86,7 +94,9 @@ def _count_requests():
     structlog.contextvars.bind_contextvars(
         path=request.path,
         method=request.method,
-        ip=request.headers.get("X-Forwarded-For", request.remote_addr)
+        # ProxyFix has already resolved this to the real client IP (the
+        # nginx-added X-Forwarded-For hop), not the Docker bridge gateway.
+        ip=request.remote_addr,
     )
 
 
