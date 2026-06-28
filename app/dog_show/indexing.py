@@ -11,7 +11,8 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _result_doc_last_result_at, _result_doc_live_bis_grace_finished,
+    _parse_show_date, _result_doc_has_main_bis, _result_doc_has_show_finals,
+    _result_doc_last_result_at, _result_doc_live_bis_grace_finished,
     _result_doc_live_entry_completion_grace_finished, _show_age_days,
     _show_date_state, _show_live_phase, _show_result_availability, _utc_iso,
 )
@@ -109,6 +110,25 @@ def _show_item_for_stats(show_id, show=None):
         }
     return _show_list_item_for_id(show_id)
 
+def _show_expects_main_bis(show_id, doc=None):
+    """Whether the show is expected to crown a main Best in Show.
+
+    True for all-breed shows (indexed breeds spanning multiple FCI groups) or
+    any cache that already records show-wide finals (group/junior/veteran BIS).
+    Used to keep the show live through the finals instead of settling the
+    moment every breed ring has finished."""
+    if _result_doc_has_show_finals(doc):
+        return True
+    indexed = _indexed_show(show_id) or {}
+    groups = set()
+    for breed in indexed.get("breeds") or []:
+        group = str(breed.get("group") or "").strip()
+        if group.isdigit():
+            groups.add(group)
+            if len(groups) >= 2:
+                return True
+    return False
+
 def _show_stats_from_index(show_id, show=None, today=None):
     indexed_show = _show_index.get("shows", {}).get(str(show_id))
     if not indexed_show:
@@ -142,7 +162,18 @@ def _show_stats_from_index(show_id, show=None, today=None):
             stats_timestamp,
             entry_count=entry_count if entry_count_known else None,
         ):
-            live_finished_by = "entries"
+            # Every breed ring is judged, but all-breed shows crown the group
+            # finals and main Best in Show afterwards. Mirror the result-cache
+            # TTL guard: a show still expecting a main BIS (BIS-1 not yet
+            # recorded) stays live rather than settling on breed completion
+            # alone — otherwise the badge reads "done" while only BIS JUN/VET
+            # have happened and the main ring is still to come.
+            awaiting_main_bis = (
+                _show_expects_main_bis(show_id, result_doc)
+                and not _result_doc_has_main_bis(result_doc)
+            )
+            if not awaiting_main_bis:
+                live_finished_by = "entries"
         if live_finished_by:
             show_state = "past"
     result_breeds_for_cache = _result_breeds_for_cache(

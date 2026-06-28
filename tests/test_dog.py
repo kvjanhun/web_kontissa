@@ -1614,6 +1614,50 @@ def test_live_show_stats_stop_after_entry_completion_grace(client):
     assert dog_result_cache._result_cache_doc_is_fresh(14079, dog_module._load_result_cache_doc(14079), now=noon) is True
 
 
+def test_live_show_stats_stay_live_until_main_bis(client):
+    """An all-breed show crowns junior/veteran/group finals and the main Best in
+    Show after every breed ring is judged. Entry completion alone (with BIS-1
+    still pending) must not flip the stats to "done" — that shut shows like
+    Turku KV / Rovaniemi KV down while only BIS JUN/VET had happened."""
+    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    seed_index_show("13762", {
+        "title": "20.06.2026 Turku KV",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaaninvinttikoira", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+        ],
+    })
+    grace = dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+    dog_module._save_result_cache_doc(13762, {
+        "status": "complete",
+        "cached_at": noon - grace - 1,
+        "live_result_entry_completion_at": noon - grace - 1,
+        "total_breeds": 2,
+        "completed_breeds": {
+            "5:3": {"name": "basenji", "result_count": 2},
+            "10:7": {"name": "afgaaninvinttikoira", "result_count": 2},
+        },
+        "results": [
+            {"name": "Junior", "breedGroup": "10", "breedId": "7", "awards": "SA, JUN ROP, BIS JUN-1"},
+            {"name": "Veteran", "breedGroup": "5", "breedId": "3", "awards": "SA, VET ROP, BIS VET-1"},
+            {"name": "C", "breedGroup": "5", "breedId": "3", "awards": "SA"},
+            {"name": "D", "breedGroup": "10", "breedId": "7", "awards": "EH"},
+        ],
+    })
+
+    stats = dog_module._show_stats_from_index(
+        13762,
+        show={"id": 13762, "date": "20.06.", "month": "kesäkuu 2026"},
+        today=dog_module.datetime.date(2026, 6, 20),
+    )
+
+    assert stats["show_state"] == "live"
+    assert stats["is_live"] is True
+    assert "live_finished_by" not in stats
+
+
 def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
     """All-breed shows decide group finals + Best in Show after every breed ring
     is judged, so entry completion must not settle the cache before BIS-1."""

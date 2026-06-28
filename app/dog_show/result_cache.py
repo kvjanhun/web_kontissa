@@ -11,8 +11,8 @@ from .indexing import (
     _mark_single_probe_breed_result_available, _persist_show_detail_to_index,
     _result_cache_doc_needs_result_refresh,
     _result_breeds_for_cache, _result_breeds_from_index, _result_breeds_with_results,
-    _show_date_for_id, _show_result_availability_for_id, _update_index_breed_judge,
-    _update_index_breed_result_flag,
+    _show_date_for_id, _show_expects_main_bis, _show_result_availability_for_id,
+    _update_index_breed_judge, _update_index_breed_result_flag,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
@@ -146,25 +146,6 @@ def _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
 
     cached_at = (doc or {}).get("cached_at") or (doc or {}).get("updated_at") or 0
     return cached_at < final_due_at
-
-def _show_expects_main_bis(show_id, doc=None):
-    """Whether the show is expected to crown a main Best in Show.
-
-    True for all-breed shows (indexed breeds spanning multiple FCI groups) or
-    any cache that already records show-wide finals (group/junior/veteran BIS).
-    Used to keep the cache live through the finals instead of settling the
-    moment every breed ring has finished."""
-    if _result_doc_has_show_finals(doc):
-        return True
-    indexed = _indexed_show(show_id) or {}
-    groups = set()
-    for breed in indexed.get("breeds") or []:
-        group = str(breed.get("group") or "").strip()
-        if group.isdigit():
-            groups.add(group)
-            if len(groups) >= 2:
-                return True
-    return False
 
 def _result_cache_ttl_for_show(show_id, now, doc=None):
     availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
