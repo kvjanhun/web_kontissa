@@ -1939,6 +1939,76 @@ def test_finals_resweep_recaptures_winner_until_main_bis(monkeypatch, client):
     assert dog_result_cache._result_doc_has_main_bis(doc) is True
 
 
+def test_finals_resweep_captures_all_bis_after_bis1_lands(monkeypatch, client):
+    """BIS-1..4 each sit on a different winning breed's row. On a big show the
+    rotating sweep only covers a chunk per pass, so BIS-1 (early in the rotation)
+    lands several passes before BIS-4 (late in the rotation). The sweep must not
+    stop the instant BIS-1 appears, or BIS-4 is stranded — it keeps re-sweeping for
+    one full rotation afterwards. Mirrors Turku KV showing only 3 of 4 BIS."""
+    breeds = _seed_live_two_breed_show(
+        13903,
+        captured=["5:3", "10:7", "6:1", "7:2"],
+        results=[
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+            {"name": "Beagle", "breedName": "beagle", "breedGroup": "6", "breedId": "1", "awards": "SA, ROP"},
+            {"name": "Collie", "breedName": "collie", "breedGroup": "7", "breedId": "2", "awards": "SA, ROP"},
+        ],
+        extra_breeds=[
+            {"name": "beagle", "count": 2, "group": "6", "breed_id": "1", "has_results": True},
+            {"name": "collie", "count": 2, "group": "7", "breed_id": "2", "has_results": True},
+        ],
+    )
+    # BIS-1 is on the first breed in the rotation, BIS-4 on the last.
+    finals = {"5:3": "SA, ROP, RYP-1, BIS-1", "7:2": "SA, ROP, RYP-1, BIS-4"}
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        return {
+            "breed": breed,
+            "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": []},
+            "mapped_results": [{
+                "name": f"Winner-{key}", "breedName": breed["name"],
+                "breedGroup": breed["group"], "breedId": breed["breed_id"],
+                "awards": finals.get(key, "SA, ROP"),
+            }],
+            "fetched_at": 2.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13903, breeds, fake_fetch)
+    # One breed re-swept per pass, and never treat the just-saved cache as fresh, so
+    # each call advances the rotation by one breed (as it would across live passes).
+    monkeypatch.setattr(dog_result_cache, "RESULT_FINALS_SWEEP_BREED_LIMIT", 1)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+
+    def awards_present():
+        doc = dog_module._load_result_cache_doc(13903)
+        return {
+            token.strip().upper()
+            for r in doc["results"]
+            for token in str(r.get("awards") or "").split(",")
+            if token.strip()
+        }
+
+    # Pass 1 lands BIS-1 (first in the rotation); BIS-4 is still un-re-swept.
+    dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
+    assert "BIS-1" in awards_present()
+    assert "BIS-4" not in awards_present()
+
+    # A few more passes complete the post-BIS rotation and reach BIS-4's breed.
+    for _ in range(4):
+        dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
+
+    tokens = awards_present()
+    assert "BIS-1" in tokens and "BIS-4" in tokens
+    doc = dog_module._load_result_cache_doc(13903)
+    assert len(doc["results"]) == 4  # rows replaced in place, never duplicated
+    # The budgeted post-BIS rotation is spent, so the sweep settles instead of
+    # re-fetching the captured breeds forever.
+    assert doc.get("finals_post_bis_sweep_remaining") == 0
+
+
 def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
     final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
     now = final_due_at + 300

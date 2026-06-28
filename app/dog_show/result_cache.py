@@ -469,6 +469,7 @@ def _all_results_doc_base(show_id, source, existing=None):
         "finals_sweep_cursor": existing.get("finals_sweep_cursor", 0),
         "finals_sweep_breed_count": existing.get("finals_sweep_breed_count"),
         "finals_sweep_breed_limit": existing.get("finals_sweep_breed_limit"),
+        "finals_post_bis_sweep_remaining": existing.get("finals_post_bis_sweep_remaining"),
     }
 
 def _breed_result_cache_key(show_id, group, breed_id):
@@ -969,11 +970,18 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     ]
 
     # Finals re-sweep: when every newly-judged breed is already captured but the
-    # show still owes a main BIS (BIS-1 not recorded yet), re-check a bounded
-    # rotating chunk of captured breeds so the RYP/BIS placements appended to the
-    # winners' rows land — instead of re-crawling the whole show on every pass.
-    # Fires while live, and once on the post-show morning check (to catch a BIS-1
-    # published after the evening cutoff, which the live sweep can't see overnight).
+    # show still owes a main BIS, re-check a bounded rotating chunk of captured
+    # breeds so the RYP/BIS placements appended to the winners' rows land — instead
+    # of re-crawling the whole show on every pass. Fires while live, and once on the
+    # post-show morning check (to catch a BIS-1 published after the evening cutoff,
+    # which the live sweep can't see overnight).
+    #
+    # BIS-1..4 each sit on a different winning breed's row, and RYP is decided
+    # before BIS, so by the time BIS-1 appears every finals placement is already
+    # published. Stopping the moment BIS-1 is recorded therefore stranded BIS-2..4
+    # (and late RYP) on breed rows the rotation had not reached yet — Turku KV only
+    # captured 3 of 4 BIS. So once the first main BIS lands we budget exactly one
+    # further full rotation over the captured breeds before settling.
     new_result_breeds = [
         breed for breed in breeds_with_results
         if breed.get("has_results")
@@ -983,16 +991,28 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         (availability.get("show_state") == "live" and availability.get("can_fetch", True))
         or _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now)
     )
+    has_main_bis = _result_doc_has_main_bis(doc)
+    expects_main_bis = _show_expects_main_bis(show_id, doc)
+    if (
+        has_main_bis
+        and expects_main_bis
+        and doc.get("finals_post_bis_sweep_remaining") is None
+    ):
+        doc["finals_post_bis_sweep_remaining"] = len(completed_breeds)
+    post_bis_remaining = doc.get("finals_post_bis_sweep_remaining")
+    finals_sweep_active = (not has_main_bis) or (post_bis_remaining or 0) > 0
     finals_resweep = 0
     if (
         not new_result_breeds
         and finals_due_window
-        and _show_expects_main_bis(show_id, doc)
-        and not _result_doc_has_main_bis(doc)
+        and expects_main_bis
+        and finals_sweep_active
     ):
         resweep_breeds = _finals_resweep_breeds(breeds_with_results, completed_breeds, doc)
         pending_breeds = pending_breeds + resweep_breeds
         finals_resweep = len(resweep_breeds)
+        if post_bis_remaining is not None:
+            doc["finals_post_bis_sweep_remaining"] = max(0, post_bis_remaining - finals_resweep)
 
     # Bounded pass: crawl at most max_breeds this call; the rest resume next pass.
     pending_before_budget = len(pending_breeds)
