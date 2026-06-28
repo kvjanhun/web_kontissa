@@ -221,35 +221,57 @@ describe('award filters', () => {
     ])
   })
 
-  it('splits BIS JUN and BIS VET into per-day groups by catalog number on a multi-day show', () => {
+  it('splits BIS JUN/VET per day by ordering each placement, not by the largest number gap', () => {
+    // Day 1's finalists span a wide catalog range (#50 → #2200), so the largest gap
+    // in the merged number list sits *inside* day 1 (#50 → #2000), not between days.
+    // Gap-clustering put 1 dog on day 1 and 7 on day 2; per-placement ordering fixes it.
     const dogs = [
-      // Day 1 finals carry the low catalog numbers, day 2 the high ones.
-      { name: 'Jun d1 first', awards: 'BIS JUN-1', number: 18 },
-      { name: 'Jun d1 second', awards: 'BIS JUN-2', number: 60 },
-      { name: 'Jun d2 first', awards: 'BIS JUN-1', number: 1310 },
-      { name: 'Jun d2 second', awards: 'BIS JUN-2', number: 1402 },
-      { name: 'Vet d1 first', awards: 'BIS VET-1', number: 22 },
-      { name: 'Vet d2 first', awards: 'BIS VET-1', number: 1290 },
+      { name: 'Jun d1 r1', awards: 'BIS JUN-1', number: 50 },
+      { name: 'Jun d1 r2', awards: 'BIS JUN-2', number: 2000 },
+      { name: 'Jun d1 r3', awards: 'BIS JUN-3', number: 2100 },
+      { name: 'Jun d1 r4', awards: 'BIS JUN-4', number: 2200 },
+      { name: 'Jun d2 r1', awards: 'BIS JUN-1', number: 2600 },
+      { name: 'Jun d2 r2', awards: 'BIS JUN-2', number: 2700 },
+      { name: 'Jun d2 r3', awards: 'BIS JUN-3', number: 2800 },
+      { name: 'Jun d2 r4', awards: 'BIS JUN-4', number: 2900 },
       // Main BIS is left grouped (not split per day), per the chosen scope.
-      { name: 'Main d1', awards: 'BIS-1', number: 18 },
-      { name: 'Main d2', awards: 'BIS-1', number: 1310 },
+      { name: 'Main d1', awards: 'BIS-1', number: 50 },
+      { name: 'Main d2', awards: 'BIS-1', number: 2600 },
     ]
 
     const groups = groupResultsByAwardFilter(dogs, 'BIS')
 
     expect(groups.map(group => group.label)).toEqual([
       'BIS',
-      'BIS VET (1. päivä)',
-      'BIS VET (2. päivä)',
       'BIS JUN (1. päivä)',
       'BIS JUN (2. päivä)',
     ])
+    const byLabel = Object.fromEntries(groups.map(group => [
+      group.label,
+      group.dogs.map(dog => `${dog.awardRank}:${dog.name}`),
+    ]))
+    // Each day gets exactly one of each placement, 1..4 in order.
+    expect(byLabel['BIS JUN (1. päivä)']).toEqual(['1:Jun d1 r1', '2:Jun d1 r2', '3:Jun d1 r3', '4:Jun d1 r4'])
+    expect(byLabel['BIS JUN (2. päivä)']).toEqual(['1:Jun d2 r1', '2:Jun d2 r2', '3:Jun d2 r3', '4:Jun d2 r4'])
+    expect(byLabel['BIS']).toEqual(['1:Main d1', '1:Main d2'])
+  })
+
+  it('slots a partial placement (a day with fewer finalists) into the right day by number', () => {
+    // Day 1 crowns a full BIS VET 1–4; day 2 only 1–2. The lone rank-3/4 dogs carry
+    // day-1 numbers, so they must land on day 1 even though day 2 exists.
+    const dogs = [
+      { name: 'd1 r1', awards: 'BIS VET-1', number: 30 },
+      { name: 'd1 r2', awards: 'BIS VET-2', number: 60 },
+      { name: 'd1 r3', awards: 'BIS VET-3', number: 90 },
+      { name: 'd1 r4', awards: 'BIS VET-4', number: 120 },
+      { name: 'd2 r1', awards: 'BIS VET-1', number: 1500 },
+      { name: 'd2 r2', awards: 'BIS VET-2', number: 1560 },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'BIS')
     const byLabel = Object.fromEntries(groups.map(group => [group.label, group.dogs.map(dog => dog.name)]))
-    expect(byLabel['BIS JUN (1. päivä)']).toEqual(['Jun d1 first', 'Jun d1 second'])
-    expect(byLabel['BIS JUN (2. päivä)']).toEqual(['Jun d2 first', 'Jun d2 second'])
-    expect(byLabel['BIS VET (1. päivä)']).toEqual(['Vet d1 first'])
-    expect(byLabel['BIS VET (2. päivä)']).toEqual(['Vet d2 first'])
-    expect(byLabel['BIS']).toEqual(['Main d1', 'Main d2'])
+    expect(byLabel['BIS VET (1. päivä)']).toEqual(['d1 r1', 'd1 r2', 'd1 r3', 'd1 r4'])
+    expect(byLabel['BIS VET (2. päivä)']).toEqual(['d2 r1', 'd2 r2'])
   })
 
   it('leaves single-day BIS JUN and BIS VET ungrouped (no per-day split)', () => {

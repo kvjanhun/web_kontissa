@@ -616,46 +616,65 @@ export function sortDogsByAwardFilter(results = [], filter = '') {
 // BIS JUN and BIS VET (junior / veteran Best in Show) are judged once per show day
 // on a multi-day event, out of that day's breed groups — so a two-day show crowns
 // two BIS JUN-1s, two BIS VET-1s, and so on. Showlink carries no per-result date,
-// but catalog numbers run in ascending day-blocks (day 1 low, day 2 high), so each
-// of those categories is split into per-day buckets by clustering catalog numbers.
-// The day count comes from how many times the top placement repeats (two "rank 1"s
-// ⇒ two rings ⇒ two days), which is steadier than guessing a gap threshold. Main
-// BIS and group RYP are intentionally left grouped.
+// but catalog numbers run in ascending per-day blocks (day 1 low, day 2 high). The
+// day count is how many times the top placement repeats (two "rank 1"s ⇒ two rings
+// ⇒ two days); dogs are assigned to days by ordering *each placement's* winners by
+// catalog number (lowest = day 1). Comparing numbers only within a placement — never
+// across placements — is what makes this robust: a single day's finalists come from
+// many breeds and span a wide number range, so the largest gap in the merged list is
+// often inside one day, not between days. Main BIS and group RYP are left grouped.
 const PER_DAY_FINALS_CATEGORY_KEYS = new Set(['BIS:JUN', 'BIS:VET'])
 
 function clusterFinalsEntriesByDay(entries) {
-  const rankCounts = new Map()
+  const byRank = new Map()
   entries.forEach((entry) => {
-    const rank = entry.details.displayRank
-    if (rank != null) rankCounts.set(rank, (rankCounts.get(rank) || 0) + 1)
+    const key = entry.details.displayRank == null ? 'x' : entry.details.displayRank
+    if (!byRank.has(key)) byRank.set(key, [])
+    byRank.get(key).push(entry)
   })
-  const dayCount = Math.max(1, ...rankCounts.values())
+  const dayCount = Math.max(1, ...[...byRank.values()].map((list) => list.length))
   if (dayCount <= 1) return [entries]
 
   const numberOf = (entry) => {
     const value = Number(entry.dog?.number)
     return Number.isFinite(value) ? value : Infinity
   }
-  const sorted = [...entries].sort((left, right) => numberOf(left) - numberOf(right))
+  const days = Array.from({ length: dayCount }, () => [])
 
-  // Cut at the largest (dayCount - 1) gaps between consecutive catalog numbers.
-  const gaps = []
-  for (let i = 1; i < sorted.length; i += 1) {
-    const prev = numberOf(sorted[i - 1])
-    const cur = numberOf(sorted[i])
-    if (Number.isFinite(prev) && Number.isFinite(cur)) {
-      gaps.push({ index: i, size: cur - prev })
-    }
-  }
-  gaps.sort((left, right) => right.size - left.size || left.index - right.index)
-  const cutIndices = new Set(gaps.slice(0, dayCount - 1).map((gap) => gap.index))
-
-  const clusters = [[]]
-  sorted.forEach((entry, index) => {
-    if (cutIndices.has(index)) clusters.push([])
-    clusters[clusters.length - 1].push(entry)
+  // Anchor the day order with the "full" placements (awarded on every day): for one
+  // placement, the lowest-numbered winner is day 1, the next day 2, and so on.
+  const fullRanks = []
+  const partialRanks = []
+  byRank.forEach((list) => {
+    (list.length === dayCount ? fullRanks : partialRanks).push(list)
   })
-  return clusters
+  fullRanks.forEach((list) => {
+    [...list]
+      .sort((left, right) => numberOf(left) - numberOf(right))
+      .forEach((entry, dayIndex) => days[dayIndex].push(entry))
+  })
+
+  // Boundaries between consecutive day blocks (midpoint of one day's highest anchored
+  // number and the next day's lowest), used to slot partial placements — a day that
+  // crowned fewer finalists than another — into the right day by catalog number.
+  const dayNumbers = days.map((list) => list.map(numberOf).filter(Number.isFinite))
+  const boundaries = []
+  for (let d = 0; d < dayCount - 1; d += 1) {
+    const curMax = dayNumbers[d].length ? Math.max(...dayNumbers[d]) : -Infinity
+    const nextMin = dayNumbers[d + 1].length ? Math.min(...dayNumbers[d + 1]) : Infinity
+    boundaries.push((curMax + nextMin) / 2)
+  }
+  const dayForNumber = (number) => {
+    for (let d = 0; d < boundaries.length; d += 1) {
+      if (number <= boundaries[d]) return d
+    }
+    return dayCount - 1
+  }
+  partialRanks.forEach((list) => {
+    list.forEach((entry) => days[dayForNumber(numberOf(entry))].push(entry))
+  })
+
+  return days
 }
 
 function splitPerDayFinals(entries) {
