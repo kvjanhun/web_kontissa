@@ -221,6 +221,49 @@ describe('award filters', () => {
     ])
   })
 
+  it('splits BIS JUN and BIS VET into per-day groups by catalog number on a multi-day show', () => {
+    const dogs = [
+      // Day 1 finals carry the low catalog numbers, day 2 the high ones.
+      { name: 'Jun d1 first', awards: 'BIS JUN-1', number: 18 },
+      { name: 'Jun d1 second', awards: 'BIS JUN-2', number: 60 },
+      { name: 'Jun d2 first', awards: 'BIS JUN-1', number: 1310 },
+      { name: 'Jun d2 second', awards: 'BIS JUN-2', number: 1402 },
+      { name: 'Vet d1 first', awards: 'BIS VET-1', number: 22 },
+      { name: 'Vet d2 first', awards: 'BIS VET-1', number: 1290 },
+      // Main BIS is left grouped (not split per day), per the chosen scope.
+      { name: 'Main d1', awards: 'BIS-1', number: 18 },
+      { name: 'Main d2', awards: 'BIS-1', number: 1310 },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'BIS')
+
+    expect(groups.map(group => group.label)).toEqual([
+      'BIS',
+      'BIS VET (1. päivä)',
+      'BIS VET (2. päivä)',
+      'BIS JUN (1. päivä)',
+      'BIS JUN (2. päivä)',
+    ])
+    const byLabel = Object.fromEntries(groups.map(group => [group.label, group.dogs.map(dog => dog.name)]))
+    expect(byLabel['BIS JUN (1. päivä)']).toEqual(['Jun d1 first', 'Jun d1 second'])
+    expect(byLabel['BIS JUN (2. päivä)']).toEqual(['Jun d2 first', 'Jun d2 second'])
+    expect(byLabel['BIS VET (1. päivä)']).toEqual(['Vet d1 first'])
+    expect(byLabel['BIS VET (2. päivä)']).toEqual(['Vet d2 first'])
+    expect(byLabel['BIS']).toEqual(['Main d1', 'Main d2'])
+  })
+
+  it('leaves single-day BIS JUN and BIS VET ungrouped (no per-day split)', () => {
+    const dogs = [
+      { name: 'Jun one', awards: 'BIS JUN-1', number: 12 },
+      { name: 'Jun two', awards: 'BIS JUN-2', number: 40 },
+      { name: 'Vet one', awards: 'BIS VET-1', number: 8 },
+    ]
+
+    const groups = groupResultsByAwardFilter(dogs, 'BIS')
+
+    expect(groups.map(group => group.label)).toEqual(['BIS VET', 'BIS JUN'])
+  })
+
   it('groups ROP and VSP results by category with winners first', () => {
     const dogs = [
       { name: 'Veteran opposite', breedName: 'Basenji', breedGroup: '6', breedId: '1', awards: 'VET VSP' },

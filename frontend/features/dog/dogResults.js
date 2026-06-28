@@ -613,6 +613,77 @@ export function sortDogsByAwardFilter(results = [], filter = '') {
   ))
 }
 
+// BIS JUN and BIS VET (junior / veteran Best in Show) are judged once per show day
+// on a multi-day event, out of that day's breed groups — so a two-day show crowns
+// two BIS JUN-1s, two BIS VET-1s, and so on. Showlink carries no per-result date,
+// but catalog numbers run in ascending day-blocks (day 1 low, day 2 high), so each
+// of those categories is split into per-day buckets by clustering catalog numbers.
+// The day count comes from how many times the top placement repeats (two "rank 1"s
+// ⇒ two rings ⇒ two days), which is steadier than guessing a gap threshold. Main
+// BIS and group RYP are intentionally left grouped.
+const PER_DAY_FINALS_CATEGORY_KEYS = new Set(['BIS:JUN', 'BIS:VET'])
+
+function clusterFinalsEntriesByDay(entries) {
+  const rankCounts = new Map()
+  entries.forEach((entry) => {
+    const rank = entry.details.displayRank
+    if (rank != null) rankCounts.set(rank, (rankCounts.get(rank) || 0) + 1)
+  })
+  const dayCount = Math.max(1, ...rankCounts.values())
+  if (dayCount <= 1) return [entries]
+
+  const numberOf = (entry) => {
+    const value = Number(entry.dog?.number)
+    return Number.isFinite(value) ? value : Infinity
+  }
+  const sorted = [...entries].sort((left, right) => numberOf(left) - numberOf(right))
+
+  // Cut at the largest (dayCount - 1) gaps between consecutive catalog numbers.
+  const gaps = []
+  for (let i = 1; i < sorted.length; i += 1) {
+    const prev = numberOf(sorted[i - 1])
+    const cur = numberOf(sorted[i])
+    if (Number.isFinite(prev) && Number.isFinite(cur)) {
+      gaps.push({ index: i, size: cur - prev })
+    }
+  }
+  gaps.sort((left, right) => right.size - left.size || left.index - right.index)
+  const cutIndices = new Set(gaps.slice(0, dayCount - 1).map((gap) => gap.index))
+
+  const clusters = [[]]
+  sorted.forEach((entry, index) => {
+    if (cutIndices.has(index)) clusters.push([])
+    clusters[clusters.length - 1].push(entry)
+  })
+  return clusters
+}
+
+function splitPerDayFinals(entries) {
+  const byCategory = new Map()
+  entries.forEach((entry) => {
+    const key = entry.details.categoryKey
+    if (!PER_DAY_FINALS_CATEGORY_KEYS.has(key)) return
+    if (!byCategory.has(key)) byCategory.set(key, [])
+    byCategory.get(key).push(entry)
+  })
+
+  byCategory.forEach((categoryEntries) => {
+    const days = clusterFinalsEntriesByDay(categoryEntries)
+    if (days.length <= 1) return
+    days.forEach((dayEntries, dayIndex) => {
+      const day = dayIndex + 1
+      dayEntries.forEach((entry) => {
+        entry.details = {
+          ...entry.details,
+          categoryKey: `${entry.details.categoryKey}:day${day}`,
+          categoryLabel: `${entry.details.categoryLabel} (${day}. päivä)`,
+          categorySort: `${entry.details.categorySort}:${String(day).padStart(2, '0')}`,
+        }
+      })
+    })
+  })
+}
+
 export function groupResultsByAwardFilter(results = [], filter = '') {
   if (!filter) return []
   const groups = new Map()
@@ -626,6 +697,8 @@ export function groupResultsByAwardFilter(results = [], filter = '') {
       entries.push({ dog, details: dogDetails })
     })
   })
+
+  if (normalizeAward(filter) === 'BIS') splitPerDayFinals(entries)
 
   entries.sort((left, right) => (
     compareAwardDetails(left.details, right.details)
