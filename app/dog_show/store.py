@@ -33,6 +33,9 @@ _show_index = {"shows": {}, "last_updated": 0}
 # the DB on every write; when the stored value moves ahead of this, we reload.
 _index_generation = None
 
+# Wall-clock of the last generation check, to throttle rebuilds (see _load_index).
+_last_index_check_ts = 0.0
+
 # Show ids whose mirror entry changed since the last flush. _save_index() writes
 # only these (one show = a handful of rows) instead of rewriting all ~47k breed
 # rows every time a single judge or result flag is folded in.
@@ -54,12 +57,28 @@ def _load_index(force=False):
     Cheap generation check on every call (a single keyed lookup), full rebuild
     only when something actually changed — mirroring the old mtime-gated JSON
     reload. Returns True when the mirror was reloaded.
+
+    Throttle: once the mirror exists, skip the check entirely for
+    INDEX_RELOAD_MIN_INTERVAL seconds. A single request re-enters this several
+    times (once per live show, via _result_cache_due), and a busy live show makes
+    the crawler bump the generation often, so without a floor each call did a full
+    read_index rebuild and starved the workers. force=True (used after our own
+    writes) always bypasses the throttle.
     """
-    global _index_generation
+    global _index_generation, _last_index_check_ts
+
+    now = time.time()
+    if (
+        not force
+        and _index_generation is not None
+        and (now - _last_index_check_ts) < config.INDEX_RELOAD_MIN_INTERVAL
+    ):
+        return False
 
     try:
         with dog_db.session_scope() as session:
             generation = sqlstore.get_index_generation(session)
+            _last_index_check_ts = now
             if not force and _index_generation is not None and generation == _index_generation:
                 return False
             new_index = sqlstore.read_index(session)

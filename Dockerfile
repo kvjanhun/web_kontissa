@@ -24,4 +24,8 @@ RUN mkdir -p /app/data && chown -R webapp:webapp /app/data
 
 USER webapp
 
-CMD ["gunicorn", "--preload", "-w", "2", "-b", "0.0.0.0:80", "run:app"]
+# --timeout 120 / --graceful-timeout 30: a slow request (cold-start index reload
+# under load) must not get the sync worker SIGKILLed mid-request — that turns
+# transient slowness into hard 500/502s at the edge. The compose `web` service
+# overrides this command; keep the two in sync.
+CMD ["gunicorn", "--preload", "-w", "2", "--timeout", "120", "--graceful-timeout", "30", "-b", "0.0.0.0:80", "run:app"]

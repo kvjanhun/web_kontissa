@@ -1719,6 +1719,176 @@ def test_show_finals_detection_ignores_plain_specialty_awards():
     assert dog_result_cache._result_doc_has_show_finals(specialty) is False
 
 
+def test_finals_resweep_breeds_cycles_captured_breeds_only():
+    breeds = [
+        {"name": "a", "group": "5", "breed_id": "3"},
+        {"name": "b", "group": "6", "breed_id": "9"},
+        {"name": "c", "group": "7", "breed_id": "1"},  # not captured -> never swept
+    ]
+    completed = {"5:3": {}, "6:9": {}}
+    doc = {}
+
+    def keys(selected):
+        return [(b["group"], b["breed_id"]) for b in selected]
+
+    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("5", "3")]
+    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("6", "9")]
+    # Wraps back to the first captured breed; the uncaptured "c" is never a candidate.
+    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("5", "3")]
+    assert doc["finals_sweep_breed_count"] == 2
+
+
+def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None):
+    """Index a live two-FCI-group show and persist a complete result cache that
+    captured `captured` breed keys with `results` rows. Returns the breed list."""
+    breeds = [
+        {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+    ] + (extra_breeds or [])
+    seed_index_show(str(show_id), {
+        "title": f"28.06.2026 Show {show_id}",
+        "date": "28.06.",
+        "month": "kesäkuu 2026",
+        "breeds": breeds,
+    })
+    dog_module._save_result_cache_doc(show_id, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": show_id,
+        "status": "complete",
+        "title": f"Show {show_id}",
+        "source_url": dog_module._source_url(show_id),
+        "started_at": 1,
+        "updated_at": 1,
+        "cached_at": 1,
+        "total_breeds": len(breeds),
+        "completed_breeds": {key: {"name": key, "result_count": 1} for key in captured},
+        "failed_breeds": {},
+        "results": results,
+    })
+    return breeds
+
+
+def _patch_live_refresh(monkeypatch, show_id, detail_breeds, fetcher):
+    live = {"show_state": "live", "can_fetch": True, "morning_hour": 6, "evening_hour": 21}
+    monkeypatch.setattr(dog_result_cache, "_show_result_availability_for_id", lambda sid, now=None: live)
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda sid: True)
+    monkeypatch.setattr(dog_result_cache, "_show_detail_for_result_cache", lambda sid: {
+        "id": show_id,
+        "title": f"Show {show_id}",
+        "source_url": dog_module._source_url(show_id),
+        "breeds": detail_breeds,
+    })
+    monkeypatch.setattr(dog_result_cache, "_fetch_breed_results_for_show_cache", fetcher)
+
+
+def test_live_refresh_fetches_only_newly_judged_breeds(monkeypatch, client):
+    """Captured breeds are immutable, so a live refresh re-fetches only the breed
+    that newly gained results — not the whole show."""
+    breeds = _seed_live_two_breed_show(
+        13900,
+        captured=["5:3"],
+        results=[{"name": "Basenji Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}],
+    )
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        return {
+            "breed": breed,
+            "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": []},
+            "mapped_results": [{
+                "name": f"Dog-{key}", "breedName": breed["name"],
+                "breedGroup": breed["group"], "breedId": breed["breed_id"], "awards": "SA",
+            }],
+            "fetched_at": 2.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13900, breeds, fake_fetch)
+
+    summary = dog_module.crawl_result_cache_for_show(13900, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert fetched == ["10:7"]  # only the uncaptured breed, not basenji
+    doc = dog_module._load_result_cache_doc(13900)
+    assert {r["name"] for r in doc["results"]} == {"Basenji Dog", "Dog-10:7"}
+
+
+def test_live_refresh_with_all_breeds_captured_skips_fetch_and_row_rewrite(monkeypatch, client):
+    """When nothing new is judged and no main BIS is owed (single-group show), a
+    live refresh fetches no breed pages and only rewrites the header — never the
+    result rows."""
+    breeds = [
+        {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+    ]
+    seed_index_show("13901", {
+        "title": "28.06.2026 Basenji", "date": "28.06.", "month": "kesäkuu 2026", "breeds": breeds,
+    })
+    dog_module._save_result_cache_doc(13901, {
+        "version": dog_module.RESULT_CACHE_VERSION, "show_id": 13901, "status": "complete",
+        "title": "Basenji", "source_url": dog_module._source_url(13901),
+        "started_at": 1, "updated_at": 1, "cached_at": 1, "total_breeds": 1,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "failed_breeds": {},
+        "results": [{"name": "Basenji Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"}],
+    })
+    fetched = []
+    _patch_live_refresh(monkeypatch, 13901, breeds, lambda sid, breed: fetched.append(breed))
+
+    calls = {"doc": 0, "header": 0}
+    monkeypatch.setattr(dog_result_cache, "_save_result_cache_doc", lambda sid, doc: calls.__setitem__("doc", calls["doc"] + 1))
+    monkeypatch.setattr(dog_result_cache, "_save_result_cache_header", lambda sid, doc: calls.__setitem__("header", calls["header"] + 1))
+
+    summary = dog_module.crawl_result_cache_for_show(13901, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert fetched == []          # no breed pages fetched
+    assert calls["doc"] == 0      # result rows were NOT rewritten
+    assert calls["header"] == 1   # only the header/meta was refreshed
+
+
+def test_finals_resweep_recaptures_winner_until_main_bis(monkeypatch, client):
+    """All breeds captured, BIS JUN present but no BIS-1: the refresh re-sweeps the
+    captured breeds (bounded) and the winner's re-fetch lands BIS-1 — without
+    duplicating rows."""
+    breeds = _seed_live_two_breed_show(
+        13902,
+        captured=["5:3", "10:7"],
+        results=[
+            {"name": "Junior", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, JUN ROP, BIS JUN-1"},
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+        ],
+    )
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        awards = "SA, ROP, RYP-1, BIS-1" if key == "5:3" else "SA, JUN ROP, BIS JUN-1"
+        return {
+            "breed": breed,
+            "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": []},
+            "mapped_results": [{
+                "name": f"Winner-{key}", "breedName": breed["name"],
+                "breedGroup": breed["group"], "breedId": breed["breed_id"], "awards": awards,
+            }],
+            "fetched_at": 2.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13902, breeds, fake_fetch)
+
+    summary = dog_module.crawl_result_cache_for_show(13902, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert set(fetched) == {"5:3", "10:7"}  # finals re-sweep re-checked the captured breeds
+    doc = dog_module._load_result_cache_doc(13902)
+    # Rows were replaced, not duplicated: still one row per breed.
+    assert len(doc["results"]) == 2
+    assert dog_result_cache._result_doc_has_main_bis(doc) is True
+
+
 def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
     final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
     now = final_due_at + 300
@@ -2263,12 +2433,16 @@ def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(m
 
 @patch("app.dog_show.showlink._SESSION.get")
 def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatch):
+    # Two indexed breeds, only one captured. A stale refresh now fetches just the
+    # uncaptured breed (incremental); when that Showlink fetch fails the existing
+    # complete cache must stay intact rather than being clobbered with a partial.
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "month": "kesäkuu 2026",
         "source_url": dog_module._source_url(14042),
         "breeds": [
             { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
+            { "name": "beagle", "count": 12, "group": "6", "breed_id": "9", "has_results": True },
         ],
     })
     dog_module._save_result_cache_doc(14042, {
@@ -2280,10 +2454,10 @@ def test_stale_result_cache_is_preserved_when_refresh_fails(mock_get, monkeypatc
         "started_at": 1,
         "updated_at": 2,
         "cached_at": 2,
-        "total_breeds": 1,
+        "total_breeds": 2,
         "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
         "failed_breeds": {},
-        "results": [{"name": "Old Cached Dog", "breedName": "basenji"}],
+        "results": [{"name": "Old Cached Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}],
     })
     monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda show_id, doc, now=None: False)
     monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)

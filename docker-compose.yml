@@ -2,7 +2,9 @@ services:
   web:
     build: .
     image: web-kontissa:latest
-    command: gunicorn -w 2 -b 0.0.0.0:80 run:app
+    # --timeout 120 / --graceful-timeout 30: don't SIGKILL a sync worker mid-request
+    # on a slow cold-start pass; that turned transient slowness into edge 500/504s.
+    command: gunicorn -w 2 --timeout 120 --graceful-timeout 30 -b 0.0.0.0:80 run:app
     env_file: .env
     environment:
       - DOG_NO_CRAWLER=true

@@ -46,6 +46,7 @@ RESULT_RETRY_AFTER_SECONDS = config.RESULT_RETRY_AFTER_SECONDS
 RESULT_CRAWL_DEFAULT_DELAY = config.RESULT_CRAWL_DEFAULT_DELAY
 RESULT_CRAWL_DEFAULT_WORKERS = config.RESULT_CRAWL_DEFAULT_WORKERS
 RESULT_LIVE_PROBE_BREED_LIMIT = config.RESULT_LIVE_PROBE_BREED_LIMIT
+RESULT_FINALS_SWEEP_BREED_LIMIT = config.RESULT_FINALS_SWEEP_BREED_LIMIT
 RESULT_LIVE_JOB_STALE_SECONDS = config.RESULT_LIVE_JOB_STALE_SECONDS
 RESULT_IMMEDIATE_WARMUP = config.RESULT_IMMEDIATE_WARMUP_DEFAULT
 RESULT_CACHE_BIS_FINAL_GRACE_SECONDS = config.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
@@ -446,9 +447,13 @@ def _all_results_doc_base(show_id, source, existing=None):
         "updated_at": now,
         "cached_at": None,
         "total_breeds": existing.get("total_breeds"),
-        "completed_breeds": existing.get("completed_breeds") or {},
-        "failed_breeds": existing.get("failed_breeds") or {},
-        "results": existing.get("results") or [],
+        # Shallow-copy the mutable carry-overs so crawling this doc never mutates
+        # the source `existing` in place — `_mark_live_entry_completion_state`
+        # reads existing["results"] after the crawl to preserve the original
+        # entry-completion time, which a shared (already-extended) list would skew.
+        "completed_breeds": dict(existing.get("completed_breeds") or {}),
+        "failed_breeds": dict(existing.get("failed_breeds") or {}),
+        "results": list(existing.get("results") or []),
         "bis_detected_at": existing.get("bis_detected_at"),
         "bis_detected_at_iso": existing.get("bis_detected_at_iso"),
         "live_result_grace_until": existing.get("live_result_grace_until"),
@@ -461,6 +466,9 @@ def _all_results_doc_base(show_id, source, existing=None):
         "live_probe_cursor": existing.get("live_probe_cursor", 0),
         "live_probe_breed_count": existing.get("live_probe_breed_count"),
         "live_probe_breed_limit": existing.get("live_probe_breed_limit"),
+        "finals_sweep_cursor": existing.get("finals_sweep_cursor", 0),
+        "finals_sweep_breed_count": existing.get("finals_sweep_breed_count"),
+        "finals_sweep_breed_limit": existing.get("finals_sweep_breed_limit"),
     }
 
 def _breed_result_cache_key(show_id, group, breed_id):
@@ -547,6 +555,44 @@ def _result_breeds_for_live_cache(show_id, breeds, doc, availability, now=None):
     if not probes:
         return selected
     return selected + probes
+
+def _finals_resweep_breeds(breeds, completed_breeds, doc, limit=None):
+    """A bounded, rotating slice of already-captured breeds to re-fetch for finals.
+
+    All-breed shows append RYP/BIS placements onto the winning breeds' rows after
+    every ring is judged, so those rows do change once — unlike the rest, which are
+    immutable after capture. Rather than re-crawl the whole show on every live pass,
+    re-check a small rotating chunk (cycling via `finals_sweep_cursor`) so the
+    finals land within a few passes without a burst. The caller only invokes this
+    once a main BIS is expected and still missing, so the sweep stops as soon as
+    BIS-1 is captured."""
+    if limit is None:
+        limit = RESULT_FINALS_SWEEP_BREED_LIMIT
+    limit = max(0, int(limit or 0))
+    if limit <= 0:
+        return []
+
+    candidates = [
+        breed for breed in breeds or []
+        if breed.get("group") and breed.get("breed_id")
+        and _breed_cache_key_from_breed(breed) in completed_breeds
+    ]
+    doc["finals_sweep_breed_count"] = len(candidates)
+    doc["finals_sweep_breed_limit"] = limit
+    if not candidates:
+        doc["finals_sweep_cursor"] = 0
+        return []
+
+    try:
+        cursor = max(0, int(doc.get("finals_sweep_cursor") or 0)) % len(candidates)
+    except (TypeError, ValueError):
+        cursor = 0
+    selected = [
+        candidates[(cursor + offset) % len(candidates)]
+        for offset in range(min(limit, len(candidates)))
+    ]
+    doc["finals_sweep_cursor"] = (cursor + len(selected)) % len(candidates)
+    return selected
 
 def _safe_int(value):
     try:
@@ -707,6 +753,15 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     if result_count:
         breed["has_results"] = True
 
+    # A finals re-sweep re-fetches an already-captured breed; drop its old rows so
+    # the refreshed rows (now carrying RYP/BIS) replace them instead of duplicating.
+    # New breeds aren't in completed_breeds yet, so this is a no-op for them.
+    if item["breed_key"] in doc.get("completed_breeds", {}):
+        doc["results"] = [
+            row for row in doc.get("results", [])
+            if not (str(row.get("breedGroup")) == group and str(row.get("breedId")) == breed_id)
+        ]
+
     doc.setdefault("results", []).extend(mapped_results)
     completed_entry = {
         "name": breed.get("name", ""),
@@ -835,7 +890,13 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         and existing.get("status") in {"running", "partial", "failed"}
         and not force
     )
-    doc = _all_results_doc_base(show_id, source, existing=existing if resumable else None)
+    # Seed from the existing doc on a live refresh of a complete cache too, not
+    # only on resume. Captured breed results are immutable, so carrying over
+    # completed_breeds/results means this pass fetches only newly-judged breeds
+    # (plus the bounded probe / finals re-sweep) instead of re-crawling the whole
+    # show. force=True still rebuilds from empty (a deliberate full re-crawl).
+    seed_from_existing = resumable or preserve_existing_complete
+    doc = _all_results_doc_base(show_id, source, existing=existing if seed_from_existing else None)
     if isinstance(existing, dict):
         for key in (
             "bis_detected_at",
@@ -850,9 +911,16 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "live_probe_cursor",
             "live_probe_breed_count",
             "live_probe_breed_limit",
+            "finals_sweep_cursor",
+            "finals_sweep_breed_count",
+            "finals_sweep_breed_limit",
         ):
             if existing.get(key):
                 doc[key] = existing.get(key)
+    # A complete cache we're refreshing in place stays "complete" throughout, so an
+    # interrupted refresh never demotes a good cache to "running"; we only add rows.
+    if preserve_existing_complete:
+        doc["status"] = "complete"
     if not preserve_existing_complete:
         if resumable:
             # Already-completed breeds' rows are persisted; just refresh the header
@@ -899,6 +967,33 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         breed for breed in breeds_with_results
         if _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
+
+    # Finals re-sweep: when every newly-judged breed is already captured but the
+    # show still owes a main BIS (BIS-1 not recorded yet), re-check a bounded
+    # rotating chunk of captured breeds so the RYP/BIS placements appended to the
+    # winners' rows land — instead of re-crawling the whole show on every pass.
+    # Fires while live, and once on the post-show morning check (to catch a BIS-1
+    # published after the evening cutoff, which the live sweep can't see overnight).
+    new_result_breeds = [
+        breed for breed in breeds_with_results
+        if breed.get("has_results")
+        and _breed_cache_key_from_breed(breed) not in completed_breeds
+    ]
+    finals_due_window = (
+        (availability.get("show_state") == "live" and availability.get("can_fetch", True))
+        or _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now)
+    )
+    finals_resweep = 0
+    if (
+        not new_result_breeds
+        and finals_due_window
+        and _show_expects_main_bis(show_id, doc)
+        and not _result_doc_has_main_bis(doc)
+    ):
+        resweep_breeds = _finals_resweep_breeds(breeds_with_results, completed_breeds, doc)
+        pending_breeds = pending_breeds + resweep_breeds
+        finals_resweep = len(resweep_breeds)
+
     # Bounded pass: crawl at most max_breeds this call; the rest resume next pass.
     pending_before_budget = len(pending_breeds)
     bounded_incomplete = (
@@ -916,6 +1011,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         total_breeds=len(breeds_with_results),
         completed_breeds=len(completed_breeds),
         pending_breeds=len(pending_breeds),
+        finals_resweep=finals_resweep,
         max_breeds=max_breeds,
         workers=max(1, int(workers or 1)),
         delay=delay,
@@ -968,7 +1064,13 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     doc["cached_at"] = cached_at
     doc["updated_at"] = cached_at
     doc["last_error"] = None
-    _save_result_cache_doc(show_id, doc)
+    if preserve_existing_complete and not pending_breeds:
+        # Live refresh that fetched nothing new: the complete result rows are
+        # already on disk, so only refresh the header/meta (cached_at, live-state
+        # blob). Avoids rewriting ~thousands of rows every couple of minutes.
+        _save_result_cache_header(show_id, doc)
+    else:
+        _save_result_cache_doc(show_id, doc)
 
     response = _result_response_from_doc(show_id, doc)
     _show_all_results_cache[show_id] = {"data": response, "ts": cached_at}
