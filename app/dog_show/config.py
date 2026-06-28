@@ -53,6 +53,13 @@ BACKGROUND_INDEX_MAX_PER_CALL = int(os.environ.get("DOG_BACKGROUND_INDEX_MAX_PER
 # which starved the request workers. Bounding rebuilds to once per interval costs
 # at most this much mirror staleness, invisible to the show list and stats.
 INDEX_RELOAD_MIN_INTERVAL = float(os.environ.get("DOG_INDEX_RELOAD_MIN_INTERVAL", "1.0"))
+# Per-show stats cache TTL (seconds). The /dog page polls /api/dog/shows every 15s
+# whenever a live show is present, and a live show's stats reconstruct its whole-show
+# result doc (thousands of rows) from SQLite. Caching the computed stats this long
+# decouples that cost from the poll rate (and from the number of viewers). Stats
+# only shift when the result cache refreshes (~every live TTL) or the clock crosses
+# a phase hour, so a few seconds of staleness is invisible.
+SHOW_STATS_CACHE_TTL = float(os.environ.get("DOG_SHOW_STATS_CACHE_TTL", "20"))
 RESULT_LOCAL_TIMEZONE = os.environ.get("DOG_RESULT_TIMEZONE", "Europe/Helsinki")
 
 # Phase C all-shows backfill: full-data crawl of historical shows, run only in an

@@ -3,7 +3,7 @@ import time
 
 import structlog
 
-from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS
+from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS, SHOW_STATS_CACHE_TTL
 from .store import (
     _indexed_show, _load_index, _load_result_cache_doc, _mark_index_dirty, _save_index,
     _show_detail_cache, _show_index, _show_list_cache,
@@ -79,8 +79,10 @@ def _stats_now_for_today(today):
 def _stats_timestamp_for_today(today):
     return _stats_now_for_today(today).timestamp() if today else time.time()
 
-def _result_count_from_cache_doc(show_id, entry_count=None, today=None):
-    doc = _load_result_cache_doc(show_id)
+def _result_count_from_cache_doc(show_id, entry_count=None, today=None, doc=None):
+    # Callers that already hold the result doc (e.g. _show_stats_from_index) pass
+    # it in so we don't reconstruct the whole-show doc from SQLite a second time.
+    doc = doc if doc is not None else _load_result_cache_doc(show_id)
     if not doc:
         return None
 
@@ -129,7 +131,7 @@ def _show_expects_main_bis(show_id, doc=None):
                 return True
     return False
 
-def _show_stats_from_index(show_id, show=None, today=None):
+def _compute_show_stats_from_index(show_id, show=None, today=None):
     indexed_show = _show_index.get("shows", {}).get(str(show_id))
     if not indexed_show:
         return None
@@ -152,6 +154,7 @@ def _show_stats_from_index(show_id, show=None, today=None):
     show_item = _show_item_for_stats(show_id, show=show)
     show_state = _show_date_state(show_item, today=today)
     live_finished_by = None
+    result_doc = None
     if show_state == "live":
         result_doc = _load_result_cache_doc(show_id)
         stats_timestamp = _stats_timestamp_for_today(today)
@@ -231,9 +234,35 @@ def _show_stats_from_index(show_id, show=None, today=None):
             show_id,
             entry_count=entry_count if entry_count_known else None,
             today=today,
+            doc=result_doc,
         )
         if result_count is not None:
             stats["result_count"] = result_count
+    return stats
+
+# Per-show stats cache. `/api/dog/shows` is polled every 15s by every open /dog
+# client whenever a live show is present, and computing a live show's stats
+# reconstructs its whole-show result doc (thousands of rows) from SQLite. Caching
+# the computed stats briefly decouples that cost from the poll rate. Bypassed when
+# an explicit `today` is passed (tests), and cleared per-test in the suite.
+_show_stats_cache = {}
+
+def _show_stats_from_index(show_id, show=None, today=None):
+    if today is not None:
+        return _compute_show_stats_from_index(show_id, show=show, today=today)
+
+    try:
+        key = int(show_id)
+    except (TypeError, ValueError):
+        return _compute_show_stats_from_index(show_id, show=show, today=today)
+
+    now = time.time()
+    cached = _show_stats_cache.get(key)
+    if cached and (now - cached["ts"]) < SHOW_STATS_CACHE_TTL:
+        return cached["stats"]
+
+    stats = _compute_show_stats_from_index(show_id, show=show, today=today)
+    _show_stats_cache[key] = {"stats": stats, "ts": now}
     return stats
 
 def _shows_with_cached_stats(shows):

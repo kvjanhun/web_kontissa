@@ -177,6 +177,8 @@ def clear_caches(monkeypatch, tmp_path):
     dog_module._show_index["last_updated"] = 0
     dog_store._index_generation = None
     dog_store._dirty_index_show_ids.clear()
+    dog_store._last_index_check_ts = 0.0
+    dog_indexing._show_stats_cache.clear()
     yield
     # Release the per-test database file so its WAL handles don't leak.
     dog_db.configure("sqlite://")
@@ -1717,6 +1719,54 @@ def test_show_finals_detection_ignores_plain_specialty_awards():
     assert dog_result_cache._result_doc_has_show_finals(finals) is True
     assert dog_result_cache._result_doc_has_show_finals(junior) is True
     assert dog_result_cache._result_doc_has_show_finals(specialty) is False
+
+
+def test_show_stats_cache_decouples_polling_from_result_doc_reads(monkeypatch, client):
+    """A live show's stats reconstruct its whole-show result doc from SQLite. The
+    stats path must load it at most once per compute, and the short-lived cache
+    must serve repeat polls without touching SQLite again."""
+    breeds = [
+        {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+    ]
+    seed_index_show("13950", {
+        "title": "28.06.2026 Show", "date": "28.06.", "month": "kesäkuu 2026", "breeds": breeds,
+    })
+    dog_module._save_result_cache_doc(13950, {
+        "version": dog_module.RESULT_CACHE_VERSION, "show_id": 13950, "status": "complete",
+        "cached_at": 1, "updated_at": 1, "total_breeds": 2,
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1},
+                             "10:7": {"name": "afgaani", "result_count": 1}},
+        "failed_breeds": {},
+        "results": [
+            {"name": "A", "breedGroup": "5", "breedId": "3", "awards": "SA"},
+            {"name": "B", "breedGroup": "10", "breedId": "7", "awards": "SA"},
+        ],
+    })
+    monkeypatch.setattr(dog_indexing, "_show_date_state", lambda show, today=None: "live")
+    monkeypatch.setattr(dog_indexing, "_show_live_phase", lambda *a, **k: "active")
+    monkeypatch.setattr(dog_indexing, "_show_result_availability",
+                        lambda show, now=None: {"show_state": "live", "can_fetch": True,
+                                                "morning_hour": 6, "evening_hour": 21})
+    calls = {"n": 0}
+    real_load = dog_indexing._load_result_cache_doc
+    monkeypatch.setattr(dog_indexing, "_load_result_cache_doc",
+                        lambda sid: (calls.__setitem__("n", calls["n"] + 1), real_load(sid))[1])
+
+    # First production poll: computes, loading the result doc exactly once (the
+    # redundant second load via _result_count_from_cache_doc is gone).
+    s1 = dog_module._show_stats_from_index(13950)
+    assert s1 is not None and s1["is_live"] is True and s1["result_count"] == 2
+    assert calls["n"] == 1
+
+    # Repeat poll within TTL: served from cache, no further SQLite read.
+    s2 = dog_module._show_stats_from_index(13950)
+    assert s2 is s1
+    assert calls["n"] == 1
+
+    # An explicit `today` (tests / deterministic callers) bypasses the cache.
+    dog_module._show_stats_from_index(13950, today=dog_module.datetime.date(2026, 6, 28))
+    assert calls["n"] == 2
 
 
 def test_finals_resweep_breeds_cycles_captured_breeds_only():
