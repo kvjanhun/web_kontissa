@@ -2513,6 +2513,110 @@ def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
 
 
 @patch("app.dog_show.showlink._SESSION.get")
+def test_crawl_result_cache_refetches_live_breeds_captured_with_zero_results(mock_get, monkeypatch):
+    # A live-show pass that runs before any ring has published results records
+    # every breed in completed_breeds with result_count 0 and marks the cache
+    # complete. Those empty captures must stay re-fetchable while the show is
+    # live — otherwise the show is frozen at 0 dogs for good (show 14085).
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    seed_index_show("13771", {
+        "title": "20.06.2026 Colliet",
+        "name": "Colliet",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13771),
+        "updated_at": now,
+        "breeds": [
+            { "name": "pitkäkarvainen collie", "count": 125, "group": "1", "breed_id": "139", "has_results": True },
+            { "name": "sileäkarvainen collie", "count": 80, "group": "1", "breed_id": "150", "has_results": False },
+        ],
+    })
+    early_capture_at = now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1
+    dog_module._save_result_cache_doc(13771, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13771,
+        "status": "complete",
+        "title": "20.06.2026 Colliet",
+        "source_url": dog_module._source_url(13771),
+        "started_at": early_capture_at,
+        "updated_at": early_capture_at,
+        "cached_at": early_capture_at,
+        "total_breeds": 2,
+        "completed_breeds": {
+            "1:139": {"name": "pitkäkarvainen collie", "result_count": 0, "updated_at": early_capture_at},
+            "1:150": {"name": "sileäkarvainen collie", "result_count": 0, "updated_at": early_capture_at},
+        },
+        "failed_breeds": {},
+        "results": [],
+    })
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    flagged_result_resp = MagicMock()
+    flagged_result_resp.text = SAMPLE_BREED_RESULTS_HTML
+    flagged_result_resp.status_code = 200
+    probed_result_resp = MagicMock()
+    probed_result_resp.text = SAMPLE_BREED_RESULTS_FLOATLEFT_HTML
+    probed_result_resp.status_code = 200
+    mock_get.side_effect = [flagged_result_resp, probed_result_resp]
+
+    summary = dog_module.crawl_result_cache_for_show(13771, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    requested_urls = [call.args[0] for call in mock_get.call_args_list]
+    assert requested_urls[0].endswith("Id=13771&R=1&RO=139")
+    assert requested_urls[1].endswith("Id=13771&R=1&RO=150")
+    doc = dog_module._load_result_cache_doc(13771)
+    assert doc["status"] == "complete"
+    assert doc["completed_breeds"]["1:139"]["result_count"] == 1
+    assert doc["completed_breeds"]["1:150"]["result_count"] == 1
+    assert len(doc["results"]) == 2
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_crawl_result_cache_keeps_zero_result_captures_settled_after_show(mock_get, monkeypatch):
+    # Outside the live window (and past the post-show morning check) an empty
+    # capture is a real capture — a settled old show with a no-show breed must
+    # not be re-crawled on every stale refresh.
+    now = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    seed_index_show("13772", {
+        "title": "10.06.2026 Colliet",
+        "name": "Colliet",
+        "date": "10.06.",
+        "month": "kesäkuu 2026",
+        "source_url": dog_module._source_url(13772),
+        "updated_at": now,
+        "breeds": [
+            { "name": "pitkäkarvainen collie", "count": 5, "group": "1", "breed_id": "139", "has_results": True },
+        ],
+    })
+    dog_module._save_result_cache_doc(13772, {
+        "version": dog_module.RESULT_CACHE_VERSION,
+        "show_id": 13772,
+        "status": "complete",
+        "title": "10.06.2026 Colliet",
+        "source_url": dog_module._source_url(13772),
+        "started_at": 1,
+        "updated_at": 2,
+        "cached_at": 2,
+        "total_breeds": 1,
+        "completed_breeds": {
+            "1:139": {"name": "pitkäkarvainen collie", "result_count": 0, "updated_at": 2},
+        },
+        "failed_breeds": {},
+        "results": [],
+    })
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda show_id, doc, now=None: False)
+    monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+
+    summary = dog_module.crawl_result_cache_for_show(13772, delay=0.1, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert mock_get.call_count == 0
+
+
+@patch("app.dog_show.showlink._SESSION.get")
 def test_crawl_result_cache_fetches_single_breed_specialty_without_result_flag(mock_get, monkeypatch):
     seed_index_show("14079", {
         "title": "20.06.2000 Bostoninterrieri",

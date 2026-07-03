@@ -964,9 +964,33 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     completed_breeds = doc.setdefault("completed_breeds", {})
     doc.setdefault("failed_breeds", {})
     doc.setdefault("results", [])
+
+    # Captured breed results are immutable — but only once the breed actually
+    # produced results. A breed crawled early on a live show day (before its ring
+    # was judged) lands in completed_breeds with result_count 0; treating that as
+    # a permanent capture froze the whole show at 0 dogs, because every later
+    # live pass saw nothing pending. While the show is live (and on the post-show
+    # morning check, for rings published after the evening cutoff), an empty
+    # capture stays re-fetchable.
+    refetch_window = (
+        (availability.get("show_state") == "live" and availability.get("can_fetch", True))
+        or _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now)
+    )
+
+    def _capture_blocks_refetch(breed):
+        entry = completed_breeds.get(_breed_cache_key_from_breed(breed))
+        if entry is None:
+            return False
+        if not refetch_window:
+            return True
+        try:
+            return int(entry.get("result_count") or 0) > 0
+        except (TypeError, ValueError):
+            return True
+
     pending_breeds = [
         breed for breed in breeds_with_results
-        if _breed_cache_key_from_breed(breed) not in completed_breeds
+        if not _capture_blocks_refetch(breed)
     ]
 
     # Finals re-sweep: when every newly-judged breed is already captured but the
@@ -983,14 +1007,10 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     # captured 3 of 4 BIS. So once the first main BIS lands we budget exactly one
     # further full rotation over the captured breeds before settling.
     new_result_breeds = [
-        breed for breed in breeds_with_results
+        breed for breed in pending_breeds
         if breed.get("has_results")
-        and _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
-    finals_due_window = (
-        (availability.get("show_state") == "live" and availability.get("can_fetch", True))
-        or _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now)
-    )
+    finals_due_window = refetch_window
     has_main_bis = _result_doc_has_main_bis(doc)
     expects_main_bis = _show_expects_main_bis(show_id, doc)
     if (
