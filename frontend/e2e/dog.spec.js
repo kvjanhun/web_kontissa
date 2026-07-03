@@ -1,5 +1,40 @@
 import { test, expect } from './fixtures/base.js'
 
+// The show list auto-collapses every month section except the current month
+// (and the relative "Tänään"/"Tällä viikolla" sections), so fixtures pinned to
+// a hard-coded month roll out of view once the calendar passes them and every
+// spec that expects an expanded show card starts failing. Anchor the fixtures
+// of current/live shows to the real clock instead; specs that exercise the
+// collapsed-month behavior keep deliberately non-current months.
+const FINNISH_MONTHS = [
+  'tammikuu', 'helmikuu', 'maaliskuu', 'huhtikuu', 'toukokuu', 'kesäkuu',
+  'heinäkuu', 'elokuu', 'syyskuu', 'lokakuu', 'marraskuu', 'joulukuu',
+]
+const pad2 = value => String(value).padStart(2, '0')
+const TODAY = new Date()
+const CURRENT_MONTH_LABEL = `${FINNISH_MONTHS[TODAY.getMonth()]} ${TODAY.getFullYear()}`
+const TODAY_DATE = `${pad2(TODAY.getDate())}.${pad2(TODAY.getMonth() + 1)}.`
+const TODAY_FULL_DATE = `${TODAY_DATE}${TODAY.getFullYear()}`
+
+// A finished show for specs that exercise the whole-show results flow: on the
+// show day itself the affordance label changes ("Tarkista koirat ja tulokset")
+// and goes quiet overnight, so those specs need a show in the past. Yesterday
+// with an explicit year parses unambiguously even across New Year, and the
+// relative "Tällä viikolla" section label is never collapsed or rewritten.
+const YESTERDAY = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1)
+const YESTERDAY_FULL_DATE = `${pad2(YESTERDAY.getDate())}.${pad2(YESTERDAY.getMonth() + 1)}.${YESTERDAY.getFullYear()}`
+
+// Two consecutive days in the current month for the multi-day date badge
+// (the calendar box only renders a range that stays within one month):
+// today–tomorrow normally, yesterday–today on the last day of the month.
+const NEXT_DAY = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + 1)
+const RANGE_START = NEXT_DAY.getMonth() === TODAY.getMonth()
+  ? TODAY
+  : new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1)
+const RANGE_END = NEXT_DAY.getMonth() === TODAY.getMonth() ? NEXT_DAY : TODAY
+const MULTI_DAY_DATE = `${pad2(RANGE_START.getDate())}.-${pad2(RANGE_END.getDate())}.${pad2(TODAY.getMonth() + 1)}.`
+const MULTI_DAY_BADGE = `${RANGE_START.getDate()}–${RANGE_END.getDate()}`
+
 test.describe('Dog Show Browser', () => {
   test.use({
     viewport: { width: 390, height: 844 },
@@ -13,9 +48,9 @@ test.describe('Dog Show Browser', () => {
           shows: [
             {
               id: 14042,
-              date: '14.06.',
+              date: TODAY_DATE,
               name: 'Basenji',
-              month: 'kesäkuu 2026',
+              month: CURRENT_MONTH_LABEL,
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
               stats: {
                 indexed: true,
@@ -46,9 +81,9 @@ test.describe('Dog Show Browser', () => {
             {
               show: {
                 id: 14042,
-                date: '14.06.',
+                date: TODAY_DATE,
                 name: 'Basenji',
-                month: 'kesäkuu 2026',
+                month: CURRENT_MONTH_LABEL,
                 source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
                 stats: {
                   indexed: true,
@@ -82,10 +117,13 @@ test.describe('Dog Show Browser', () => {
     const searchInput = page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')
     await expect(searchInput).toBeVisible()
     await expect(page.getByRole('button', { name: 'Hae rotua', exact: true })).toHaveCount(0)
-    await expect(page.getByRole('button', { name: /Basenji/ })).toBeVisible()
-    await expect(page.getByText('2 rotua')).toBeVisible()
-    await expect(page.getByText('Käynnissä')).toBeVisible()
-    await expect(page.getByText('12/90 tulosta')).toBeVisible()
+    // A show dated today renders both in "Tällä viikolla" and its month
+    // section, so scope the list assertions to the featured section.
+    const thisWeek = page.locator('.dog-this-week-section')
+    await expect(thisWeek.getByRole('button', { name: /Basenji/ })).toBeVisible()
+    await expect(thisWeek.getByText('2 rotua')).toBeVisible()
+    await expect(thisWeek.getByText('Käynnissä')).toBeVisible()
+    await expect(thisWeek.getByText('12/90 tulosta')).toBeVisible()
     await expect(page.getByText('90 koiraa')).toHaveCount(0)
     await expect(page.getByText('1 tulosrotu')).toHaveCount(0)
 
@@ -93,7 +131,7 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByText('Haetaan...')).toBeVisible()
     await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(1)
     await expect(page.getByText('Paula Steele')).toBeVisible()
-    await expect(page.getByText('14.06.2026')).toBeVisible()
+    await expect(page.getByText(TODAY_FULL_DATE)).toBeVisible()
 
     await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
     await expect(searchInput).toHaveValue('')
@@ -108,9 +146,9 @@ test.describe('Dog Show Browser', () => {
           shows: [
             {
               id: 13762,
-              date: '13.-14.06.',
+              date: MULTI_DAY_DATE,
               name: 'Turku KV',
-              month: 'kesäkuu 2026',
+              month: CURRENT_MONTH_LABEL,
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=13762',
               stats: {
                 indexed: true,
@@ -135,12 +173,13 @@ test.describe('Dog Show Browser', () => {
 
     await page.goto('/dog')
 
-    await expect(page.getByRole('button', { name: /Turku KV/ })).toBeVisible({ timeout: 10000 })
-    await expect(page.getByText('Jatkuu')).toBeVisible()
+    const thisWeek = page.locator('.dog-this-week-section')
+    await expect(thisWeek.getByRole('button', { name: /Turku KV/ })).toBeVisible({ timeout: 10000 })
+    await expect(thisWeek.getByText('Jatkuu')).toBeVisible()
     await expect(page.getByText('Käynnissä')).toHaveCount(0)
-    await expect(page.getByText('12/90 tulosta')).toBeVisible()
+    await expect(thisWeek.getByText('12/90 tulosta')).toBeVisible()
     // Calendar box renders the multi-day range, not just the first day.
-    await expect(page.getByText('13–14')).toBeVisible()
+    await expect(thisWeek.getByText(MULTI_DAY_BADGE)).toBeVisible()
   })
 
   test('browser back restores the previous dog page view', async ({ page }) => {
@@ -151,10 +190,13 @@ test.describe('Dog Show Browser', () => {
           shows: [
             {
               id: 14042,
-              date: '14.06.',
+              date: YESTERDAY_FULL_DATE,
               name: 'Basenji',
-              month: 'kesäkuu 2026',
+              month: 'Tällä viikolla',
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+              // is_live keeps the "Tuloksia saaneet" breed filter visible while
+              // the past show date keeps the whole-show affordance in its
+              // settled "Suodata koko näyttelyä" form at any hour.
               stats: {
                 indexed: true,
                 breed_count: 2,
@@ -276,7 +318,7 @@ test.describe('Dog Show Browser', () => {
   test('show links open the breed list from the top of the page', async ({ page }) => {
     const shows = Array.from({ length: 35 }, (_, index) => ({
       id: index === 34 ? 14042 : 13000 + index,
-      date: `${String(index + 1).padStart(2, '0')}.06.`,
+      date: TODAY_DATE,
       name: index === 34 ? 'Target Basenji Show' : `Scroll Test Show ${index + 1}`,
       month: 'Tänään',
       source_url: `https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=${index === 34 ? 14042 : 13000 + index}`,
@@ -321,7 +363,9 @@ test.describe('Dog Show Browser', () => {
     })
 
     await page.goto('/dog')
-    const targetShow = page.getByRole('button', { name: /Target Basenji Show/ })
+    // Today-dated shows are duplicated into "Tällä viikolla"; target the month
+    // section further down the page to keep the scroll distance meaningful.
+    const targetShow = page.locator('.dog-month-group').getByRole('button', { name: /Target Basenji Show/ })
     await targetShow.scrollIntoViewIfNeeded()
     await expect.poll(() => page.evaluate(() => window.scrollY)).toBeGreaterThan(100)
 
@@ -340,9 +384,9 @@ test.describe('Dog Show Browser', () => {
           shows: [
             {
               id: 14042,
-              date: '14.06.',
+              date: YESTERDAY_FULL_DATE,
               name: 'Basenji Show',
-              month: 'kesäkuu 2026',
+              month: 'Tällä viikolla',
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
             },
           ],
@@ -640,9 +684,9 @@ test.describe('Dog Show Browser', () => {
           shows: [
             {
               id: 14042,
-              date: '14.06.',
+              date: TODAY_DATE,
               name: 'Basenji',
-              month: 'kesäkuu 2026',
+              month: CURRENT_MONTH_LABEL,
               source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
               stats: { indexed: true, breed_count: 1, show_state: 'past' },
             },
@@ -681,7 +725,7 @@ test.describe('Dog Show Browser', () => {
     await expect(brand).toBeVisible()
 
     // Open a show, then jump back to the list via the brand.
-    await page.getByRole('button', { name: /Basenji/ }).click()
+    await page.locator('.dog-this-week-section').getByRole('button', { name: /Basenji/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
     await expect(brand).toBeVisible()
 
