@@ -16,6 +16,7 @@ import {
   groupResultsByAwardFilter,
   groupShowBreedGroups,
   isOvernightResultWindow,
+  liveDetailAvailability,
   parseShowDateRange,
   showAwardCritiqueKey,
   showBreedGroupCritiqueKey,
@@ -379,6 +380,43 @@ describe('buildShowWinnersGroups', () => {
 
     expect(winners.bisGroups).toEqual([])
     expect(winners.rypGroups).toEqual([])
+  })
+})
+
+describe('liveDetailAvailability', () => {
+  it('treats a show live once backend stats say so', () => {
+    expect(liveDetailAvailability({ is_live: true }, undefined)).toEqual({
+      filterAvailable: true,
+      pollingAvailable: true,
+    })
+  })
+
+  it('stops polling once stats say a show is no longer live, but keeps the filter in the show_day window', () => {
+    // The backend flipped is_live to false (terminal captured + confirmed), so
+    // the 120s detail re-poll stops; the whole-show filter still stays available
+    // while the client-side show_day window is open (data is loaded regardless).
+    expect(liveDetailAvailability({ is_live: false }, 'show_day')).toEqual({
+      filterAvailable: true,
+      pollingAvailable: false,
+    })
+  })
+
+  it('hides the filter and stops polling for a settled show outside the show_day window', () => {
+    expect(liveDetailAvailability({ is_live: false }, 'settled')).toEqual({
+      filterAvailable: false,
+      pollingAvailable: false,
+    })
+  })
+
+  it('falls back to the show_day window before stats have loaded', () => {
+    expect(liveDetailAvailability(null, 'show_day')).toEqual({
+      filterAvailable: true,
+      pollingAvailable: true,
+    })
+    expect(liveDetailAvailability(null, 'upcoming')).toEqual({
+      filterAvailable: false,
+      pollingAvailable: false,
+    })
   })
 })
 

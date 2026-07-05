@@ -23,6 +23,7 @@ import {
   isNumericString,
   isOvernightResultWindow,
   isThisWeekLeft,
+  liveDetailAvailability,
   parseShowDate,
   sameId,
   shouldCollapseMonth,
@@ -219,14 +220,11 @@ export function useDogBrowser() {
   const selectedShowStats = computed(() => (
     selectedShow.value?.stats || showDetail.value?.stats || null
   ))
-  const resultBreedFilterAvailable = computed(() => (
-    Boolean(selectedShowStats.value?.is_live || allDogsAvailability.value?.phase === 'show_day')
+  const liveDetailState = computed(() => (
+    liveDetailAvailability(selectedShowStats.value, allDogsAvailability.value?.phase)
   ))
-  const liveDetailPollingAvailable = computed(() => (
-    selectedShowStats.value
-      ? Boolean(selectedShowStats.value.is_live)
-      : allDogsAvailability.value?.phase === 'show_day'
-  ))
+  const resultBreedFilterAvailable = computed(() => liveDetailState.value.filterAvailable)
+  const liveDetailPollingAvailable = computed(() => liveDetailState.value.pollingAvailable)
 
   function shouldPollLiveShowDetail() {
     return Boolean(

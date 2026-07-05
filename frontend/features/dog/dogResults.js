@@ -936,6 +936,22 @@ export function hasShowStats(show) {
   return showStatItems(show).length > 0
 }
 
+// Whether a show's detail view should treat it as live — for enabling the
+// whole-show result filter and for the 120s detail re-poll. The backend's
+// `stats.is_live` is authoritative once stats have loaded (it now flips to
+// false only when the show's terminal award is captured and confirmed stable);
+// before stats arrive, fall back to the client-side `show_day` availability
+// window. Kept pure so both predicates stay in one tested place.
+export function liveDetailAvailability(stats, availabilityPhase) {
+  const hasStats = stats && typeof stats === 'object'
+  const isLive = Boolean(hasStats && stats.is_live)
+  const showDayFallback = availabilityPhase === 'show_day'
+  return {
+    filterAvailable: isLive || showDayFallback,
+    pollingAvailable: hasStats ? isLive : showDayFallback,
+  }
+}
+
 export function showStatsLabel(show) {
   const stats = show?.stats || {}
   const parts = []
