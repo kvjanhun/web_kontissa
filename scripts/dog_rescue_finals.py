@@ -59,14 +59,16 @@ logger = structlog.get_logger(__name__)
 
 
 def _owes_finals(show_id):
-    """True if a complete cache expects show-wide finals but hasn't captured its
-    terminal (a result-bearing group missing RYP-1, or no main BIS-1)."""
+    """True if a complete cache is a **multi-group** show (crowns a main BIS) that
+    hasn't captured its terminal (a result-bearing group missing RYP-1, or no
+    main BIS-1). Single-group shows crown no main BIS, so they never "owe" one and
+    are not rescue candidates — matching the production live plan."""
     doc = _load_result_cache_doc(show_id)
     if not doc:
         return False
     breeds = (_indexed_show(show_id) or {}).get("breeds") or []
     analysis = finals.analyze(doc, breeds)
-    return bool(analysis["expects_finals"] and not analysis["target_met"])
+    return bool(analysis["expects_main_bis"] and not analysis["target_met"])
 
 
 def _candidate_ids():

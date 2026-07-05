@@ -946,9 +946,12 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         if breed.get("has_results")
     ]
     analysis = finals.analyze(doc, breeds_with_results)
+    # Keep re-checking the finals breeds until the terminal is confirmed stable
+    # (`_mark_terminal_confirmation` only sets terminal_confirmed once the target
+    # — main BIS for a multi-group show, entry completion otherwise — is met and
+    # a following pass adds nothing new).
     finals_hunt_active = (
-        analysis["expects_finals"]
-        and not (analysis["target_met"] and doc.get("terminal_confirmed"))
+        analysis["expects_finals"] and not doc.get("terminal_confirmed")
     )
     finals_resweep = 0
     if not new_result_breeds and refetch_window and finals_hunt_active:

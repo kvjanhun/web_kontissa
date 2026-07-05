@@ -129,9 +129,17 @@ def analyze(doc, indexed_breeds):
         if row_has_final:
             finals_keys.add(key)
 
-    expects_finals = len(result_groups) >= 2 or ryp_stage or has_bis1 or has_side_bis
+    # Only a MULTI-group show crowns a main Best in Show. A single-group show —
+    # a breed or group specialty — tops out at its group RYP-1 (if it runs a
+    # group ring) plus junior/veteran/utility BIS on the breed rows, and awards
+    # no `BIS-1`. Requiring `BIS-1` from those (they exist — e.g. a group-10-only
+    # show with only junior/veteran/utility BIS) would keep polling them forever.
+    expects_main_bis = len(result_groups) >= 2
+    expects_finals = expects_main_bis or ryp_stage or has_bis1 or has_side_bis
     missing_ryp_groups = (result_groups - ryp1_groups) if ryp_stage else set()
 
+    # The main-BIS terminal (meaningful only when the show expects a main BIS;
+    # `_terminal_status` uses entry completion for single-group shows instead).
     if ryp_stage:
         target_met = has_bis1 and not missing_ryp_groups
     else:
@@ -141,6 +149,7 @@ def analyze(doc, indexed_breeds):
 
     return {
         "expects_finals": expects_finals,
+        "expects_main_bis": expects_main_bis,
         "result_groups": result_groups,
         "ryp_stage": ryp_stage,
         "ryp1_groups": ryp1_groups,

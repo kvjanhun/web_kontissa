@@ -2205,6 +2205,27 @@ def test_live_plan_rescue_hard_stops_overnight():
     assert night["phase"] == "rescue" and night["can_fetch"] is False
 
 
+def test_live_plan_single_group_show_does_not_rescue():
+    """A single-FCI-group show (e.g. group 10 only) crowns junior/veteran/utility
+    BIS but no main BIS-1. It must settle when its date passes — not enter overtime
+    or rescue-poll for two days waiting for a BIS-1 that never comes (show 13664)."""
+    show = {"id": 13664, "date": "12.04.", "month": "huhtikuu 2026"}
+    breeds = [{"group": "10", "breed_id": str(b), "count": 2, "has_results": True}
+              for b in range(1, 5)]
+    doc = {"status": "complete", "results": [
+        {"breedGroup": "10", "breedId": "1", "awards": "SA, ROP, JUN ROP, BIS JUN-1"},
+        {"breedGroup": "10", "breedId": "2", "awards": "SA, ROP, VET ROP, BIS VET-1"},
+    ]}
+    # Live day: still fetching (runs the finals sweep to catch side BIS), not settled.
+    live = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 4, 12, 14))
+    assert live["expects_main_bis"] is False
+    assert live["expects_finals"] is True
+    assert live["phase"] == "live"
+    # Day after: a multi-group show would be in rescue; this one settles instead.
+    after = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 4, 13, 10))
+    assert after["phase"] == "settled"
+
+
 def test_live_plan_settles_incomplete_past_deadline():
     """Past the 2-day deadline an owed-but-never-published finals settles as
     settled_incomplete (the source itself is sometimes incomplete)."""

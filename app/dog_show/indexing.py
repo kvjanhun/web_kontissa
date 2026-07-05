@@ -158,7 +158,7 @@ def _compute_show_stats_from_index(show_id, show=None, today=None):
         )
         if plan["phase"] in ("settled", "settled_incomplete"):
             live_finished_by = "incomplete" if plan["phase"] == "settled_incomplete" else (
-                "bis" if plan["expects_finals"] else "entries"
+                "bis" if plan["expects_main_bis"] else "entries"
             )
             show_state = "past"
     result_breeds_for_cache = _result_breeds_for_cache(

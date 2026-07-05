@@ -181,19 +181,25 @@ def _terminal_status(doc, indexed_breeds):
     analysis = finals.analyze(doc, indexed_breeds)
     entry_count = _entry_count_from_breeds(indexed_breeds)
     entries_complete = _result_doc_entries_complete(doc, entry_count)
-    if analysis["expects_finals"]:
+    try:
+        row_count = len(doc.get("results") or [])
+    except (AttributeError, TypeError):
+        row_count = 0
+    if analysis["expects_main_bis"]:
+        # Multi-group show: the terminal is the main BIS-1 (+ every group's RYP-1).
         target_met = analysis["target_met"]
         signature = finals.fingerprint_token(analysis)
     else:
+        # Single-group or finals-less show: no main BIS to wait for. Settle on
+        # entry completion; any group RYP / side BIS is captured opportunistically
+        # by the finals sweep and folded into the signature so a late one resets
+        # the confirmation.
         target_met = entries_complete
-        try:
-            row_count = len(doc.get("results") or [])
-        except (AttributeError, TypeError):
-            row_count = 0
-        signature = f"entries:{row_count}"
+        signature = f"entries:{row_count}|{finals.fingerprint_token(analysis)}"
     return {
         "analysis": analysis,
         "expects_finals": analysis["expects_finals"],
+        "expects_main_bis": analysis["expects_main_bis"],
         "entries_complete": entries_complete,
         "target_met": target_met,
         "signature": signature,
@@ -262,6 +268,7 @@ def _result_live_plan(
     status = _terminal_status(doc, indexed_breeds)
     analysis = status["analysis"]
     expects_finals = status["expects_finals"]
+    expects_main_bis = status["expects_main_bis"]
     target_met = status["target_met"]
     # Both finals and finals-less shows require a confirming pass (the crawler's
     # `_mark_terminal_confirmation`) before settling, so a live show never flips
@@ -280,6 +287,7 @@ def _result_live_plan(
             "can_fetch": can_fetch,
             "show_state": state,
             "expects_finals": expects_finals,
+            "expects_main_bis": expects_main_bis,
             "target_met": target_met,
             "confirmed": confirmed,
             "settle_by_target": settle_by_target,
@@ -298,8 +306,14 @@ def _result_live_plan(
     if settle_by_target and is_final_day:
         return _plan("settled", None, False)
 
-    # A finals-less show past its date has nothing left to fetch.
-    if not expects_finals and state == "past":
+    # Overtime and rescue exist only to catch a **main BIS** and its group RYPs,
+    # which publish after the breed rings on a multi-group show. A single-group
+    # show (breed/group specialty) crowns no main BIS, so it never enters overtime
+    # or rescue — it settles when its date passes, like a finals-less show, having
+    # captured its side BIS / group RYP during the live day. This also stops a
+    # group-10-only show (junior/veteran/utility BIS, no `BIS-1`) from being
+    # rescue-polled for two days every time.
+    if not expects_main_bis and state == "past":
         return _plan("settled", None, False)
 
     in_day = morning_hour <= hour < evening_hour
@@ -307,19 +321,20 @@ def _result_live_plan(
     if state == "live":
         if in_day:
             return _plan("live", RESULT_CACHE_LIVE_TTL, True)
-        # Outside day hours on a live date-range. Only the final day's finals
-        # earn an evening/night overtime tail; earlier days keep the polite
-        # overnight lull between show days.
+        # Outside day hours on a live date-range. Only a multi-group final day's
+        # finals earn an evening/night overtime tail; earlier days and single-group
+        # shows keep the polite overnight lull between show days.
         if (
             is_final_day
-            and expects_finals
+            and expects_main_bis
             and not settle_by_target
             and (hour >= evening_hour or hour < night_stop_hour)
         ):
             return _plan("overtime", RESULT_CACHE_OVERTIME_TTL, True)
         return _plan("live", RESULT_CACHE_LIVE_TTL, False)
 
-    # state == "past", within the deadline, still owing its terminal: rescue.
+    # state == "past", within the deadline, a multi-group show still owing its
+    # main BIS: rescue.
     can_fetch = _in_finals_fetch_window(hour, morning_hour, evening_hour, night_stop_hour)
     return _plan("rescue", RESULT_CACHE_RESCUE_TTL, can_fetch)
 
