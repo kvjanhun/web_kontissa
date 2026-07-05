@@ -13,7 +13,7 @@ present) but whose terminal target is not met — a result-bearing FCI group wit
 no RYP-1, or no main BIS-1 on an all-breed show. A show whose source genuinely
 never published those tokens simply comes back unchanged.
 
-Polite and safe (identical guarantees to `dog_recrawl_pre_phase_c.py`):
+Polite and safe:
 - same request rate as the live result crawl (3 workers, 0.4s between starts),
   tunable via --workers / --delay; oldest-first;
 - before forcing each show it fetches the live Showlink detail page and only
@@ -23,8 +23,8 @@ Polite and safe (identical guarantees to `dog_recrawl_pre_phase_c.py`):
 Idempotent-ish: once a show gains its finals it no longer matches the selector.
 A show whose finals were never published at the source will keep matching, so use
 --limit / the printed list to avoid re-forcing known source-incomplete shows.
-One-off; run against the host ./app/data like the other migrations; NOT part of
-the crawler loop.
+One-off operational tool; run against the host ./app/data; NOT part of the
+crawler loop.
 
     SECRET_KEY=dev python3 scripts/dog_rescue_finals.py --dry-run
     SECRET_KEY=dev python3 scripts/dog_rescue_finals.py --limit 5

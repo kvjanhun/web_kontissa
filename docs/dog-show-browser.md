@@ -89,7 +89,7 @@ Tables (see `app/dog_show/models.py`):
 
 `dog.db` is **not** replicated to Litestream (which covers `site.db` only) — once fetched the data is effectively static and Konsta backs it up manually. The in-memory `_show_index` mirror (`store.py`) is reloaded only when `dog_meta.index_generation` advances, so cross-process freshness works without re-reading on every request.
 
-`store.py` keeps the `_show_index` dict and all `/api/dog/*` response shapes byte-identical to the old JSON era; the one-off migration `scripts/migrate_dog_to_sql.py` loaded the legacy JSON files into `dog.db` with validated round-trip parity. For recent/live shows, complete caches with zero result breeds are still ignored and rebuilt when the index is stale or now shows result-enabled breeds.
+`store.py` keeps the `_show_index` dict and all `/api/dog/*` response shapes byte-identical to the old JSON era (the pre-SQL JSON files were migrated in with validated round-trip parity; the migration scripts are removed — see git history). For recent/live shows, complete caches with zero result breeds are still ignored and rebuilt when the index is stale or now shows result-enabled breeds.
 
 ## Freshness Policy
 
@@ -102,7 +102,7 @@ Tables (see `app/dog_show/models.py`):
 
 ### Terminal detection: when a live show is "finished"
 
-The whole redesign (2026-07, `plans/2026-06-28-dog-show-terminal-detection.md`) centers on one decision: stop fast-polling a show soon after it truly ends, but never before its finals are captured. Both the result-cache TTL and the front-page `is_live` badge derive their answer from a single pure function, `utils._result_live_plan(show, doc, indexed_breeds, now)`, so the crawler and the badge never disagree. The award-structure analysis it leans on lives in `finals.py` (`analyze` / `candidate_breed_keys` / `fingerprint_token`).
+The whole redesign (2026-07) centers on one decision: stop fast-polling a show soon after it truly ends, but never before its finals are captured. Both the result-cache TTL and the front-page `is_live` badge derive their answer from a single pure function, `utils._result_live_plan(show, doc, indexed_breeds, now)`, so the crawler and the badge never disagree. The award-structure analysis it leans on lives in `finals.py` (`analyze` / `candidate_breed_keys` / `fingerprint_token`).
 
 - **Show structure.** Dogs are graded breed by breed inside each FCI group (each breed crowns a `ROP`). When every breed in a group is judged, the group winners `RYP-1..4` are chosen from that group's `ROP` dogs — no new written grades. After **every** group has its winners, the main `BIS-1..4` is chosen from the `RYP-1` group winners. Juniors/veterans have no group stage (their `BIS JUN`/`BIS VET` land independently). Showlink appends these finals tokens onto the *winning dogs'* already-captured rows.
 - **Terminal target (`finals.analyze`).** Only a **multi-group** show (indexed breeds spanning ≥2 FCI groups → `expects_main_bis`) crowns a main Best in Show. Its target is met when (a) `BIS-1` is captured **and** (b) — only once any `RYP` token has appeared — every result-bearing group has its `RYP-1`. A **multi-group specialty cluster** (erikoisnäyttely, WDS-circuit club show, palveluskoiratapahtuma) crowns `BIS-1` with **no** group stage, so it settles on `BIS-1` alone (the RYP-per-group requirement activates only on evidence of an RYP stage). A **single-group show** (breed or group specialty, e.g. a group-10-only show that awards only junior/veteran/utility BIS) crowns **no** main `BIS-1`, so its terminal is entry completion — it never enters overtime/rescue waiting for a `BIS-1` that will not come; its side BIS / group RYP are captured during the live day by the finals sweep. A finals-less show (single-breed specialty) likewise settles on entry completion / its date passing.
@@ -116,9 +116,8 @@ The whole redesign (2026-07, `plans/2026-06-28-dog-show-terminal-detection.md`) 
 - Front-page display state (`stats.is_live` / `stats.is_paused`, `_show_live_phase` in `utils.py`): a live show reads as **`Käynnissä`** while judging is active, and as **`Jatkuu`** (paused) during its multi-day nightly/evening lull — the overnight quiet window, or a result stall of `DOG_RESULT_PAUSE_STALL_SECONDS` (2h) once past `DOG_RESULT_PAUSE_EVENING_HOUR` (17:00) — but only when another in-range show day still follows. The first day's pre-dawn and the final day's wind-down stay `Käynnissä`; the show flips to past only when `_result_live_plan` reports `settled`/`settled_incomplete` (terminal captured + confirmed, or the deadline hit), so an all-breed show keeps reading `Käynnissä`/`Jatkuu` through its finals instead of flipping to `done` the moment every breed ring is judged. `Jatkuu` rows keep showing today's `n/N tulosta`. This is a display distinction only; the Showlink fetch gate is unchanged.
 - **Live-show serving cost.** While any list row reads `is_live`, the `/dog` page polls `/api/dog/shows` every 15s (per open client), and computing a live show's stats reconstructs its whole-show result doc from SQLite. `_show_stats_from_index` loads that doc at most once per compute and caches the result per process for `DOG_SHOW_STATS_CACHE_TTL` (20s), so poll volume and viewer count don't translate into per-request whole-show reads. This is the web-side counterpart to the crawler's incremental refresh — both keep a live show from doing work proportional to anything other than actual new data.
 - **Scheduler.** `scripts/dog_crawl.py` no longer skips the auto-recent result pass when queued jobs ran in the same cycle — that starvation (web browsing keeps queueing `live-list-refresh` jobs) is what stopped a live show's finals from being fetched. The auto pass shares the budget; a show a queued job just refreshed is deduped out by the candidates' own freshness check.
-- **Rescuing shows that already lost their finals.** `scripts/dog_rescue_finals.py` is a one-off (not in the crawler loop) that finds complete caches which structurally owe finals (via `finals.analyze`) and force re-crawls them oldest-first, with the same "only force if Showlink still serves result-bearing breeds" guard as `dog_recrawl_pre_phase_c.py`. Use `--dry-run` to list, `--show <id>` to target specific shows. Shows whose source never published the tokens come back unchanged.
+- **Rescuing shows that already lost their finals.** `scripts/dog_rescue_finals.py` is a one-off operational tool (not in the crawler loop) that finds complete caches which structurally owe finals (via `finals.analyze`) and force re-crawls them oldest-first, guarded so it only forces shows Showlink still serves result-bearing breeds for. Use `--dry-run` to list, `--show <id>` to target specific shows. Shows whose source never published the tokens come back unchanged.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
-- Whole-show result active TTL for recent non-live shows: replaced by the single final post-show check once a show date is known.
 - Whole-show result settled TTL: 7 days by default.
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
@@ -142,13 +141,11 @@ Environment knobs:
 - `DOG_INDEX_DIR`: base directory for dog state; also the default location of `dog.db`.
 - `DOG_DATABASE_URI`: full SQLAlchemy URL for the `/dog` database; defaults to `dog.db` inside `DOG_INDEX_DIR`.
 - `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
-- `DOG_RESULT_BIS_FINAL_GRACE_SECONDS`: seconds to keep live polling after main BIS appears in cached awards; defaults to `1800`.
 - `DOG_RESULT_LIVE_PROBE_BREED_LIMIT`: max unchecked breeds to probe during one live whole-show refresh; defaults to `64`.
 - `DOG_RESULT_FINALS_SWEEP_BREED_LIMIT`: max already-captured breeds re-checked per pass for finals (`RYP`/`BIS`) once all breeds are judged but `BIS-1` is still missing; defaults to `30`. Bounds the end-of-show finals sweep so it never re-crawls the whole show at once.
 - `DOG_INDEX_RELOAD_MIN_INTERVAL`: minimum seconds between full in-memory index rebuilds per process; defaults to `1.0`. The generation check is cheap, but a busy live show makes the crawler bump the generation often and one `/api/dog/shows` hit re-checks it several times — without this floor each did a full `read_index` rebuild and starved the request workers.
 - `DOG_SHOW_STATS_CACHE_TTL`: seconds to cache a show's computed list stats per web process; defaults to `20`. The `/dog` page polls `/api/dog/shows` every 15s while any show reads `is_live`, and a live show's stats reconstruct its whole-show result doc (thousands of rows) from SQLite. Caching the stats this long decouples that cost from the poll rate and the number of viewers. Bypassed when an explicit `today` is passed (tests).
 - `DOG_RESULT_LIVE_JOB_STALE_SECONDS`: seconds before a non-heartbeating live result job can be claimed again; defaults to `DOG_RESULT_LIVE_TTL`.
-- `DOG_RESULT_ACTIVE_TTL`: legacy recent-show TTL setting; dated past shows now use the single final post-show check plus settled TTL.
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
 - `DOG_RESULT_SETTLED_AFTER_DAYS`: days after show date before using settled TTL.
 - `DOG_RESULT_AUTO_WINDOW_DAYS`: how many past days automatic warming covers.
@@ -159,38 +156,12 @@ Environment knobs:
 - `DOG_RESULT_TIMEZONE`: IANA timezone used to evaluate show dates and the morning/evening result windows; defaults to `Europe/Helsinki`. The crawler/web containers run in UTC, so this is resolved explicitly via `tzdata` rather than the process clock.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
-- `DOG_BACKFILL_*` (below): archived — only consulted when `--backfill` is passed, which production no longer does (see [Historical Backfill](#historical-backfill-phase-c)).
-- `DOG_BACKFILL_START_HOUR` / `DOG_BACKFILL_END_HOUR`: Finnish local off-peak window for the historical backfill; defaults to `0`–`6` (00:00–06:00). End is exclusive; the window may wrap midnight.
-- `DOG_BACKFILL_DELAY`: seconds between backfill breed-result requests; defaults to `2.0`. Prefer raising this over adding workers if Showlink ever slows.
-- `DOG_BACKFILL_WORKERS`: concurrent requests per backfill show; defaults to `1` (deliberately serial — the backfill must never be bursty).
-- `DOG_BACKFILL_SHOW_LIMIT`: max shows to backfill per crawler pass; defaults to `1`.
-- `DOG_BACKFILL_BREED_BUDGET`: max breeds crawled per backfill pass before the pass returns; defaults to `25` (≈50s at the 2s spacing). A show larger than the budget is crawled across several passes (resuming per-breed) instead of holding the crawler loop for one long crawl.
 
-## Historical Backfill (Phase C)
+## Historical Completeness
 
-> **Archived 2026-07.** The backfill has finished: every dog show still reachable on Showlink is captured with `status='complete'` in `dog_result_cache`. Production no longer passes `--backfill` (removed from the `dog-crawler` command in `docker-compose.yml`). The code, CLI flag, and `DOG_BACKFILL_*` knobs remain for reference and for re-running if a fresh tranche of history ever needs capturing. New and recent shows keep getting complete caches without it, via the auto-warm (7-day), queued-job, and immediate-warmup paths.
+Every dog show still reachable on Showlink is captured with `status='complete'` in `dog_result_cache` (the Phase C backfill, completed and removed 2026-07 — see git history for the off-peak backfill machinery). Showlink keeps a **rolling ~24-month window** and silently drops older shows; captured history in `dog.db` is permanent and survives that. New and recent shows get complete caches via the auto-warm (7-day window), queued-job, and live-refresh paths, so the database stays complete going forward without any backfill.
 
-`scripts/dog_crawl.py --backfill` enables an off-peak, oldest-first crawl that captures full results for shows beyond the live/auto window. It is a no-op outside the Finnish 00:00–06:00 window and while any user/live result job is queued or running, so it never competes with live work. It selects the **oldest not-yet-captured** show with result-bearing breeds, crawls it via the normal result-cache path (single worker, `DOG_BACKFILL_DELAY` between requests), and marks it complete. A complete show is **permanently captured and never re-crawled** — the backfill only advances into not-yet-captured history.
-
-Oldest-first is deliberate: Showlink keeps a **rolling ~24-month window** and silently drops older shows (their pages return an empty shell, results gone for good). Oldest-first races that window so the most at-risk history is secured first; recent shows are already covered by the auto-warm and live-refresh paths. A show that has already aged out is recorded complete with zero results and not retried.
-
-Each backfill fetch captures everything the result page offers in one pass: per-dog `competitive_placement` (PU/PN), and the breed honor-roll (`dog_breed_award`: ROP/VSP/SERT/veteran/junior/breeder winners with owner/kennel), in addition to the grades, awards, critiques, and judges already captured.
-
-Backfill passes are **bounded by `DOG_BACKFILL_BREED_BUDGET`** (default 25 breeds): a 200+ breed historical show is crawled in chunks across consecutive passes rather than holding the loop for one ~7–8 minute crawl. The crawl is resumable per-breed, so each pass continues the same show (`status="incomplete"`) until the final pass marks it complete. This keeps the queued/auto/live passes responsive between backfill chunks.
-
-### One-off re-crawl of pre-Phase-C shows
-
-A handful of shows were captured between Phase B (SQL migration) and Phase C (full-data capture); their result rows lack `competitive_placement` and they have no `dog_breed_award` rows. `scripts/dog_recrawl_pre_phase_c.py` is a one-off that finds exactly those shows (complete caches with result rows but zero non-empty `competitive_placement` and zero awards) and force-re-crawls them oldest-first so they gain the new fields. It is **not** part of the crawler loop.
-
-Before forcing each show it fetches the live Showlink detail page and only re-crawls if the show **still serves result-bearing breeds** — a show that has aged out of Showlink's window is skipped and its captured data is left intact (a force re-crawl would otherwise overwrite it with an empty result set). Run it against the host `./app/data` like the other one-off migrations:
-
-```bash
-SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py --dry-run   # list selected ids
-SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py             # re-crawl all (oldest first)
-SECRET_KEY=dev python3 scripts/dog_recrawl_pre_phase_c.py --limit 5   # oldest 5 only
-```
-
-Unlike the continuous `--backfill` (deliberately 1 worker / 2s for weeks-long unattended running), this watched one-off **defaults to the live result-crawl rate** (`--workers 3 --delay 0.4`, one request per breed) — the same rate Showlink already tolerates from this site and within the crawler's worker ceiling, so it stays polite without out-muscling the loop's other passes. Lower `--workers` / raise `--delay` to be gentler. It is idempotent: once a show has the new fields it no longer matches the selector.
+Every result fetch captures the full data the page offers in one pass: per-dog `competitive_placement` (PU/PN) and the breed honor-roll (`dog_breed_award`: ROP/VSP/SERT/veteran/junior/breeder winners with owner/kennel), in addition to grades, awards, critiques, and judges.
 
 ## Public Crawler Identity
 
@@ -220,8 +191,6 @@ This means:
 - Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 - During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
-
-The historical `--backfill` pass is no longer part of this command (archived 2026-07; see [Historical Backfill](#historical-backfill-phase-c)).
 
 The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.
 
@@ -297,34 +266,6 @@ Disable user-triggered immediate warmup for a test run:
 
 ```bash
 DOG_RESULT_IMMEDIATE_WARMUP=false SECRET_KEY=dev python3 run.py
-```
-
-## One-off JSON → dog.db Migration
-
-`scripts/migrate_dog_to_sql.py` is the reviewed one-off that loaded the legacy JSON caches (`dog_show_index.json`, `dog_result_cache/*.json`, `dog_result_jobs.json`) into `dog.db`. It reads the JSON files directly (decoupled from the now-SQL store), folds result-only judges into the breed list the way the app does lazily, writes the rows, then validates that every record round-trips back identically before reporting success. It is idempotent — it replaces all dog rows each run.
-
-Validate-only (re-check an existing `dog.db` against the JSON, no writes):
-
-```bash
-SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py --validate-only
-```
-
-Run the migration (writes `DOG_DATABASE_URI`, default `app/data/dog.db`):
-
-```bash
-SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py
-```
-
-On the NUC, stop the web + crawler containers first, run the migration against the host `./app/data`, confirm it prints `OK: … round-trip identically`, then start the containers. `dog.db` is not Litestream-replicated; back it up manually.
-
-## Phase C schema migration (existing dog.db)
-
-> **Historical — ran 2026-06.** This migration and the `--backfill` it preceded are both complete; kept here for reference and for any future fresh-database bring-up.
-
-`scripts/migrate_dog_phase_c.py` adds the Phase C capture fields to an existing `dog.db`: the `dog_result.competitive_placement` column (an additive `ALTER TABLE`) and the `dog_breed_award` table (`create_all`). It is idempotent and additive — it never drops or rewrites rows; pre-Phase-C rows simply have `NULL` competitive_placement and no honor-roll until those shows are (re)crawled. Run it once before enabling `--backfill` on the new image:
-
-```bash
-docker compose run --rm web python scripts/migrate_dog_phase_c.py   # prints what it changed
 ```
 
 ## Testing

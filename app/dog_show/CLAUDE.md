@@ -37,8 +37,6 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 
 ## Compatibility Notes
 
-`app/api/dog.py` intentionally re-exports several private helpers and cache objects while the test suite and crawler migrate to the package modules. Do not remove those exports casually; first update `tests/test_dog.py`, `scripts/dog_crawl.py`, and any docs that still point at the facade.
-
 The shared `_show_index` object is mutated in place by `store._load_index()` so imports from `store.py`, `indexing.py`, and `app/api/dog.py` continue seeing the same dictionary. It is now a SQL-backed mirror: `_load_index()` reloads it from `dog.db` only when the `dog_meta.index_generation` counter advances, and code that mutates a show in place must mark it dirty (`store._mark_index_dirty(sid)`) before `_save_index()` so the per-show flush persists it.
 
 ## dog.db (the persistent store)
@@ -51,7 +49,7 @@ The shared `_show_index` object is mutated in place by `store._load_index()` so 
 
 - Preserve all `/api/dog/*` response shapes unless the frontend and E2E tests are changed deliberately.
 - Preserve the dict shapes `store.py` exposes (`_show_index` entries, whole-show result docs, the result-jobs doc) — `sqlstore.py` round-trips them and `tests/test_dog.py` locks them in.
-- No live migrations at import/startup. `db.init_db()` only creates missing tables; any column/table change needs an explicit plan, tests, and a reviewed one-off prod migration (see `scripts/migrate_dog_to_sql.py`).
+- No live migrations at import/startup. `db.init_db()` only creates missing tables; any column/table change needs an explicit plan, tests, and a reviewed one-off prod migration.
 - Keep `group` and `breed` validation in the route layer.
 - Keep crawler request volume bounded: respect worker limits, request delay, retry backoff, and `retry_after`.
 - Run `python3 -m pytest tests/test_dog.py` after backend behavior changes when the app test harness is healthy.

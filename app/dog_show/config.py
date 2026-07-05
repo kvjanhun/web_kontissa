@@ -27,7 +27,6 @@ RESULT_CACHE_RESCUE_TTL = int(os.environ.get("DOG_RESULT_RESCUE_TTL", "900"))
 # if its terminal award never appeared (the source itself is sometimes
 # incomplete). Settling then is logged as settled_incomplete, not silent.
 RESULT_SETTLE_DEADLINE_DAYS = int(os.environ.get("DOG_RESULT_SETTLE_DEADLINE_DAYS", "2"))
-RESULT_CACHE_ACTIVE_TTL = int(os.environ.get("DOG_RESULT_ACTIVE_TTL", "21600"))
 RESULT_CACHE_SETTLED_TTL = int(os.environ.get("DOG_RESULT_SETTLED_TTL", "604800"))
 RESULT_CACHE_SETTLED_AFTER_DAYS = int(os.environ.get("DOG_RESULT_SETTLED_AFTER_DAYS", "2"))
 RESULT_AUTO_WINDOW_DAYS = int(os.environ.get("DOG_RESULT_AUTO_WINDOW_DAYS", "7"))
@@ -80,26 +79,7 @@ INDEX_RELOAD_MIN_INTERVAL = float(os.environ.get("DOG_INDEX_RELOAD_MIN_INTERVAL"
 SHOW_STATS_CACHE_TTL = float(os.environ.get("DOG_SHOW_STATS_CACHE_TTL", "20"))
 RESULT_LOCAL_TIMEZONE = os.environ.get("DOG_RESULT_TIMEZONE", "Europe/Helsinki")
 
-# Phase C all-shows backfill: full-data crawl of historical shows, run only in an
-# off-peak window, strictly polite (single worker, deliberate per-request delay),
-# oldest-first so the most at-risk history (closest to ageing off Showlink's
-# rolling window) is captured first. Disabled unless dog_crawl.py is run with
-# --backfill. The window is Finnish local time; the crawler container runs UTC.
-BACKFILL_START_HOUR = int(os.environ.get("DOG_BACKFILL_START_HOUR", "0"))
-BACKFILL_END_HOUR = int(os.environ.get("DOG_BACKFILL_END_HOUR", "6"))
-BACKFILL_DELAY = float(os.environ.get("DOG_BACKFILL_DELAY", "2.0"))
-BACKFILL_WORKERS = int(os.environ.get("DOG_BACKFILL_WORKERS", "1"))
-BACKFILL_SHOW_LIMIT = int(os.environ.get("DOG_BACKFILL_SHOW_LIMIT", "1"))
-# Max breeds a single backfill pass crawls before returning, so a 200+ breed
-# historical show is captured across several passes (resuming per-breed) instead
-# of holding the crawler loop for one long crawl. ~25 breeds ≈ 50s at 2s spacing,
-# comfortably inside the loop cadence and the off-peak window.
-BACKFILL_BREED_BUDGET = int(os.environ.get("DOG_BACKFILL_BREED_BUDGET", "25"))
-
 INDEX_DIR = os.environ.get("DOG_INDEX_DIR", os.path.join(os.path.dirname(__file__), "..", "data"))
-INDEX_PATH = os.path.join(INDEX_DIR, "dog_show_index.json")
-RESULT_CACHE_DIR = os.environ.get("DOG_RESULT_CACHE_DIR", os.path.join(INDEX_DIR, "dog_result_cache"))
-RESULT_JOBS_PATH = os.environ.get("DOG_RESULT_JOBS_PATH", os.path.join(INDEX_DIR, "dog_result_jobs.json"))
 
 # Dog data lives in its own SQLite database (the /dog-only persistent store),
 # separate from the main site.db and not replicated to Litestream. A full

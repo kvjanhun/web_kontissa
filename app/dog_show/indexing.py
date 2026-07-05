@@ -1,9 +1,9 @@
 import datetime
+import re
 import time
 
 import structlog
 
-from . import finals
 from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS, SHOW_STATS_CACHE_TTL
 from .store import (
     _indexed_show, _load_index, _load_result_cache_doc, _mark_index_dirty, _save_index,
@@ -12,7 +12,7 @@ from .store import (
 from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
-    _parse_show_date, _result_doc_has_main_bis, _result_doc_has_show_finals,
+    _parse_show_date,
     _result_doc_last_result_at, _result_live_plan, _show_age_days,
     _show_date_state, _show_live_phase, _show_result_availability, _utc_iso,
 )
@@ -111,16 +111,6 @@ def _show_item_for_stats(show_id, show=None):
             "month": indexed_show.get("month", ""),
         }
     return _show_list_item_for_id(show_id)
-
-def _show_expects_main_bis(show_id, doc=None):
-    """Whether the show is expected to crown show-wide finals (RYP/BIS).
-
-    True for all-breed shows (indexed breeds spanning multiple FCI groups) or any
-    cache that already records show-wide finals tokens. Thin wrapper over
-    `finals.analyze` so the show-type inference lives in one place; kept as a
-    named helper for the crawler/tests."""
-    indexed = _indexed_show(show_id) or {}
-    return finals.analyze(doc, indexed.get("breeds") or [])["expects_finals"]
 
 def _compute_show_stats_from_index(show_id, show=None, today=None):
     indexed_show = _show_index.get("shows", {}).get(str(show_id))
@@ -488,8 +478,6 @@ def _merge_persisted_result_state_into_breeds(show_id, breeds):
                 item["judge"] = persisted.get("judge")
         merged.append(item)
     return merged
-
-import re
 
 def _parse_show_meta_from_title(title):
     if not title:

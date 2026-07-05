@@ -1,4 +1,3 @@
-import datetime
 import time
 
 import requests
@@ -6,12 +5,8 @@ import structlog
 from flask import Blueprint, jsonify, request as flask_request
 
 from app import limiter
-from app.dog_show import crawler, result_cache, store
-from app.dog_show.config import (
-    BASE_URL, BREED_RESULT_TTL, REQUEST_HEADERS, REQUEST_TIMEOUT, RESULT_CACHE_VERSION,
-    RESULT_RETRY_AFTER_SECONDS, SHOW_DETAIL_TTL, SHOW_LIST_TTL,
-)
-from app.dog_show.crawler import crawl_empty_index_once, crawl_index_once, queue_background_indexing
+from app.dog_show.config import BREED_RESULT_TTL, RESULT_RETRY_AFTER_SECONDS
+from app.dog_show.crawler import queue_background_indexing
 from app.dog_show.indexing import (
     _cached_show_detail, _enrich_breeds_with_cached_result_judges,
     _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
@@ -24,16 +19,14 @@ from app.dog_show.result_cache import (
     _breed_results_from_all_results_cache, _cached_all_results_response,
     _enrich_breeds_with_result_progress, _queue_live_result_cache_refresh,
     _queue_live_result_cache_refreshes, _result_cache_progress, _start_result_cache_warmup,
-    crawl_result_cache_for_show, crawl_result_cache_once,
 )
 from app.dog_show.search import search_shows_data
 from app.dog_show.showlink import _fetch_page, _source_url
 from app.dog_show.shows import _get_show_list
 from app.dog_show.store import (
-    INDEX_PATH, RESULT_CACHE_DIR, RESULT_JOBS_PATH, _breed_result_cache, _index_summary,
+    _breed_result_cache, _index_summary,
     _load_index, _load_result_cache_doc, _load_result_jobs, _queue_result_cache_job,
-    _remove_result_cache_job, _save_index, _save_result_cache_doc, _save_result_jobs,
-    _show_all_results_cache, _show_detail_cache, _show_index, _show_list_cache,
+    _save_index, _show_detail_cache, _show_index, _show_list_cache,
 )
 from app.dog_show.utils import _clean_judge_name, _utc_iso
 

@@ -9,13 +9,7 @@ from .utils import _utc_iso
 
 logger = structlog.get_logger(__name__)
 
-# Legacy JSON locations. Storage now lives in dog.db (see db.py / sqlstore.py),
-# but these constants are still re-exported (api/dog.py, scripts/dog_crawl.py)
-# and describe where the one-off migration reads its source from.
 INDEX_DIR = config.INDEX_DIR
-INDEX_PATH = config.INDEX_PATH
-RESULT_CACHE_DIR = config.RESULT_CACHE_DIR
-RESULT_JOBS_PATH = config.RESULT_JOBS_PATH
 RESULT_JOB_STALE_SECONDS = config.RESULT_JOB_STALE_SECONDS
 RESULT_JOB_BACKOFF_SECONDS = config.RESULT_JOB_BACKOFF_SECONDS
 
@@ -169,7 +163,8 @@ def _append_result_breed(show_id, doc, group, breed_id, results):
 
 
 def _complete_result_cache_show_ids():
-    """Set of show ids with a complete result cache (for the backfill skip check)."""
+    """Set of show ids with a complete result cache (one status-column scan).
+    Used by the operational finals-rescue tool (scripts/dog_rescue_finals.py)."""
     try:
         with dog_db.session_scope() as session:
             return sqlstore.complete_result_cache_show_ids(session)

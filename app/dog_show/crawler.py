@@ -1,3 +1,4 @@
+import threading
 import time
 
 import structlog
@@ -135,8 +136,6 @@ def crawl_empty_index_once(limit=20, delay=0.5):
     summary["empty_candidates"] = len(candidates)
     logger.info("dog_crawler_empty_index_pass_complete", **summary)
     return summary
-
-import threading
 
 _background_indexing_lock = threading.Lock()
 _background_indexed_shows = set()

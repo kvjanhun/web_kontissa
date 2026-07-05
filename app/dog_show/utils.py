@@ -116,30 +116,6 @@ def _clean_all_result_item(result):
 def _clean_all_results(results):
     return [_clean_all_result_item(result) for result in (results or [])]
 
-def _split_award_tokens(value):
-    return [item.strip().upper() for item in str(value or "").split(",") if item.strip()]
-
-def _result_doc_has_main_bis(doc):
-    if not isinstance(doc, dict):
-        return False
-    return any(
-        "BIS-1" in _split_award_tokens(result.get("awards"))
-        for result in doc.get("results") or []
-    )
-
-def _result_doc_has_show_finals(doc):
-    """True when the cache already records show-wide finals placements: group
-    (RYP), junior (BIS JUN), or veteran (BIS VET) Best in Show. Such shows crown
-    a main Best in Show after the breed rings finish, so the whole-show cache
-    must not settle on breed completion alone."""
-    if not isinstance(doc, dict):
-        return False
-    for result in doc.get("results") or []:
-        for token in _split_award_tokens(result.get("awards")):
-            if token.startswith(("BIS JUN", "BIS VET", "BIS PEN", "RYP")):
-                return True
-    return False
-
 def _entry_count_from_breeds(breeds):
     """Total catalog entries across a breed list, or None when unknowable."""
     entry_count = 0

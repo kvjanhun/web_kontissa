@@ -337,35 +337,13 @@ def read_result_doc(session, show_id):
 def complete_result_cache_show_ids(session):
     """Show ids with a fully-captured result cache (status='complete').
 
-    A single status-column scan, used by the backfill candidate filter to skip
-    already-captured shows without reconstructing each whole-show doc."""
+    A single status-column scan, used by the finals-rescue tool to find complete
+    caches without reconstructing each whole-show doc."""
     return {
         row[0] for row in session.execute(
             select(DogResultCache.show_id).where(DogResultCache.status == "complete")
         ).all()
     }
-
-
-def pre_phase_c_result_cache_show_ids(session):
-    """Show ids of complete result caches captured before the Phase C full-data
-    change: they have result rows, but every row's competitive_placement is empty
-    and there are no honor-roll award rows. Used by the one-off re-crawl to gain
-    the new fields. (Post-Phase-C captures have PU/PN placements and/or awards.)"""
-    complete = select(DogResultCache.show_id).where(DogResultCache.status == "complete")
-    has_competitive = (
-        select(DogResult.show_id)
-        .where(func.coalesce(DogResult.competitive_placement, "") != "")
-        .distinct()
-    )
-    has_awards = select(DogBreedAward.show_id).distinct()
-    stmt = (
-        select(DogResult.show_id)
-        .where(DogResult.show_id.in_(complete))
-        .where(DogResult.show_id.notin_(has_competitive))
-        .where(DogResult.show_id.notin_(has_awards))
-        .distinct()
-    )
-    return {row[0] for row in session.execute(stmt).all()}
 
 
 # ---------------------------------------------------------------------------
