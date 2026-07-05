@@ -915,7 +915,6 @@
   .dog-results-filter-grid.dog-show-tools-grid-live .dog-results-only-col {
     grid-column: span 5;
   }
-  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-tools-action,
   .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-progress-inline {
     grid-column: 1 / -1;
   }
@@ -943,12 +942,6 @@
 }
 .dog-breed-search {
   margin-bottom: 0;
-}
-.dog-show-tools-grid-live .dog-show-tools-action .dog-show-wide-toggle {
-  max-width: 26rem;
-}
-.dog-show-tools-grid-live .dog-show-wide-note {
-  max-width: 42rem;
 }
 .dog-results-only-toggle {
   position: relative;
@@ -1019,44 +1012,6 @@
   white-space: nowrap;
   min-width: 0;
   pointer-events: none;
-}
-.dog-show-wide-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  padding: 0 1rem;
-  min-height: 38px;
-  background: var(--dog-control-bg);
-  border: 1px solid var(--dog-border-strong);
-  border-radius: var(--dog-radius-sm);
-  color: var(--dog-accent);
-  font-family: inherit;
-  font-size: 0.85rem;
-  font-weight: 700;
-  cursor: pointer;
-  width: 100%;
-  white-space: nowrap;
-  box-shadow: inset 0 1px 0 var(--dog-control-highlight);
-  transition: background 0.15s, border-color 0.15s, color 0.15s, transform 0.15s;
-}
-.dog-show-wide-toggle:hover {
-  background: color-mix(in srgb, var(--dog-accent) 6%, var(--dog-surface));
-  border-color: var(--dog-accent);
-  transform: translateY(-1px);
-}
-.dog-show-wide-note {
-  margin: 0.35rem 0 0;
-  color: var(--dog-text-muted);
-  font-size: 0.76rem;
-  line-height: 1.35;
-}
-.dog-toggle-icon {
-  width: 1rem;
-  height: 1rem;
-  color: var(--dog-accent);
-  stroke-width: 2px;
-  flex-shrink: 0;
 }
 .dog-breed-list {
   display: flex;
@@ -1268,6 +1223,50 @@
 }
 .dog-show-award-results {
   margin-top: 1.25rem;
+}
+/* ═══ Show winners summary (BIS / RYP-1) ═══ */
+.dog-show-winners {
+  margin: 0 0 1.75rem;
+  padding: 1rem 1rem 1.15rem;
+  background: color-mix(in srgb, var(--dog-accent) 5%, var(--dog-panel-bg));
+  border: 1px solid color-mix(in srgb, var(--dog-accent) 22%, var(--dog-border));
+  border-radius: var(--dog-radius-lg);
+  box-shadow: var(--dog-shadow-soft);
+}
+.dog-show-winners-title {
+  margin: 0 0 0.85rem;
+  color: var(--dog-text);
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.01em;
+}
+.dog-show-winners-subtitle {
+  margin: 1.1rem 0 0.5rem;
+  color: var(--dog-text-muted);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.dog-show-winners-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+.dog-show-winners-group + .dog-show-winners-group {
+  margin-top: 0.85rem;
+}
+.dog-show-winners-heading {
+  margin: 0;
+  padding: 0.35rem 0;
+  color: var(--dog-text);
+  font-size: 0.95rem;
+  font-weight: 700;
+}
+.dog-show-winners-heading-sm {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--dog-text-muted);
 }
 .dog-award-result-group {
   display: flex;
@@ -1517,6 +1516,13 @@
   background: rgba(190, 24, 93, 0.08);
   color: var(--dog-accent-2);
   border: 1px solid rgba(190, 24, 93, 0.24);
+}
+/* Best-of-sex competitive rank (PU/PN): distinguished from the grade/honour
+   awards with the primary accent so a PU1/PN1 reads as a ranking, not a title. */
+.dog-comp-placement {
+  background: color-mix(in srgb, var(--dog-accent) 10%, transparent);
+  color: var(--dog-accent);
+  border-color: color-mix(in srgb, var(--dog-accent) 30%, transparent);
 }
 
 /* ═══ Critique ═══ */

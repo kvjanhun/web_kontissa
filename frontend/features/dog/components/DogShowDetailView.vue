@@ -3,6 +3,7 @@ import DogBreedGroup from './DogBreedGroup.vue'
 import DogMetaBar from './DogMetaBar.vue'
 import DogResultCard from './DogResultCard.vue'
 import DogShowTools from './DogShowTools.vue'
+import DogShowWinners from './DogShowWinners.vue'
 import DogStateBlock from './DogStateBlock.vue'
 import { showAwardCritiqueKey, showBreedGroupCritiqueKey } from '../dogResults.js'
 
@@ -123,6 +124,10 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  showWinnersGroups: {
+    type: Object,
+    default: null,
+  },
   breedEmptyText: {
     type: String,
     default: '',
@@ -145,7 +150,6 @@ const emit = defineEmits([
   'update:dogClassFilter',
   'update:dogAwardFilter',
   'update:showGroupMode',
-  'start-show-wide',
   'retry-all-dogs',
   'breed-group-click',
   'open-breed',
@@ -251,8 +255,14 @@ function toggleAllVisibleCritiques() {
         @update:dogGradeFilter="$emit('update:dogGradeFilter', $event)"
         @update:dogClassFilter="$emit('update:dogClassFilter', $event)"
         @update:dogAwardFilter="$emit('update:dogAwardFilter', $event)"
-        @start-show-wide="$emit('start-show-wide')"
         @retry-all-dogs="$emit('retry-all-dogs')"
+      />
+
+      <DogShowWinners
+        v-if="showWinnersGroups"
+        :winners="showWinnersGroups"
+        :expanded-critiques="expandedCritiques"
+        @toggle-critique="$emit('toggle-critique', $event)"
       />
 
       <div v-if="shownDogCount !== null" class="dog-results-meta-row-header">

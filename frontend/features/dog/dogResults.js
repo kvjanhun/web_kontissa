@@ -742,6 +742,25 @@ export function groupResultsByAwardFilter(results = [], filter = '') {
   return [...groups.values()]
 }
 
+// Show-level winners summary derived purely from the already-loaded whole-show
+// results: the show finals (BIS / BIS JUN / BIS VET / BIS PEN, per-day split on
+// multi-day shows) and the FCI group winners (RYP-1 only — the full RYP-1..4 stays
+// in the award-filter view). Reuses groupResultsByAwardFilter so ordering, per-day
+// splitting, and awardRank all match the award view. Both arrays are `{ key, label,
+// dogs }` sections; rypGroups are single-winner sections labelled by FCI group.
+// Returns empty arrays for specialty shows that crown no show-wide finals.
+export function buildShowWinnersGroups(results = []) {
+  const bisGroups = groupResultsByAwardFilter(results, 'BIS').filter(group => group.dogs.length)
+  const rypGroups = []
+  groupResultsByAwardFilter(results, 'RYP').forEach((group) => {
+    const winner = group.dogs.find(dog => dog.awardRank === 1)
+    if (winner) {
+      rypGroups.push({ key: group.key, label: fciGroupLabel(winner.breedGroup), dogs: [winner] })
+    }
+  })
+  return { bisGroups, rypGroups }
+}
+
 const CLASS_ORDER = [
   'Pentuluokka',
   'Junioriluokka',
@@ -1102,7 +1121,6 @@ export function getShowResultAvailability(show, now = new Date(), morningHour = 
     return {
       canLoad: true,
       phase: 'unknown',
-      actionLabel: 'Suodata koko näyttelyä',
       loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
     }
   }
@@ -1128,8 +1146,6 @@ export function getShowResultAvailability(show, now = new Date(), morningHour = 
     return {
       canLoad: true,
       phase: 'show_day',
-      actionLabel: 'Tarkista koirat ja tulokset',
-      note: 'Näyttelypäivänä luokat ja tulokset voivat täydentyä vaiheittain päivän edetessä.',
       loadingNote: 'Näyttelypäivänä välimuisti voi täydentyä vaiheittain sitä mukaa kun Showlink julkaisee tietoja.',
     }
   }
@@ -1137,7 +1153,6 @@ export function getShowResultAvailability(show, now = new Date(), morningHour = 
   return {
     canLoad: true,
     phase: 'past',
-    actionLabel: 'Suodata koko näyttelyä',
     loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
   }
 }

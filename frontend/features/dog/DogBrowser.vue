@@ -53,6 +53,7 @@ const {
   availableShowClasses,
   availableShowAwards,
   showAwardResultGroups,
+  showWinnersGroups,
   indexedSearchActive,
   groupedShows,
   thisWeekShows,
@@ -65,7 +66,6 @@ const {
   availableAwards,
   resultsByGenderAndClass,
   awardResultGroups,
-  startShowWideSearch,
   loadAllShowResults,
   fetchShows,
   fetchShowDetail,
@@ -161,11 +161,11 @@ watch(pageTitle, (title) => {
         :all-breed-sections-collapsed="allBreedSectionsCollapsed"
         :is-breed-section-collapsed="isBreedSectionCollapsed"
         :show-award-result-groups="showAwardResultGroups"
+        :show-winners-groups="showWinnersGroups"
         :breed-empty-text="breedEmptyText"
         :expanded-critiques="expandedCritiques"
         :is-breed-group-expanded="isBreedGroupExpanded"
         @retry-detail="fetchShowDetail"
-        @start-show-wide="startShowWideSearch"
         @retry-all-dogs="loadAllShowResults"
         @breed-group-click="onBreedGroupClick"
         @open-breed="openBreed"

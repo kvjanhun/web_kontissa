@@ -24,16 +24,42 @@ const TODAY_FULL_DATE = `${TODAY_DATE}${TODAY.getFullYear()}`
 const YESTERDAY = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1)
 const YESTERDAY_FULL_DATE = `${pad2(YESTERDAY.getDate())}.${pad2(YESTERDAY.getMonth() + 1)}.${YESTERDAY.getFullYear()}`
 
-// Two consecutive days in the current month for the multi-day date badge
-// (the calendar box only renders a range that stays within one month):
-// today–tomorrow normally, yesterday–today on the last day of the month.
+// Two consecutive days in the current month for the multi-day date badge. The
+// range must stay inside BOTH the current month (the calendar box only renders a
+// same-month range) AND the current "this week left" window, which ends Sunday —
+// otherwise the show drops out of the featured "Tällä viikolla" section. Since
+// parseShowDate resolves a range to its LATER day, that later day must be ≤ the
+// upcoming Sunday. So use today–tomorrow normally, but fall back to yesterday–today
+// on the last day of the month or on a Sunday (when tomorrow spills into next week).
 const NEXT_DAY = new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() + 1)
-const RANGE_START = NEXT_DAY.getMonth() === TODAY.getMonth()
+const FORWARD_RANGE_OK = NEXT_DAY.getMonth() === TODAY.getMonth() && TODAY.getDay() !== 0
+const RANGE_START = FORWARD_RANGE_OK
   ? TODAY
   : new Date(TODAY.getFullYear(), TODAY.getMonth(), TODAY.getDate() - 1)
-const RANGE_END = NEXT_DAY.getMonth() === TODAY.getMonth() ? NEXT_DAY : TODAY
+const RANGE_END = FORWARD_RANGE_OK ? NEXT_DAY : TODAY
 const MULTI_DAY_DATE = `${pad2(RANGE_START.getDate())}.-${pad2(RANGE_END.getDate())}.${pad2(TODAY.getMonth() + 1)}.`
 const MULTI_DAY_BADGE = `${RANGE_START.getDate()}–${RANGE_END.getDate()}`
+
+// Whole-show results now auto-load the moment a show detail opens. Specs that only
+// exercise the breed list (not whole-show filtering) stub /all-results as a slow
+// "warming" response: the cache never finishes loading, so the breed-list UI is
+// asserted in its unloaded state and the auto-load fetch never reaches the real
+// server. retry_after is large so the background poll effectively doesn't re-fire
+// during the test.
+async function stubWarmingAllResults(page, showId) {
+  await page.route(`**/api/dog/shows/${showId}/all-results`, async route => {
+    await route.fulfill({
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        show_id: showId,
+        status: 'warming',
+        retry_after: 120,
+        progress: { state: 'queued', total_breeds: 1, fetched_breeds: 0, failed_breeds: 0, total_dogs: 0, percent: 0 },
+      }),
+    })
+  })
+}
 
 test.describe('Dog Show Browser', () => {
   test.use({
@@ -114,7 +140,7 @@ test.describe('Dog Show Browser', () => {
 
     await expect(page.locator('h1:has-text("Näyttelytulokset")')).toBeVisible({ timeout: 10000 })
 
-    const searchInput = page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')
+    const searchInput = page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...')
     await expect(searchInput).toBeVisible()
     await expect(page.getByRole('button', { name: 'Hae rotua', exact: true })).toHaveCount(0)
     // A show dated today renders both in "Tällä viikolla" and its month
@@ -136,6 +162,63 @@ test.describe('Dog Show Browser', () => {
     await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
     await expect(searchInput).toHaveValue('')
     await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(0)
+  })
+
+  test('search surfaces dog-name and owner matches with their own tags', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+    await page.route('**/api/dog/search**', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          query: 'tähti',
+          results: [
+            {
+              show: { id: 14042, date: YESTERDAY_FULL_DATE, name: 'Näyttely A', month: 'Tällä viikolla' },
+              breed: null, match: 'dog', dog: 'Aamun Tähti', dog_match_count: 3,
+            },
+            {
+              show: { id: 15050, date: YESTERDAY_FULL_DATE, name: 'Näyttely B', month: 'Tällä viikolla' },
+              breed: null, match: 'owner', owner: 'Tähti Pia', owner_match_count: 4,
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+    await page.route('**/api/dog/shows/14042', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14042, title: 'Näyttely A', breeds: [], source_url: '',
+          fetched_at: 1781431200, fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+    // After navigating into the dog's show, results auto-load — keep it off the real server.
+    await stubWarmingAllResults(page, 14042)
+
+    await page.goto('/dog')
+    await page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...').fill('tähti')
+
+    await expect(page.locator('.dog-search-breed-tag', { hasText: 'Koira' })).toBeVisible()
+    await expect(page.getByText('Aamun Tähti +2 muuta')).toBeVisible()
+    await expect(page.locator('.dog-search-breed-tag', { hasText: 'Omistaja' })).toBeVisible()
+    await expect(page.getByText('Tähti Pia · 4 tulosta')).toBeVisible()
+
+    // A dog hit opens its show and pre-fills the whole-show search with the dog name.
+    // (The cache stays "warming" here, so the input keeps its unloaded placeholder;
+    // assert the value by the input's class rather than the widened placeholder.)
+    await page.getByRole('button', { name: /Aamun Tähti/ }).click()
+    await expect(page).toHaveURL(/\/dog\?show=14042$/)
+    await expect(page.locator('.dog-breed-search .dog-search-input')).toHaveValue('Aamun Tähti')
   })
 
   test('paused multi-day show shows Jatkuu, today’s results, and a date range', async ({ page }) => {
@@ -277,6 +360,37 @@ test.describe('Dog Show Browser', () => {
       })
     })
 
+    // Whole-show results now auto-load when the show opens, so this show needs a
+    // complete cache to serve instantly.
+    await page.route('**/api/dog/shows/14042/all-results', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          show_id: 14042,
+          results: [
+            {
+              number: 1,
+              name: 'Aamun Tähti',
+              reg_url: '',
+              grade: 'ERI',
+              placement: 1,
+              awards: '',
+              critique: '',
+              gender: 'uros',
+              class_name: 'JUN',
+              breedName: 'Basenji',
+              breedGroup: '6',
+              breedId: '123',
+              breedObj: { name: 'Basenji', count: 3, group: '6', breed_id: '123', has_results: true },
+            },
+          ],
+          cache: { status: 'complete', stale: false, total_breeds: 1, fetched_breeds: 1, failed_breeds: 0, total_dogs: 1, percent: 100 },
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
     await page.goto('/dog')
 
     await page.getByRole('button', { name: /Basenji/ }).click()
@@ -289,7 +403,8 @@ test.describe('Dog Show Browser', () => {
     // The persistent /dog brand stays visible on the show page.
     await expect(page.getByRole('link', { name: '/dog' })).toBeVisible()
     await expect(page.locator('.dog-top-title')).toHaveCSS('text-overflow', 'ellipsis')
-    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
+    // Auto-loaded whole-show cache widens the placeholder (no button to click).
+    await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
     const resultBreedsOnly = page.getByRole('checkbox', { name: 'Tuloksia saaneet' })
     await expect(resultBreedsOnly).toBeVisible()
     await expect(resultBreedsOnly).toBeChecked()
@@ -299,20 +414,22 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByText('Akita')).toBeVisible()
     await resultBreedsOnly.check()
     await expect(page.getByText('Akita')).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toBeVisible()
 
+    // With the cache loaded, a breed group expands in place; its "Rotutulokset"
+    // link is what now opens the single-breed page.
     await page.getByRole('button', { name: /Basenji 3 koiraa/ }).click()
+    await page.getByRole('button', { name: 'Rotutulokset' }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042&group=6&breed=123$/)
     await expect(page.getByText('Testituomari')).toBeVisible()
 
     await page.goBack()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
-    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
+    await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
     await expect(page.getByText('Testituomari')).toHaveCount(0)
 
     await page.goBack()
     await expect(page).toHaveURL(/\/dog$/)
-    await expect(page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')).toBeVisible()
+    await expect(page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...')).toBeVisible()
   })
 
   test('show links open the breed list from the top of the page', async ({ page }) => {
@@ -361,6 +478,8 @@ test.describe('Dog Show Browser', () => {
         }),
       })
     })
+
+    await stubWarmingAllResults(page, 14042)
 
     await page.goto('/dog')
     // Today-dated shows are duplicated into "Tällä viikolla"; target the month
@@ -480,12 +599,10 @@ test.describe('Dog Show Browser', () => {
 
     await page.goto('/dog')
     await page.getByRole('button', { name: /Basenji Show/ }).click()
-    await expect(page.getByPlaceholder('Hae rotua tai tuomaria...')).toBeVisible()
 
-    // Open whole-show filter panel
-    await page.getByRole('button', { name: 'Suodata koko näyttelyä' }).click()
-
-    // Check that one combined search/filter panel remains and breed groups expand on demand
+    // Whole-show results auto-load on open — there is no button to click. Once the
+    // cache is loaded the widened search placeholder appears and breed groups
+    // expand on demand.
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
     await expect(page.getByText('Aamun Tähti')).toHaveCount(0)
@@ -521,6 +638,87 @@ test.describe('Dog Show Browser', () => {
     await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
     await expect(showSearchInput).toHaveValue('')
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
+  })
+
+  test('show winners summary and PU/PN chips render from the whole-show cache', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 14042,
+              date: YESTERDAY_FULL_DATE,
+              name: 'Voittaja Show',
+              month: 'Tällä viikolla',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14042,
+          title: 'Voittaja Show 2026',
+          breeds: [
+            { name: 'Basenji', count: 3, group: '6', breed_id: '123', has_results: true },
+            { name: 'Akita', count: 2, group: '5', breed_id: '124', has_results: true },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14042',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14042/all-results', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          show_id: 14042,
+          results: [
+            {
+              number: 1, name: 'Best In Show Dog', reg_url: '', grade: 'ERI', placement: 1,
+              competitive_placement: 'PU1', awards: 'ROP, BIS-1', critique: '',
+              gender: 'uros', class_name: 'VAL', breedName: 'Basenji', breedGroup: '6', breedId: '123',
+              breedObj: { name: 'Basenji', count: 3, group: '6', breed_id: '123', has_results: true },
+            },
+            {
+              number: 2, name: 'Group Five Winner', reg_url: '', grade: 'ERI', placement: 1,
+              competitive_placement: 'PN1', awards: 'ROP, RYP-1', critique: '',
+              gender: 'narttu', class_name: 'VAL', breedName: 'Akita', breedGroup: '5', breedId: '124',
+              breedObj: { name: 'Akita', count: 2, group: '5', breed_id: '124', has_results: true },
+            },
+          ],
+          cache: { status: 'complete', stale: false, total_breeds: 2, fetched_breeds: 2, failed_breeds: 0, total_dogs: 2, percent: 100 },
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByRole('button', { name: /Voittaja Show/ }).click()
+
+    // Winners summary renders on the default (unfiltered) view once the cache loads.
+    await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'BIS', exact: true })).toBeVisible()
+    await expect(page.getByText('Ryhmävoittajat (RYP-1)')).toBeVisible()
+    await expect(page.getByText('Best In Show Dog')).toBeVisible()
+    await expect(page.getByText('Group Five Winner')).toBeVisible()
+
+    // Best-of-sex rank chips (PU1/PN1) render on the winner cards.
+    await expect(page.getByText('PU1')).toBeVisible()
+    await expect(page.getByText('PN1')).toBeVisible()
+
+    // Applying a filter hides the summary and shows the filtered breed list instead.
+    await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Group')
+    await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toHaveCount(0)
   })
 
   test('future shows explain that whole-show results are not checked yet', async ({ page }) => {
@@ -638,6 +836,8 @@ test.describe('Dog Show Browser', () => {
       })
     })
 
+    await stubWarmingAllResults(page, 14050)
+
     await page.goto('/dog')
     await page.getByRole('button', { name: /maaliskuu 2026/i }).click()
     await page.getByRole('button', { name: /Ryhmänäyttely/ }).click()
@@ -719,6 +919,8 @@ test.describe('Dog Show Browser', () => {
       })
     })
 
+    await stubWarmingAllResults(page, 14042)
+
     await page.goto('/dog')
 
     const brand = page.getByRole('link', { name: '/dog' })
@@ -733,7 +935,7 @@ test.describe('Dog Show Browser', () => {
     await page.evaluate(() => { window.__dogSpaMarker = true })
     await brand.click()
     await expect(page).toHaveURL(/\/dog$/)
-    await expect(page.getByPlaceholder('Hae näyttelyä, rotua tai tuomaria...')).toBeVisible()
+    await expect(page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...')).toBeVisible()
     expect(await page.evaluate(() => window.__dogSpaMarker)).toBe(true)
   })
 })

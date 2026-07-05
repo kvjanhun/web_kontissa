@@ -76,7 +76,6 @@ defineEmits([
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
-  'start-show-wide',
   'retry-all-dogs',
 ])
 
@@ -203,33 +202,6 @@ const gradeOptions = computed(() => (
             <p class="dog-progress-copy">{{ allDogsAvailability.message }}</p>
           </div>
         </div>
-      </div>
-
-      <div
-        v-else-if="!allDogsLoading && !allDogsLoaded && !allDogsError"
-        class="dog-filter-col dog-show-tools-action"
-      >
-        <label class="dog-filter-label">Koko näyttely</label>
-        <button
-          class="dog-show-wide-toggle"
-          @click="$emit('start-show-wide')"
-        >
-          <svg class="dog-toggle-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="56" y1="72" x2="200" y2="72" />
-            <circle cx="96" cy="72" r="20" />
-            <line x1="56" y1="128" x2="200" y2="128" />
-            <circle cx="152" cy="128" r="20" />
-            <line x1="56" y1="184" x2="200" y2="184" />
-            <circle cx="112" cy="184" r="20" />
-          </svg>
-          <span>{{ allDogsAvailability?.actionLabel || 'Suodata koko näyttelyä' }}</span>
-          <svg class="dog-arrow-sm" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="96 48 176 128 96 208" />
-          </svg>
-        </button>
-        <p v-if="allDogsAvailability?.note" class="dog-show-wide-note">
-          {{ allDogsAvailability.note }}
-        </p>
       </div>
 
       <div

@@ -61,6 +61,8 @@ The big feature. Zero additional Showlink load — it is a **post-process of row
 
 ## Workstream 2 — Search surface: stop pretending only `rotu` is searchable
 
+> **DONE 2026-07-05** (shipped in `plans/alright-i-have-checked-cozy-creek.md`). Front-page search now matches dog names (`dog_result.name`) and owners (`dog_breed_award.owner`) across all captured shows for queries ≥3 chars, via `sqlstore.search_dog_results_by_name` / `search_breed_award_owners` behind `store.py`, appended after the show/breed/judge index results (bounded 20 shows/type). New `match` types `dog`/`owner` render as `Koira`/`Omistaja` tags in `DogShowListView.vue`; the parked `judge_match_count` ("N rotua") is now surfaced too, and the placeholder copy widened to "…tai koiraa". Case-insensitive å/ä/ö via OR-ed raw/upper/lower LIKE (no migration; measured <100ms on prod). **Not done here (deferred to profiles, Workstream 1):** kennel/award-winner first-class search beyond the owner field, and `reg_id`-anchored cross-show profiles.
+
 Two halves: **(a) actually index the new entities for search**, and **(b) fix the copy that says "rotu"** so it matches what is findable. Do (a) before (b) — promising a search we don't serve is worse than under-promising.
 
 ### (a) What is searchable today vs. what we now have

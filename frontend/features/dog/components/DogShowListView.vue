@@ -89,7 +89,7 @@ defineEmits([
         :value="filterText"
         type="text"
         class="dog-search-input"
-        placeholder="Hae näyttelyä, rotua tai tuomaria..."
+        placeholder="Hae näyttelyä, rotua, tuomaria tai koiraa..."
         @input="$emit('filter-input', $event.target.value)"
       />
       <DogSearchClearButton
@@ -158,7 +158,19 @@ defineEmits([
               <span v-else-if="result.match === 'judge'" class="dog-search-breed-tag">
                 Tuomari
                 <span v-if="result.judge" class="dog-search-judge-sub">
-                  {{ result.judge }}
+                  {{ result.judge }}<template v-if="result.judge_match_count > 1"> · {{ result.judge_match_count }} rotua</template>
+                </span>
+              </span>
+              <span v-else-if="result.match === 'dog'" class="dog-search-breed-tag">
+                Koira
+                <span v-if="result.dog" class="dog-search-judge-sub">
+                  {{ result.dog }}<template v-if="result.dog_match_count > 1"> +{{ result.dog_match_count - 1 }} muuta</template>
+                </span>
+              </span>
+              <span v-else-if="result.match === 'owner'" class="dog-search-breed-tag">
+                Omistaja
+                <span v-if="result.owner" class="dog-search-judge-sub">
+                  {{ result.owner }}<template v-if="result.owner_match_count > 1"> · {{ result.owner_match_count }} tulosta</template>
                 </span>
               </span>
               <span v-else class="dog-search-breed-tag">Näyttely</span>

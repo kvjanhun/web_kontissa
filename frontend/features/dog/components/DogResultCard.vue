@@ -40,6 +40,7 @@ const hasLead = computed(() => Boolean(rankValue.value || props.dog.number))
 const hasMeta = computed(() =>
   Boolean(
     (props.showInlineMeta && (props.dog.class_name || genderSymbol.value)) ||
+    props.dog.competitive_placement ||
     awards.value.length,
   ),
 )
@@ -101,10 +102,17 @@ const hasMeta = computed(() =>
         </div>
       </div>
 
-      <!-- Line 2: class, gender, and awards (wraps freely) -->
+      <!-- Line 2: class, gender, best-of-sex rank (PU/PN), and awards (wraps freely) -->
       <div v-if="hasMeta" class="dog-result-meta">
         <span v-if="showInlineMeta && dog.class_name" class="dog-result-class">{{ dog.class_name }}</span>
         <span v-if="showInlineMeta && genderSymbol" :class="['dog-result-gender', dog.gender]">{{ genderSymbol }}</span>
+        <span
+          v-if="dog.competitive_placement"
+          class="dog-mini-award dog-comp-placement"
+          title="Paras uros / paras narttu -kilpailun sijoitus"
+        >
+          {{ dog.competitive_placement }}
+        </span>
         <span
           v-for="(award, index) in awards"
           :key="index"

@@ -238,14 +238,14 @@ URL state is kept in query params:
 
 Important UI behavior:
 
-- The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache. If a judge is only present in a warmed whole-show result cache, search uses that cache and writes the judge back to the compact index.
+- The list page has one search field. Empty input browses shows by month; two or more characters search shows, breeds, and judges through the indexed cache. If a judge is only present in a warmed whole-show result cache, search uses that cache and writes the judge back to the compact index. Queries of three or more characters additionally match **dog names** (`dog_result.name`) and **owners** (`dog_breed_award.owner`) across all captured shows via SQL (`app/dog_show/sqlstore.py` `search_dog_results_by_name` / `search_breed_award_owners`, behind `store.py`), returning `match` types `dog`/`owner` with a representative name and per-show count. These SQL matches rank after the index show/breed/judge results and are bounded to 20 shows each. Case-insensitivity for å/ä/ö is handled by OR-ing raw/upper/lower LIKE patterns (no normalized column/migration); `%`/`_` are escaped so a literal `100%` search can't wildcard.
 - Active show rows display `Käynnissä` and replace the signup pill with `n/N tulosta`; a multi-day show paused for the night/evening shows `Jatkuu` instead (still with `n/N tulosta`); past and upcoming show rows show only the full signup count. Multi-day rows show a date range (`13–14`) in the calendar box.
-- The show detail page has `Rotuluettelo` and `Koirat & Tulokset` tabs.
+- The show detail page is a single screen: the breed list (groupable by FCI group / judge / alphabetically) plus a whole-show filter panel. There are no `Koirat & Tulokset` content tabs; breed rows expand in place to show their dogs once the whole-show cache is loaded.
 - On live show detail pages, `Tuloksia saaneet` is on by default. Breed rows with cached progress show `n/N` judged dogs and, when the toggle is active, breeds with the freshest result progress sort first.
 - If the toggle is turned off during a live show, unchecked breeds remain openable so a direct breed page can be tried even before Showlink's group-list checkmark catches up.
-- Whole-show filters run only against the persisted `/all-results` cache. Before show-day 06:00, the UI keeps the breed list searchable and explains that whole-show results are not checked yet.
-- On the show date after 06:00, the UI allows checking whole-show data but warns that classes and results can fill in gradually as the day progresses.
-- While `/all-results` is warming, the page shows an animated progress card and polls the API.
+- Whole-show results auto-load when a show detail opens — every reachable show is permanently cached, so a complete `/all-results` cache fills the filters instantly with no load button. Before show-day 06:00 (`upcoming`/`show_morning`), nothing is fetched: the UI keeps the breed list searchable and explains that whole-show results are not checked yet, and a one-shot timer auto-loads them the moment the 06:00 window opens.
+- On the show date after 06:00, whole-show data auto-loads but the UI warns that classes and results can fill in gradually as the day progresses.
+- While `/all-results` is warming (live or still-crawling shows), the page shows an animated progress card and polls the API using `retry_after`.
 - Grade filtering keeps `HYL`, `EVA`, and `POISSA` separate.
 
 ## Operational Commands

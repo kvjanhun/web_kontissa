@@ -37,10 +37,10 @@ Standalone `/dog` browser for Showlink data. Read `features/dog/AGENTS.md` befor
 - **Route entry**: `pages/dog/index.vue` only sets page metadata/layout and renders `features/dog/DogBrowser.vue`.
 - **Feature module**: Dog-specific components, `useDogBrowser.js`, `dogResults.js`, and `dog.css` live under `features/dog/`; do not move them into shared components unless another route genuinely reuses them.
 - **Route state**: `?show=<id>` opens a show; `?show=<id>&group=<group>&breed=<breed>` opens a breed result page.
-- **Show detail tabs**: `Rotuluettelo` lists breeds; `Koirat & Tulokset` loads the whole-show cache and filters all dogs. The breed list groups by FCI group (default), judge, or alphabetically via mode tabs.
-- **Whole-show loading**: A `202` warming response keeps the animated progress card visible and polls using the backend `retry_after` value.
+- **Show detail**: one screen — the breed list plus a whole-show filter panel (there are no `Rotuluettelo`/`Koirat & Tulokset` content tabs). The breed list groups by FCI group (default), judge, or alphabetically via mode tabs, and each breed row expands in place to show its dogs once the whole-show cache is loaded.
+- **Whole-show loading**: results auto-load when a show detail opens (no load button; every reachable show is permanently cached). A `200` complete cache fills the filters instantly; a `202` warming response keeps the animated progress card visible and polls using the backend `retry_after` value. Shows before their show-day window (`upcoming`/`show_morning`) show an info card and are not fetched.
 - **Filters**: Whole-show and breed result filters support text, grade, class, and awards. `HYL`, `EVA`, and `POISSA` are intentionally separate grade filters.
-- **Search**: Breed search uses the backend persisted index and polls index stats while indexing is incomplete.
+- **Search**: Show/breed/judge search uses the backend persisted index (polls index stats while indexing is incomplete); three-plus-char queries also match dog names and owners across all captured shows (tagged `Koira` / `Omistaja`).
 
 ## Composables
 

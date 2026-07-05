@@ -5,6 +5,7 @@ import {
   availableClassesFromResults,
   availableGradesFromResults,
   buildDogQuery,
+  buildShowWinnersGroups,
   createShowBreedGroups,
   dogMatchesShowFilters,
   filterDogResults,
@@ -92,6 +93,7 @@ export function useDogBrowser() {
   let indexPollTimer = null
   let allDogsPollTimer = null
   let liveDetailPollTimer = null
+  let morningAutoLoadTimer = null
   let allDogsSessionId = 0
   let routeSyncToken = 0
   let pendingLinkScrollToTop = false
@@ -107,6 +109,13 @@ export function useDogBrowser() {
     if (liveDetailPollTimer) {
       clearTimeout(liveDetailPollTimer)
       liveDetailPollTimer = null
+    }
+  }
+
+  function clearMorningAutoLoad() {
+    if (morningAutoLoadTimer) {
+      clearTimeout(morningAutoLoadTimer)
+      morningAutoLoadTimer = null
     }
   }
 
@@ -181,6 +190,7 @@ export function useDogBrowser() {
     allDogsResults.value = []
     allDogsProgress.value = null
     clearLiveDetailPoll()
+    clearMorningAutoLoad()
   }
 
   // Keep the breed/dog search input responsive while debouncing the expensive
@@ -198,9 +208,14 @@ export function useDogBrowser() {
 
   const allDogsProgressPercent = computed(() => getAllDogsProgressPercent(allDogsProgress.value))
   const allDogsProgressText = computed(() => getAllDogsProgressText(allDogsProgress.value))
-  const allDogsAvailability = computed(() => (
-    getShowResultAvailability(selectedShow.value || showDetail.value)
-  ))
+  // Bumped by the morning auto-load timer so this time-based computed (which reads
+  // a non-reactive `new Date()`) re-evaluates when the show-day window opens while
+  // the page is left untouched, flipping canLoad and triggering the auto-load watch.
+  const availabilityClockTick = ref(0)
+  const allDogsAvailability = computed(() => {
+    availabilityClockTick.value
+    return getShowResultAvailability(selectedShow.value || showDetail.value)
+  })
   const selectedShowStats = computed(() => (
     selectedShow.value?.stats || showDetail.value?.stats || null
   ))
@@ -326,6 +341,17 @@ export function useDogBrowser() {
     dogAwardFilter.value,
   ))
 
+  // Show-winners summary: shown at the top of the default (unfiltered) detail view
+  // once the whole-show cache is loaded, hidden while any show-wide filter/search is
+  // active (the filtered breed list / award view takes over). Null when the show
+  // crowns no finals (e.g. a single-breed specialty).
+  const showWinnersGroups = computed(() => {
+    if (!allDogsLoaded.value || showWideFiltersActive.value) return null
+    const winners = buildShowWinnersGroups(allDogsResults.value)
+    if (!winners.bisGroups.length && !winners.rypGroups.length) return null
+    return winners
+  })
+
   async function loadAllShowResults(options = {}) {
     const { poll = false, sessionId = allDogsSessionId } = options
     const showId = selectedShow.value?.id
@@ -371,13 +397,38 @@ export function useDogBrowser() {
     }
   }
 
-  function startShowWideSearch() {
-    if (!allDogsAvailability.value.canLoad) return
-    clearAllDogsPoll()
-    allDogsSessionId += 1
-    allDogsLoading.value = false
-    allDogsError.value = ''
+  // Whole-show results auto-load when a show detail opens — every reachable show
+  // is now permanently cached, so complete caches return instantly and there is no
+  // reason to gate the filters behind a button. Live/warming shows still stream in
+  // via the progress card + retry_after polling that loadAllShowResults drives.
+  function maybeAutoLoadAllResults() {
+    if (!import.meta.client) return
+    if (currentView.value !== 'detail' || !showDetail.value || detailLoading.value) return
+    const availability = allDogsAvailability.value
+    if (!availability.canLoad) {
+      // Pre-morning show day: arm a one-shot timer so results appear the moment the
+      // show-day window opens, even if the page is never touched. Upcoming shows
+      // (a different, possibly distant calendar day) are intentionally not armed.
+      scheduleMorningAutoLoad(availability)
+      return
+    }
+    clearMorningAutoLoad()
+    if (allDogsLoaded.value || allDogsLoading.value || allDogsError.value) return
     loadAllShowResults({ sessionId: allDogsSessionId })
+  }
+
+  function scheduleMorningAutoLoad(availability) {
+    clearMorningAutoLoad()
+    if (availability?.phase !== 'show_morning' || !availability.availableFrom) return
+    const delayMs = Math.max(0, availability.availableFrom.getTime() - Date.now()) + 5000
+    const sessionId = allDogsSessionId
+    morningAutoLoadTimer = setTimeout(() => {
+      morningAutoLoadTimer = null
+      if (sessionId !== allDogsSessionId) return
+      // Force the availability computed to re-evaluate against the new clock; the
+      // canLoad flip re-runs the auto-load watch, which then fetches.
+      availabilityClockTick.value += 1
+    }, delayMs)
   }
 
   function standardizeShows(showsList) {
@@ -482,6 +533,7 @@ export function useDogBrowser() {
     expandedBreedGroups.value = new Set()
     collapsedBreedSections.value = new Set()
     clearLiveDetailPoll()
+    clearMorningAutoLoad()
     if (openingDifferentShow) {
       resultBreedsOnly.value = resultBreedFilterAvailable.value
     }
@@ -579,6 +631,13 @@ export function useDogBrowser() {
         group: result.breed.group,
         breed: result.breed.breed_id,
       }, { scrollToTop: true })
+    }
+    // A dog-name hit opens the show and pre-fills the whole-show search with the
+    // matched dog's name, so the auto-loaded results land straight on that dog.
+    // fetchShowDetail does not clear breedSearchQuery, so setting it before the
+    // route change survives the navigation.
+    if (result.match === 'dog' && result.dog) {
+      breedSearchQuery.value = result.dog
     }
     return pushDogQuery({ show: result.show.id }, { scrollToTop: true })
   }
@@ -744,6 +803,17 @@ export function useDogBrowser() {
     scheduleLiveShowDetailPoll()
   })
 
+  // Auto-load whole-show results on detail open, on back-nav re-entry, and when the
+  // show-day window opens (canLoad flip). maybeAutoLoadAllResults is idempotent and
+  // gated, so firing on any of these deps is safe.
+  watch([
+    currentView,
+    () => showDetail.value?.id,
+    () => allDogsAvailability.value.canLoad,
+  ], () => {
+    maybeAutoLoadAllResults()
+  })
+
   const filteredDogResults = computed(() => filterDogResults(breedResults.value?.results || [], {
     search: dogSearchQuery.value,
     grade: dogGradeFilter.value,
@@ -861,6 +931,7 @@ export function useDogBrowser() {
     allDogsSessionId += 1
     clearAllDogsPoll()
     clearLiveDetailPoll()
+    clearMorningAutoLoad()
   })
 
   return {
@@ -909,6 +980,7 @@ export function useDogBrowser() {
     availableShowClasses,
     availableShowAwards,
     showAwardResultGroups,
+    showWinnersGroups,
     showWideFiltersActive,
     indexedSearchActive,
     groupedShows,
@@ -923,7 +995,6 @@ export function useDogBrowser() {
     availableAwards,
     resultsByGenderAndClass,
     awardResultGroups,
-    startShowWideSearch,
     loadAllShowResults,
     fetchShows,
     fetchShowDetail,

@@ -5,6 +5,7 @@ import {
   gradeOptionLabel,
   awardMatchesFilter,
   buildDogQuery,
+  buildShowWinnersGroups,
   createShowBreedGroups,
   dogMatchesShowFilters,
   fciGroupLabel,
@@ -330,6 +331,57 @@ describe('award filters', () => {
   })
 })
 
+describe('buildShowWinnersGroups', () => {
+  it('collects BIS finals and RYP-1 group winners, reusing per-day BIS splitting', () => {
+    const results = [
+      { name: 'BIS winner', breedName: 'Basenji', breedGroup: '6', awards: 'BIS-1', number: 5 },
+      { name: 'BIS second', breedName: 'Akita', breedGroup: '5', awards: 'BIS-2', number: 9 },
+      { name: 'Jun d1', breedName: 'Whippet', breedGroup: '10', awards: 'BIS JUN-1', number: 10 },
+      { name: 'Jun d2', breedName: 'Saluki', breedGroup: '10', awards: 'BIS JUN-1', number: 2000 },
+      { name: 'Group 5 winner', breedName: 'Akita', breedGroup: '5', awards: 'RYP-1', number: 9 },
+      { name: 'Group 5 runner-up', breedName: 'Samoyed', breedGroup: '5', awards: 'RYP-2', number: 40 },
+      { name: 'Group 6 winner', breedName: 'Basenji', breedGroup: '6', awards: 'RYP-1', number: 5 },
+      // A plain result with no finals award must not appear anywhere.
+      { name: 'Nobody', breedName: 'Beagle', breedGroup: '6', awards: 'SA', number: 3 },
+    ]
+
+    const winners = buildShowWinnersGroups(results)
+
+    // BIS section reuses groupResultsByAwardFilter: main BIS grouped, BIS JUN split per day.
+    expect(winners.bisGroups.map(group => group.label)).toEqual([
+      'BIS',
+      'BIS JUN (1. päivä)',
+      'BIS JUN (2. päivä)',
+    ])
+    expect(winners.bisGroups[0].dogs.map(dog => `${dog.awardRank}:${dog.name}`)).toEqual([
+      '1:BIS winner',
+      '2:BIS second',
+    ])
+
+    // Only RYP-1 winners, one single-dog group per FCI group, labelled by group.
+    expect(winners.rypGroups.map(group => group.label)).toEqual([
+      fciGroupLabel('5'),
+      fciGroupLabel('6'),
+    ])
+    expect(winners.rypGroups.map(group => group.dogs.map(dog => dog.name))).toEqual([
+      ['Group 5 winner'],
+      ['Group 6 winner'],
+    ])
+  })
+
+  it('returns empty groups for a show with no show-wide finals (specialty)', () => {
+    const results = [
+      { name: 'ROP dog', breedName: 'Basenji', breedGroup: '6', awards: 'ROP, SERT', number: 1 },
+      { name: 'VSP dog', breedName: 'Basenji', breedGroup: '6', awards: 'VSP', number: 2 },
+    ]
+
+    const winners = buildShowWinnersGroups(results)
+
+    expect(winners.bisGroups).toEqual([])
+    expect(winners.rypGroups).toEqual([])
+  })
+})
+
 describe('showStatItems and showStatsLabel', () => {
   it('formats live show progress without exposing full entry count as a separate signup pill', () => {
     const show = {
@@ -479,15 +531,17 @@ describe('show date result availability', () => {
       phase: 'upcoming',
       title: 'Tuloksia ei haeta vielä',
     })
+    // show_morning must carry availableFrom so the auto-load timer knows when the
+    // show-day window opens (the composable arms a one-shot timer off it).
     expect(earlyMorning).toMatchObject({
       canLoad: false,
       phase: 'show_morning',
       title: 'Tuloksia odotetaan',
     })
+    expect(earlyMorning.availableFrom).toEqual(new Date(2026, 5, 20, 6, 0, 0, 0))
     expect(showDay).toMatchObject({
       canLoad: true,
       phase: 'show_day',
-      actionLabel: 'Tarkista koirat ja tulokset',
     })
   })
 })
