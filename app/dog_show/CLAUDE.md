@@ -32,7 +32,7 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 - Keep Showlink fetching in `showlink.py`; frontend code must not scrape or fan out over breed pages.
 - Keep all dog.db reads/writes behind `store.py`; the JSON↔row mapping lives only in `sqlstore.py` and the schema only in `models.py`. Do not open the dog database directly from routes, indexing, or the crawler.
 - Keep parser changes in `parsers.py` and cover Showlink page-shape changes in `tests/test_dog.py`.
-- Keep result-cache orchestration in `result_cache.py`; this is where concurrency, backoff, stale-cache handling, and immediate warmup limits live.
+- Keep result-cache orchestration in `result_cache.py`; this is where concurrency, backoff, and stale-cache handling live.
 - Keep crawler loop orchestration in `scripts/dog_crawl.py`; reusable crawler pass functions live in `crawler.py` and `result_cache.py`.
 
 ## Compatibility Notes

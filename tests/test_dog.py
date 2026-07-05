@@ -173,13 +173,11 @@ def clear_caches(monkeypatch, tmp_path):
     dog_db.configure(dog_db_uri)
     dog_db.init_db(dog_db_uri)
 
-    monkeypatch.setattr(dog_result_cache, "RESULT_IMMEDIATE_WARMUP", False)
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
     _show_detail_cache.clear()
     _breed_result_cache.clear()
     _show_all_results_cache.clear()
-    dog_result_cache._immediate_warmups.clear()
     dog_store._show_index["shows"].clear()
     dog_store._show_index["last_updated"] = 0
     dog_store._index_generation = None
@@ -189,6 +187,14 @@ def clear_caches(monkeypatch, tmp_path):
     yield
     # Release the per-test database file so its WAL handles don't leak.
     dog_db.configure("sqlite://")
+
+
+def _current_month_label():
+    """Finnish month label for the current month, so recency checks hold whenever
+    the suite runs."""
+    from app.dog_show.config import FINNISH_MONTHS
+    now = datetime.datetime.now()
+    return f"{FINNISH_MONTHS[now.month - 1]} {now.year}"
 
 
 def seed_index_show(show_id, show):
@@ -615,10 +621,15 @@ def test_get_shows_does_not_show_stats_for_empty_index_entries(mock_get, client)
 
 @patch("app.dog_show.showlink._SESSION.get")
 def test_get_show_detail(mock_get, client):
+    """The crawler indexes a specialty detail page; the endpoint serves the
+    indexed copy (the web tier itself never fetches Showlink detail pages)."""
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
     mock_resp.status_code = 200
     mock_get.return_value = mock_resp
+
+    dog_crawler._update_index_show({"id": 14042, "name": "Basenji", "month": "kes\u00e4kuu 2026"})
+    mock_get.reset_mock()
 
     resp = client.get("/api/dog/shows/14042")
     assert resp.status_code == 200
@@ -635,24 +646,38 @@ def test_get_show_detail(mock_get, client):
     assert data["breeds"][1]["has_results"] is False
     assert data["source_url"].endswith("Id=14042")
     assert data["fetched_at_iso"]
+    mock_get.assert_not_called()
+
+
+def test_show_detail_not_indexed_returns_not_ready(client):
+    resp = client.get("/api/dog/shows/14042")
+    assert resp.status_code == 425
+    data = resp.get_json()
+    assert data["status"] == "not_indexed"
+    assert data["message"]
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_recent_show_detail_cache_expires(mock_get, client):
+def test_recent_show_detail_cache_expiry_falls_back_to_index(mock_get, client):
+    """An expired in-memory detail cache is replaced from the persisted index,
+    never by a web-tier Showlink fetch."""
+    seed_index_show("14042", {
+        "title": "14.06.2026 Basenji",
+        "month": _current_month_label(),
+        "breeds": [
+            {"name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True},
+        ],
+    })
     _show_detail_cache[14042] = {
         "data": {"id": 14042, "title": "stale", "breeds": []},
         "ts": 0,
     }
-    mock_resp = MagicMock()
-    mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
-    mock_resp.status_code = 200
-    mock_get.return_value = mock_resp
 
     resp = client.get("/api/dog/shows/14042")
 
     assert resp.status_code == 200
     assert resp.get_json()["title"] == "14.06.2026 Basenji"
-    mock_get.assert_called_once()
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -747,7 +772,10 @@ def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get, monkeypatch, client):
+def test_show_detail_serves_stale_flagless_index_without_fetching(mock_get, monkeypatch, client):
+    """A stale live index with no result flags is still served as-is by the web
+    tier; refreshing the breed list against Showlink is the crawler's job
+    (see test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results)."""
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "name": "Basenji",
@@ -765,18 +793,15 @@ def test_show_detail_refreshes_stale_recent_index_without_result_flags(mock_get,
         "_show_result_availability_for_id",
         lambda show_id, now=None: {"can_fetch": True, "show_state": "live"},
     )
-    mock_resp = MagicMock()
-    mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
-    mock_resp.status_code = 200
-    mock_get.return_value = mock_resp
 
     resp = client.get("/api/dog/shows/14042")
 
     assert resp.status_code == 200
     data = resp.get_json()
+    assert data["cache"]["status"] == "indexed"
+    # Single-breed show inside the fetch window stays openable via the probe mark.
     assert data["breeds"][0]["has_results"] is True
-    assert dog_store._show_index["shows"]["14042"]["breeds"][0]["has_results"] is True
-    mock_get.assert_called_once()
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -1085,6 +1110,8 @@ SAMPLE_AGGREGATE_SHOW_BREEDS_HTML = """
 
 @patch("app.dog_show.showlink._SESSION.get")
 def test_get_show_detail_general(mock_get, client):
+    """General all-breed pages link numeric FCI groups (R=1..10); the crawler
+    walks them when indexing, and the endpoint serves the indexed breeds."""
     mock_resp_main = MagicMock()
     mock_resp_main.text = SAMPLE_GENERAL_SHOW_MAIN_HTML
     mock_resp_main.status_code = 200
@@ -1098,6 +1125,10 @@ def test_get_show_detail_general(mock_get, client):
     mock_resp_g5.status_code = 200
 
     mock_get.side_effect = [mock_resp_main, mock_resp_g3, mock_resp_g5]
+
+    dog_crawler._update_index_show({"id": 14025, "name": "Kouvola", "month": "toukokuu 2026"})
+    mock_get.reset_mock()
+    mock_get.side_effect = None
 
     resp = client.get("/api/dog/shows/14025")
     assert resp.status_code == 200
@@ -1117,10 +1148,13 @@ def test_get_show_detail_general(mock_get, client):
     assert data["breeds"][1]["group"] == "5"
     assert data["breeds"][1]["breed_id"] == "3"
     assert data["breeds"][1]["has_results"] is False
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
+def test_crawl_index_uses_aggregate_breed_results_link(mock_get, client):
+    """BIS-focused specialty landing pages carry the real breed list under R=R;
+    the crawler indexes through it and replaces a stale empty index entry."""
     seed_index_show("13934", {
         "title": "stale empty index",
         "name": "Kanakoirakerho",
@@ -1138,6 +1172,11 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
 
     mock_get.side_effect = [mock_resp_main, mock_resp_breeds]
 
+    dog_crawler._update_index_show({"id": 13934, "name": "Kanakoirakerho", "date": "14.06.", "month": "kesäkuu 2026"})
+    assert mock_get.call_args_list[1].args[0].endswith("Id=13934&R=R")
+    mock_get.reset_mock()
+    mock_get.side_effect = None
+
     resp = client.get("/api/dog/shows/13934")
 
     assert resp.status_code == 200
@@ -1150,9 +1189,9 @@ def test_get_show_detail_uses_aggregate_breed_results_link(mock_get, client):
     assert data["breeds"][0]["breed_id"] == "88"
     assert data["breeds"][0]["has_results"] is True
     assert data["breeds"][1]["name"] == "gordoninsetteri"
-    assert mock_get.call_args_list[1].args[0].endswith("Id=13934&R=R")
     assert len(dog_store._show_index["shows"]["13934"]["breeds"]) == 2
     assert "empty_breed_list_confirmed" not in dog_store._show_index["shows"]["13934"]
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -1234,11 +1273,29 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_get_breed_results(mock_get, client):
+def test_get_breed_results_from_whole_show_cache(mock_get, monkeypatch, client):
+    """The breed endpoint serves from the crawled whole-show cache; the web tier
+    never fetches Showlink result pages itself."""
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+    seed_index_show("14042", {
+        "title": "14.06.2024 Basenji", "name": "Basenji",
+        "date": "14.06.", "month": "kesäkuu 2024",
+        "source_url": dog_showlink._source_url(14042),
+        "breeds": [
+            {"name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True},
+        ],
+    })
     mock_resp = MagicMock()
     mock_resp.text = SAMPLE_BREED_RESULTS_HTML
     mock_resp.status_code = 200
     mock_get.return_value = mock_resp
+
+    summary = dog_result_cache.crawl_result_cache_for_show(14042, delay=0, source="test", workers=1)
+    assert summary["status"] == "complete"
+    mock_get.reset_mock()
+    # Clear the in-memory breed cache the crawl warmed, so this exercises the
+    # persisted whole-show extraction path.
+    _breed_result_cache.clear()
 
     resp = client.get("/api/dog/shows/14042/results?group=5&breed=3")
     assert resp.status_code == 200
@@ -1263,53 +1320,54 @@ def test_get_breed_results(mock_get, client):
     assert res["class_name"] == "Pentuluokka 5-7 kk"
     assert data["source_url"].endswith("Id=14042&R=5&RO=3")
     assert data["fetched_at_iso"]
+    assert data["cache"]["status"] == "show_all_results"
+    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_get_breed_results_strips_glued_judge_label(mock_get, client):
+def test_uncached_breed_results_queue_job_and_return_not_ready(mock_get, monkeypatch, client):
+    """A breed missing from the whole-show cache inside the fetch window queues a
+    crawler job instead of fetching Showlink from the web worker."""
     seed_index_show("13763", {
-        "title": "18.-19.04.2026 Vaasa KV",
-        "name": "Vaasa KV",
-        "month": "huhtikuu 2026",
+        "title": "18.-19.04.2026 Vaasa KV", "name": "Vaasa KV",
+        "date": "18.-19.04.", "month": "huhtikuu 2026",
         "breeds": [
-            {
-                "name": "sileäkarvainen noutaja",
-                "count": 28,
-                "group": "8",
-                "breed_id": "124",
-                "has_results": True,
-                "judge": "TuomariTarja Kolkka",
-            }
+            {"name": "sileäkarvainen noutaja", "count": 28, "group": "8", "breed_id": "124", "has_results": True},
         ],
     })
-    mock_resp = MagicMock()
-    mock_resp.text = SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML
-    mock_resp.status_code = 200
-    mock_get.return_value = mock_resp
 
     resp = client.get("/api/dog/shows/13763/results?group=8&breed=124")
 
-    assert resp.status_code == 200
+    assert resp.status_code == 425
     data = resp.get_json()
-    assert data["breed"] == "sileäkarvainen noutaja"
+    assert data["status"] == "not_ready"
+    assert data["reason"] == "cache_warming"
+    assert data["message"]
+    jobs = dog_store._load_result_jobs()["jobs"]
+    assert jobs["13763"]["reason"] == "breed-request"
+    mock_get.assert_not_called()
+
+
+def test_parse_breed_results_strips_glued_judge_label():
+    from bs4 import BeautifulSoup
+    from app.dog_show.parsers import _parse_breed_results
+    data = _parse_breed_results(
+        BeautifulSoup(SAMPLE_BREED_RESULTS_GLUE_JUDGE_HTML, "html.parser"), 13763
+    )
     assert data["judge"] == "Tarja Kolkka"
-    assert dog_store._show_index["shows"]["13763"]["breeds"][0]["judge"] == "Tarja Kolkka"
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
+def test_result_crawl_reads_floatleft_breed_header_and_backfills_index(mock_get, monkeypatch, client):
+    """Floatleft-header breed pages parse via the crawl path; the capture folds
+    the judge and result flag back into the breed index."""
+    monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
     seed_index_show("13771", {
-        "title": "20.-21.06.2026 Jyväskylä KV",
-        "name": "Jyväskylä KV",
-        "month": "kesäkuu 2026",
+        "title": "20.-21.06.2024 Jyväskylä KV", "name": "Jyväskylä KV",
+        "date": "20.-21.06.", "month": "kesäkuu 2024",
+        "source_url": dog_showlink._source_url(13771),
         "breeds": [
-            {
-                "name": "sileäkarvainen noutaja",
-                "count": 26,
-                "group": "8",
-                "breed_id": "124",
-                "has_results": False,
-            },
+            {"name": "sileäkarvainen noutaja", "count": 26, "group": "8", "breed_id": "124", "has_results": True},
         ],
     })
     mock_resp = MagicMock()
@@ -1317,14 +1375,16 @@ def test_get_breed_results_reads_floatleft_breed_header(mock_get, client):
     mock_resp.status_code = 200
     mock_get.return_value = mock_resp
 
-    resp = client.get("/api/dog/shows/13771/results?group=8&breed=124")
+    summary = dog_result_cache.crawl_result_cache_for_show(13771, delay=0, source="test", workers=1)
+    assert summary["status"] == "complete"
 
+    resp = client.get("/api/dog/shows/13771/results?group=8&breed=124")
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["breed"] == "sileäkarvainen noutaja"
     assert data["judge"] == "Pietro Marino"
     assert data["results"][0]["name"] == "Almanza Blast From The Past"
-    assert dog_store._show_index["shows"]["13771"]["breeds"][0]["has_results"] is True
+    assert dog_store._show_index["shows"]["13771"]["breeds"][0]["judge"] == "Pietro Marino"
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -1389,36 +1449,12 @@ def test_show_all_results_missing_cache_queues_without_fetching(mock_get, client
     assert data["retry_after"] == dog_result_cache.RESULT_RETRY_AFTER_SECONDS
     assert data["progress"]["state"] == "queued"
     assert data["progress"]["total_breeds"] == 1
-    assert data["started"] is False
+    assert "started" not in data  # web workers no longer warm caches themselves
     mock_get.assert_not_called()
 
     jobs = dog_store._load_result_jobs()
     assert jobs["jobs"]["14042"]["state"] == "queued"
     assert jobs["jobs"]["14042"]["reason"] == "user"
-
-
-@patch("app.dog_show.showlink._SESSION.get")
-def test_show_all_results_starts_immediate_warmup_when_enabled(mock_get, monkeypatch, client):
-    seed_index_show("14042", {
-        "title": "14.06.2026 Basenji",
-        "month": "kesäkuu 2026",
-        "breeds": [
-            { "name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True },
-        ],
-    })
-    started = []
-    monkeypatch.setattr(
-        dog_module,
-        "_start_result_cache_warmup",
-        lambda show_id, reason="user-immediate": started.append((show_id, reason)) or True,
-    )
-
-    resp = client.get("/api/dog/shows/14042/all-results")
-
-    assert resp.status_code == 202
-    assert resp.get_json()["started"] is True
-    assert started == [(14042, "user-immediate")]
-    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -3282,26 +3318,6 @@ def test_show_stats_is_live_only_when_results_fetchable(client):
         )
         assert stats["is_live"] is True
 
-
-
-@patch("app.dog_show.crawler.time.sleep", lambda *a, **k: None)
-@patch("app.dog_show.crawler._update_index_show")
-def test_background_indexing_caps_batch_per_call(mock_update):
-    """One /api/dog/shows hit must not background-index more than the cap, so a
-    cold index can't spawn hundreds of Showlink requests from a web worker."""
-    import threading
-
-    cap = dog_crawler.BACKGROUND_INDEX_MAX_PER_CALL
-    shows = [{"id": 20000 + i} for i in range(cap + 5)]
-    dog_crawler._background_indexed_shows.clear()
-    try:
-        dog_crawler.queue_background_indexing(shows)
-        for thread in threading.enumerate():
-            if thread.name == "dog-bg-indexer":
-                thread.join(timeout=5)
-        assert mock_update.call_count == cap
-    finally:
-        dog_crawler._background_indexed_shows.clear()
 
 
 # ---------------------------------------------------------------------------

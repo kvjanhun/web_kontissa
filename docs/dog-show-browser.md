@@ -46,8 +46,8 @@ The design goal is fast reads for users and polite, bounded crawling toward Show
 ## Public API
 
 - `GET /api/dog/shows`: current Showlink show list plus index status and compact cached row stats when indexed. Active shows also include current result progress from the whole-show result cache.
-- `GET /api/dog/shows/<show_id>`: breed list for one show. Live/recent detail responses enrich breeds with compact result progress from the whole-show cache when available.
-- `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page. Missing result pages are not fetched before the show date at 06:00 local time.
+- `GET /api/dog/shows/<show_id>`: breed list for one show, served from the persisted index only (a show the crawler has not indexed yet returns `425`/`not_indexed`). Live/recent detail responses enrich breeds with compact result progress from the whole-show cache when available.
+- `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page, extracted from the whole-show cache. A breed the cache has not captured yet returns `425`/`not_ready` (queueing a crawler job when inside the fetch window); the web tier never fetches result pages itself.
 - `GET /api/dog/shows/<show_id>/all-results`: complete show result cache used by whole-show filters. Missing whole-show caches return `425`/`not_ready` instead of queueing work before the show date at 06:00 local time.
 - `GET /api/dog/search?q=<query>`: search shows and indexed breeds.
 
@@ -61,15 +61,15 @@ Rate limits are intentionally lower than internal crawler throughput:
 1. The browser loads `/dog` and calls `/api/dog/shows`.
 2. The show list is enriched from the breed index in `dog.db` (`dog_show`/`dog_breed`) with breed count and entry count when a show is indexed. If the show date range includes today, the row also reads that show's whole-show result cache to expose `result_count/entry_count` progress without scanning historical result caches. When a live show's result cache is stale, this endpoint queues a bounded server-side refresh so front-page polling can move the number forward.
 3. Opening a show calls `/api/dog/shows/<show_id>`.
-4. If the breed index already contains the show and breed list, the backend serves that indexed copy without fetching Showlink.
+4. The backend serves the indexed copy from `dog.db`; the web tier never fetches Showlink detail pages (a not-yet-indexed show returns `425` until the crawler's index pass picks it up).
 5. For live shows, the detail response also reads the show's result cache (`dog_result_cache`/`dog_result`) and adds per-breed `result_count`, `result_total_count`, `result_updated_at`, and `result_progress` fields when the cache has seen that breed.
-6. If a live show's result cache is stale, the detail endpoint queues the same bounded background refresh used by the show list. The open detail page polls the detail endpoint every 2 minutes.
+6. If a live show's result cache is stale, the detail endpoint queues the same crawler job the show list queues. The open detail page polls the detail endpoint every 2 minutes.
 7. Opening a single breed calls `/api/dog/shows/<show_id>/results`.
-8. If a complete whole-show result cache exists, the single-breed endpoint extracts the breed from that cache instead of fetching Showlink.
+8. The single-breed endpoint extracts the breed from the complete whole-show cache; a not-yet-captured breed queues a crawler job and returns `425`.
 9. Opening the whole-show filter calls `/api/dog/shows/<show_id>/all-results`.
 10. If the show is still in the future, or it is the first show date before 06:00, the API returns `not_ready` and does not queue or fetch result pages.
-11. If the whole-show cache is missing or stale after that threshold, the API queues a durable job and starts one bounded immediate background warmup in the web worker when allowed.
-12. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the detail and whole-show result paths refresh the Showlink breed list before deciding what result pages exist.
+11. If the whole-show cache is missing or stale after that threshold, the API queues a durable job for the crawler (which checks the queue every 30 seconds); web workers never fetch result pages themselves.
+12. If the persisted breed index for a recent/live show is old and still has zero result-enabled breeds, the crawler's result path refreshes the Showlink breed list before deciding what result pages exist.
 13. Live whole-show result refreshes also probe a bounded rotating set of unchecked breeds, because a direct breed result page can contain rows before its group-list checkmark appears. When a probe finds rows, the breed is marked `has_results` in the breed index.
 14. The crawler service also processes queued jobs and proactively warms recent shows.
 15. The frontend polls `/all-results` using `retry_after` while the cache is warming and shows progress from the persisted cache document.
@@ -154,8 +154,6 @@ Environment knobs:
 - `DOG_RESULT_PAUSE_STALL_SECONDS`: result-stall length that flips a non-final multi-day show to the `Jatkuu` display state during the evening wind-down; defaults to `7200` (2h). Display only — does not affect fetching.
 - `DOG_RESULT_PAUSE_EVENING_HOUR`: earliest local hour the stall trigger may apply, so a slow midday breed ring or crawler lag can't fake `Jatkuu`; defaults to `17`.
 - `DOG_RESULT_TIMEZONE`: IANA timezone used to evaluate show dates and the morning/evening result windows; defaults to `Europe/Helsinki`. The crawler/web containers run in UTC, so this is resolved explicitly via `tzdata` rather than the process clock.
-- `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
-- `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
 
 ## Historical Completeness
 
@@ -192,7 +190,7 @@ This means:
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 - During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
 
-The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.
+The web container never talks to Showlink except for the 30-minute show-list refresh: show detail is served from the persisted index only, breed results only from the whole-show cache, and missing/stale caches are queued as `dog_result_job` rows for the crawler. All page fetching (indexing, result crawling, live refreshes) happens in the `dog-crawler` service.
 
 ## Politeness And Failure Behavior
 
@@ -260,12 +258,6 @@ Repair stale empty breed-index entries without warming result caches:
 
 ```bash
 SECRET_KEY=dev DOG_INDEX_DIR="$(pwd)/app/data" python3 scripts/dog_crawl.py --no-results --no-index-maintenance --empty-index-limit 20 --empty-index-delay 0.5
-```
-
-Disable user-triggered immediate warmup for a test run:
-
-```bash
-DOG_RESULT_IMMEDIATE_WARMUP=false SECRET_KEY=dev python3 run.py
 ```
 
 ## Testing

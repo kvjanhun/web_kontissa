@@ -1,4 +1,3 @@
-import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -17,7 +16,7 @@ from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
-    _append_result_breed, _breed_result_cache, _claim_result_cache_job,
+    _append_result_breed, _breed_result_cache,
     _defer_result_cache_job,
     _heartbeat_result_cache_job, _indexed_show, _load_index, _load_result_cache_doc,
     _load_result_jobs, _remove_result_cache_job, _result_job_due, _queue_result_cache_job,
@@ -44,11 +43,6 @@ RESULT_CRAWL_DEFAULT_WORKERS = config.RESULT_CRAWL_DEFAULT_WORKERS
 RESULT_LIVE_PROBE_BREED_LIMIT = config.RESULT_LIVE_PROBE_BREED_LIMIT
 RESULT_FINALS_SWEEP_BREED_LIMIT = config.RESULT_FINALS_SWEEP_BREED_LIMIT
 RESULT_LIVE_JOB_STALE_SECONDS = config.RESULT_LIVE_JOB_STALE_SECONDS
-RESULT_IMMEDIATE_WARMUP = config.RESULT_IMMEDIATE_WARMUP_DEFAULT
-
-_immediate_warmups = set()
-_immediate_warmups_lock = threading.Lock()
-_immediate_warmup_slots = threading.BoundedSemaphore(max(1, config.RESULT_IMMEDIATE_MAX_ACTIVE))
 
 def _result_cache_doc_is_complete(doc):
     return bool(doc and doc.get("status") == "complete")
@@ -1121,7 +1115,7 @@ def _auto_result_cache_candidates(now):
         candidate.pop("rank", None)
     return candidates
 
-def _queue_live_result_cache_refresh(show_id, show=None, reason="live-detail-refresh", immediate=True, now=None):
+def _queue_live_result_cache_refresh(show_id, show=None, reason="live-detail-refresh", now=None):
     now = now or time.time()
     availability = (
         _show_result_availability(show, now=_availability_now(now))
@@ -1136,15 +1130,12 @@ def _queue_live_result_cache_refresh(show_id, show=None, reason="live-detail-ref
         return None
 
     job = _queue_result_cache_job(show_id, reason=reason)
-    started = _start_result_cache_warmup(show_id, reason=reason) if immediate else False
-    queued = {
+    return {
         "show_id": show_id,
-        "started": started,
         "job_state": job.get("state"),
     }
-    return queued
 
-def _queue_live_result_cache_refreshes(shows, limit=2, immediate=True):
+def _queue_live_result_cache_refreshes(shows, limit=2):
     now = time.time()
     queued = []
     for show in shows or []:
@@ -1160,7 +1151,6 @@ def _queue_live_result_cache_refreshes(shows, limit=2, immediate=True):
             show_id,
             show=show,
             reason="live-list-refresh",
-            immediate=immediate,
             now=now,
         )
         if item:
@@ -1252,69 +1242,3 @@ def crawl_result_cache_once(limit=1, delay=RESULT_CRAWL_DEFAULT_DELAY, auto_rece
     )
     return pass_summary
 
-def _finish_immediate_warmup(show_id):
-    with _immediate_warmups_lock:
-        _immediate_warmups.discard(int(show_id))
-    _immediate_warmup_slots.release()
-
-def _run_immediate_result_cache_warmup(show_id):
-    try:
-        summary = crawl_result_cache_for_show(
-            show_id,
-            delay=RESULT_CRAWL_DEFAULT_DELAY,
-            source="user-immediate",
-            workers=RESULT_CRAWL_DEFAULT_WORKERS,
-        )
-        status = summary.get("status")
-        if status in {"complete", "skipped"}:
-            _remove_result_cache_job(show_id)
-        else:
-            _defer_result_cache_job(show_id, summary.get("error") or status)
-        logger.info(
-            "dog_immediate_result_warmup_complete",
-            show_id=show_id,
-            status=status,
-            reason=summary.get("reason"),
-            error=summary.get("error"),
-        )
-    except Exception as exc:
-        logger.exception("dog_immediate_result_warmup_failed", show_id=show_id)
-        _defer_result_cache_job(show_id, exc)
-    finally:
-        _finish_immediate_warmup(show_id)
-
-def _start_result_cache_warmup(show_id, reason="user-immediate"):
-    if not RESULT_IMMEDIATE_WARMUP or not _result_cache_due(show_id):
-        return False
-
-    show_id = int(show_id)
-    with _immediate_warmups_lock:
-        if show_id in _immediate_warmups:
-            return False
-        _immediate_warmups.add(show_id)
-
-    if not _immediate_warmup_slots.acquire(blocking=False):
-        with _immediate_warmups_lock:
-            _immediate_warmups.discard(show_id)
-        logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="no_slot")
-        return False
-
-    claimed = _claim_result_cache_job(
-        show_id,
-        reason=reason,
-        stale_seconds=_result_job_stale_seconds_for_show(show_id),
-    )
-    if not claimed:
-        _finish_immediate_warmup(show_id)
-        logger.info("dog_immediate_result_warmup_deferred", show_id=show_id, reason="job_running")
-        return False
-
-    thread = threading.Thread(
-        target=_run_immediate_result_cache_warmup,
-        args=(show_id,),
-        name=f"dog-result-warmup-{show_id}",
-        daemon=True,
-    )
-    thread.start()
-    logger.info("dog_immediate_result_warmup_started", show_id=show_id, reason=reason)
-    return True

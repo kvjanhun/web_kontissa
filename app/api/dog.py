@@ -6,46 +6,42 @@ from flask import Blueprint, jsonify, request as flask_request
 
 from app import limiter
 from app.dog_show.config import BREED_RESULT_TTL, RESULT_RETRY_AFTER_SECONDS
-from app.dog_show.crawler import queue_background_indexing
 from app.dog_show.indexing import (
     _cached_show_detail, _enrich_breeds_with_cached_result_judges,
-    _enrich_breeds_with_index_judges, _is_show_recent_by_id, _persist_show_detail_to_index,
+    _enrich_breeds_with_index_judges, _is_show_recent_by_id,
     _mark_single_probe_breed_result_available, _show_detail_from_index,
     _show_result_availability_for_id, _show_stats_from_index, _shows_with_cached_stats,
-    _update_index_breed_judge, _update_index_breed_result_flag,
 )
-from app.dog_show.parsers import _parse_breed_results, _parse_show_detail
 from app.dog_show.result_cache import (
     _breed_results_from_all_results_cache, _cached_all_results_response,
     _enrich_breeds_with_result_progress, _queue_live_result_cache_refresh,
-    _queue_live_result_cache_refreshes, _result_cache_progress, _start_result_cache_warmup,
+    _queue_live_result_cache_refreshes, _result_cache_progress,
 )
 from app.dog_show.search import search_shows_data
-from app.dog_show.showlink import _fetch_page, _source_url
 from app.dog_show.shows import _get_show_list
 from app.dog_show.store import (
-    _breed_result_cache, _index_summary,
-    _load_index, _load_result_cache_doc, _load_result_jobs, _queue_result_cache_job,
-    _save_index, _show_detail_cache, _show_index, _show_list_cache,
+    _breed_result_cache, _index_summary, _load_result_cache_doc,
+    _queue_result_cache_job, _show_detail_cache, _show_list_cache,
 )
-from app.dog_show.utils import _clean_judge_name, _utc_iso
 
 logger = structlog.get_logger(__name__)
 
 dog_bp = Blueprint('dog', __name__)
 
-def _results_not_ready_response(show_id, availability):
+def _results_not_ready_response(show_id, availability, reason=None):
     reason_messages = {
         "future_show": "Tuloksia ei haeta vielä ennen näyttelypäivän aamua.",
         "show_morning": "Tuloksia ei haeta vielä ennen näyttelypäivän klo 6:ta.",
         "show_night": "Tuloksia ei päivitetä yöaikaan (klo 21–6). Aiemmin haetut tulokset näkyvät yhä.",
+        "cache_warming": "Tuloksia haetaan parhaillaan taustalla. Yritä hetken kuluttua uudelleen.",
     }
+    reason = reason or availability.get("reason")
     return {
         "show_id": int(show_id),
         "status": "not_ready",
-        "reason": availability.get("reason"),
+        "reason": reason,
         "message": reason_messages.get(
-            availability.get("reason"),
+            reason,
             "Tuloksia ei haeta vielä tälle näyttelylle.",
         ),
         "availability": availability,
@@ -62,9 +58,7 @@ def _attach_show_detail_stats(show_id, data):
 def show_list():
     try:
         shows = _get_show_list()
-        _load_index()
         _queue_live_result_cache_refreshes(shows)
-        queue_background_indexing(shows)
         return jsonify({
             "shows": _shows_with_cached_stats(shows),
             "index": _index_summary(total_show_count=len(shows)),
@@ -87,14 +81,17 @@ def show_list():
 @dog_bp.route("/api/dog/shows/<int:show_id>")
 @limiter.limit("30/minute")
 def show_detail(show_id):
+    # Served from the persisted breed index (dog.db) only. The web tier never
+    # fetches Showlink pages for detail; a show missing from the index (a brand
+    # new listing) is picked up by the crawler's index pass within minutes.
     try:
         cached = _cached_show_detail(show_id)
         if cached:
             data = dict(cached)
             data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
-            updated_from_index = _enrich_breeds_with_index_judges(show_id, data["breeds"])
-            updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data["breeds"])
-            progress_updated = _enrich_breeds_with_result_progress(show_id, data["breeds"])
+            updated_from_index = _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
+            updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))
+            progress_updated = _enrich_breeds_with_result_progress(show_id, data.get("breeds", []))
             _queue_live_result_cache_refresh(show_id)
             _attach_show_detail_stats(show_id, data)
             if updated_from_index or updated_from_results or progress_updated:
@@ -105,7 +102,7 @@ def show_detail(show_id):
                 }
             return jsonify(data)
 
-        indexed = _show_detail_from_index(show_id, refresh_stale_result_flags=True)
+        indexed = _show_detail_from_index(show_id)
         if indexed:
             _enrich_breeds_with_result_progress(show_id, indexed.get("breeds", []))
             _queue_live_result_cache_refresh(show_id)
@@ -113,33 +110,11 @@ def show_detail(show_id):
             _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
             return jsonify(indexed)
 
-        url = _source_url(show_id)
-        soup = _fetch_page(url)
-        data = _parse_show_detail(soup, show_id)
-        fetched_at = time.time()
-        data["fetched_at"] = fetched_at
-        data["fetched_at_iso"] = _utc_iso(fetched_at)
-        data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
-
-        _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
-        _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))
-        _enrich_breeds_with_result_progress(show_id, data.get("breeds", []))
-        _queue_live_result_cache_refresh(show_id)
-
-        try:
-            _persist_show_detail_to_index(show_id, data, fetched_at)
-        except Exception as e:
-            logger.warning("dog_detail_index_persist_failed", show_id=show_id, error=str(e))
-
-        _show_detail_cache[show_id] = {"data": data, "ts": fetched_at}
-        _attach_show_detail_stats(show_id, data)
-        return jsonify(data)
-    except requests.RequestException as exc:
-        logger.warning("showlink_fetch_failed", endpoint="show_detail", show_id=show_id, exc_info=True)
-        stale = _cached_show_detail(show_id, allow_stale=True)
-        if stale:
-            return jsonify(stale)
-        return jsonify({"error": "Failed to fetch show detail", "detail": str(exc)}), 502
+        return jsonify({
+            "show_id": int(show_id),
+            "status": "not_indexed",
+            "message": "Näyttelyn tietoja ei ole vielä haettu. Yritä hetken kuluttua uudelleen.",
+        }), 425
     except Exception:
         logger.exception("show_detail_error", show_id=show_id)
         return jsonify({"error": "Internal server error"}), 500
@@ -177,42 +152,17 @@ def breed_results(show_id):
             _breed_result_cache[cache_key] = {"data": persisted, "ts": now}
             return jsonify(persisted)
 
+        # Not in the whole-show cache. The web tier does not fetch Showlink result
+        # pages itself; outside the fetch window this is a plain "not ready", and
+        # inside it the queued job lets the crawler capture the breed shortly.
         availability = _show_result_availability_for_id(show_id)
         if not availability.get("can_fetch", True):
             return jsonify(_results_not_ready_response(show_id, availability)), 425
 
-        url = _source_url(show_id, group, breed)
-        soup = _fetch_page(url)
-        data = _parse_breed_results(soup, show_id)
-        data["source_url"] = url
-        data["fetched_at"] = now
-        data["fetched_at_iso"] = _utc_iso(now)
-
-        try:
-            _load_index()
-            sid_str = str(show_id)
-            if sid_str in _show_index["shows"]:
-                judge = _clean_judge_name(data.get("judge"))
-                updated_index = False
-                if data.get("results") and _update_index_breed_result_flag(show_id, group, breed):
-                    updated_index = True
-                if judge and _update_index_breed_judge(show_id, group, breed, judge):
-                    updated_index = True
-                if updated_index:
-                    _save_index()
-        except Exception as e:
-            logger.warning("dog_index_judge_update_failed", show_id=show_id, error=str(e))
-
-        _breed_result_cache[cache_key] = {"data": data, "ts": now}
-        return jsonify(data)
-    except requests.RequestException as exc:
-        logger.warning(
-            "showlink_fetch_failed", endpoint="breed_results",
-            show_id=show_id, group=group, breed=breed, exc_info=True,
-        )
-        if cache_key in _breed_result_cache:
-            return jsonify(_breed_result_cache[cache_key]["data"])
-        return jsonify({"error": "Failed to fetch breed results", "detail": str(exc)}), 502
+        _queue_result_cache_job(show_id, reason="breed-request")
+        return jsonify(_results_not_ready_response(
+            show_id, availability, reason="cache_warming",
+        )), 425
     except Exception:
         logger.exception("breed_results_error", show_id=show_id, group=group, breed=breed)
         return jsonify({"error": "Internal server error"}), 500
@@ -234,17 +184,13 @@ def show_all_results(show_id):
             return jsonify(_results_not_ready_response(show_id, availability)), 425
 
         job = _queue_result_cache_job(show_id, reason="user")
-        started = _start_result_cache_warmup(show_id, reason="user-immediate")
         doc = _load_result_cache_doc(show_id)
-        if started:
-            job = _load_result_jobs().get("jobs", {}).get(str(int(show_id)), job)
         return jsonify({
             "show_id": show_id,
             "status": "warming",
             "message": "Whole-show result cache is being prepared.",
             "retry_after": RESULT_RETRY_AFTER_SECONDS,
             "progress": _result_cache_progress(show_id, doc=doc, job=job),
-            "started": started,
             "availability": availability,
         }), 202
     except Exception as e:

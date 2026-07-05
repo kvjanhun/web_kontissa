@@ -254,30 +254,6 @@ def _set_result_job_running(show_id):
     return job
 
 
-def _claim_result_cache_job(show_id, reason="user-immediate", stale_seconds=None):
-    now = time.time()
-    jobs_doc = _load_result_jobs()
-    jobs = jobs_doc.setdefault("jobs", {})
-    sid = str(int(show_id))
-    job = jobs.get(sid, {"show_id": int(show_id), "created_at": now, "attempts": 0})
-
-    if job.get("state") == "running" and not _result_job_due(job, now=now, stale_seconds=stale_seconds):
-        return None
-
-    job["state"] = "running"
-    job["show_id"] = int(show_id)
-    job["reason"] = reason
-    job.setdefault("created_at", now)
-    job.setdefault("attempts", 0)
-    job["requested_at"] = now
-    job["updated_at"] = now
-    job["last_started_at"] = now
-    jobs[sid] = job
-    jobs_doc["updated_at"] = now
-    _save_result_jobs(jobs_doc)
-    return job
-
-
 def _heartbeat_result_cache_job(show_id, min_interval=15):
     now = time.time()
     jobs_doc = _load_result_jobs()

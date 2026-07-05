@@ -15,7 +15,6 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-crawler-local-only")
 
 from app.dog_show import db as dog_db  # noqa: E402

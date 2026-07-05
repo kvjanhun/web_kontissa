@@ -7,7 +7,6 @@ services:
     command: gunicorn -w 2 --timeout 120 --graceful-timeout 30 -b 0.0.0.0:80 run:app
     env_file: .env
     environment:
-      - DOG_NO_CRAWLER=true
       - DOG_INDEX_DIR=/app/data
     ports:
       - "127.0.0.1:8080:80"
@@ -33,7 +32,6 @@ services:
     command: python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
     env_file: .env
     environment:
-      - DOG_NO_CRAWLER=true
       - DOG_INDEX_DIR=/app/data
     volumes:
       - ./app/data:/app/data

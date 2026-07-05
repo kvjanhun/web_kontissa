@@ -47,8 +47,6 @@ RESULT_LIVE_PROBE_BREED_LIMIT = int(os.environ.get("DOG_RESULT_LIVE_PROBE_BREED_
 # finals.py, so this only caps how many are re-checked per pass.
 RESULT_FINALS_SWEEP_BREED_LIMIT = int(os.environ.get("DOG_RESULT_FINALS_SWEEP_BREED_LIMIT", "30"))
 RESULT_LIVE_JOB_STALE_SECONDS = int(os.environ.get("DOG_RESULT_LIVE_JOB_STALE_SECONDS", str(RESULT_CACHE_LIVE_TTL)))
-RESULT_IMMEDIATE_MAX_ACTIVE = int(os.environ.get("DOG_RESULT_IMMEDIATE_MAX_ACTIVE", "1"))
-RESULT_IMMEDIATE_WARMUP_DEFAULT = os.environ.get("DOG_RESULT_IMMEDIATE_WARMUP", "true").lower() != "false"
 RESULT_SHOW_MORNING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_MORNING_HOUR", "6"))
 RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "21"))
 
@@ -59,10 +57,6 @@ RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "2
 RESULT_PAUSE_STALL_SECONDS = int(os.environ.get("DOG_RESULT_PAUSE_STALL_SECONDS", "7200"))
 RESULT_PAUSE_EVENING_HOUR = int(os.environ.get("DOG_RESULT_PAUSE_EVENING_HOUR", "17"))
 
-# Max shows a single web-worker /api/dog/shows hit may background-index. Keeps a
-# cold/empty index from spawning hundreds of Showlink requests per request; the
-# dog-crawler service picks up the rest on its 15-minute crawl_index_once pass.
-BACKGROUND_INDEX_MAX_PER_CALL = int(os.environ.get("DOG_BACKGROUND_INDEX_MAX_PER_CALL", "5"))
 # Minimum seconds between full in-memory index rebuilds per process. The generation
 # check is cheap, but a busy live show makes the crawler bump the generation often,
 # and one /api/dog/shows hit re-checks it several times (once per live show, via

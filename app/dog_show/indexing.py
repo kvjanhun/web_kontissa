@@ -652,12 +652,9 @@ def _cached_show_detail(show_id, allow_stale=False):
 
     return None
 
-def _show_detail_from_index(show_id, refresh_stale_result_flags=False):
+def _show_detail_from_index(show_id):
     indexed_show = _indexed_show(show_id)
     if not indexed_show or not indexed_show.get("breeds"):
-        return None
-
-    if refresh_stale_result_flags and _indexed_result_flags_need_refresh(show_id, indexed_show):
         return None
 
     updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()

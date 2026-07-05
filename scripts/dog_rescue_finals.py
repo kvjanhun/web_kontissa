@@ -40,7 +40,6 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if REPO_ROOT not in sys.path:
     sys.path.insert(0, REPO_ROOT)
 
-os.environ.setdefault("DOG_NO_CRAWLER", "true")
 os.environ.setdefault("SECRET_KEY", "dog-rescue-local-only")
 os.environ.setdefault("DATABASE_URI", "sqlite://")  # in-memory; rescue only touches dog.db
 
