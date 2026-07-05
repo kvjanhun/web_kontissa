@@ -1,6 +1,6 @@
 # /dog Browser — Phase E (cross-entity profiles) + search-surface expansion
 
-**Status:** deferred — **do not start until the historical backfill is materially further along** (see "Readiness gate" below). This file supersedes the Phase E section of the now-deleted `2026-06-21-dog-browser-followups.md` and folds in a second workstream surfaced during the 2026-06-23 review: our search copy and our actual search index both still behave as if **breed (`rotu`)** is the only thing worth finding, even though Phase C now captures dogs, owners, kennels, awards, and placements.
+**Status (updated 2026-07-04):** gate PASSED. The historical backfill has completed — Konsta confirmed every Showlink-reachable show is captured, and `--backfill` has now been archived out of the production crawler command (`docker-compose.yml`). **Workstream 2 (search-surface expansion) is now in progress** under `plans/alright-i-have-checked-cozy-creek.md`. **Workstream 1 (dog/judge profile pages) remains deferred** to a follow-up plan; kennels/owners get searchability only for now. This file supersedes the Phase E section of the now-deleted `2026-06-21-dog-browser-followups.md` and folds in a second workstream surfaced during the 2026-06-23 review: our search copy and our actual search index both still behave as if **breed (`rotu`)** is the only thing worth finding, even though Phase C now captures dogs, owners, kennels, awards, and placements.
 
 **Date:** 2026-06-23
 **Depends on:** Phases A–D + the 2026-06-22 hardening (all shipped). The off-peak `--backfill` crawler is live and walking history oldest-first; this plan consumes the rows it produces.
@@ -23,6 +23,16 @@ Pick a concrete threshold and verify it against `dog.db` first — do not start 
 - `dog_result.reg_id` is populated and stable enough that the same dog's `reg_id` recurs across shows (spot-check a few well-travelled dogs). This is the Phase E cross-show anchor; if `reg_id` turns out unstable, Phase E's data model changes and this plan must be revised first.
 
 Record the actual numbers in this file when the gate is evaluated, then proceed.
+
+### Gate evaluation — 2026-07-04 (production `dog.db`, PASSED)
+
+Measured against the production database (copied to local `app/data/dog.db`):
+
+- **Result-bearing shows captured: 674 / 674 → 100% `status="complete"`** in `dog_result_cache` (674 total caches, all complete). `remaining_to_backfill = 0` — the backfill has caught up with the entire reachable Showlink window. Well past the ≥60–70% threshold.
+- **`dog_breed_award`: 188,541 rows across 648 distinct shows.** **Non-NULL `dog_result.competitive_placement`: 127,498 rows.** Both span the full multi-year history, not the last week.
+- **`dog_result.reg_id`: 367,193 / 379,201 populated (96.8%).** It is a **stable cross-show anchor**: 50,998 distinct dogs recur across two or more shows, and a single `reg_id` appears in as many as 78 shows with one row per show (no duplication). Phase E's dog-profile model on `reg_id` is safe.
+
+Gate PASSED. Proceeding with Workstream 2 (search expansion); Workstream 1 (profiles) stays deferred.
 
 ---
 

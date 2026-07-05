@@ -149,6 +149,7 @@ Environment knobs:
 - `DOG_RESULT_TIMEZONE`: IANA timezone used to evaluate show dates and the morning/evening result windows; defaults to `Europe/Helsinki`. The crawler/web containers run in UTC, so this is resolved explicitly via `tzdata` rather than the process clock.
 - `DOG_RESULT_IMMEDIATE_WARMUP`: set to `false` to disable user-triggered immediate warmup in web workers.
 - `DOG_RESULT_IMMEDIATE_MAX_ACTIVE`: max immediate warmups per web worker.
+- `DOG_BACKFILL_*` (below): archived — only consulted when `--backfill` is passed, which production no longer does (see [Historical Backfill](#historical-backfill-phase-c)).
 - `DOG_BACKFILL_START_HOUR` / `DOG_BACKFILL_END_HOUR`: Finnish local off-peak window for the historical backfill; defaults to `0`–`6` (00:00–06:00). End is exclusive; the window may wrap midnight.
 - `DOG_BACKFILL_DELAY`: seconds between backfill breed-result requests; defaults to `2.0`. Prefer raising this over adding workers if Showlink ever slows.
 - `DOG_BACKFILL_WORKERS`: concurrent requests per backfill show; defaults to `1` (deliberately serial — the backfill must never be bursty).
@@ -156,6 +157,8 @@ Environment knobs:
 - `DOG_BACKFILL_BREED_BUDGET`: max breeds crawled per backfill pass before the pass returns; defaults to `25` (≈50s at the 2s spacing). A show larger than the budget is crawled across several passes (resuming per-breed) instead of holding the crawler loop for one long crawl.
 
 ## Historical Backfill (Phase C)
+
+> **Archived 2026-07.** The backfill has finished: every dog show still reachable on Showlink is captured with `status='complete'` in `dog_result_cache`. Production no longer passes `--backfill` (removed from the `dog-crawler` command in `docker-compose.yml`). The code, CLI flag, and `DOG_BACKFILL_*` knobs remain for reference and for re-running if a fresh tranche of history ever needs capturing. New and recent shows keep getting complete caches without it, via the auto-warm (7-day), queued-job, and immediate-warmup paths.
 
 `scripts/dog_crawl.py --backfill` enables an off-peak, oldest-first crawl that captures full results for shows beyond the live/auto window. It is a no-op outside the Finnish 00:00–06:00 window and while any user/live result job is queued or running, so it never competes with live work. It selects the **oldest not-yet-captured** show with result-bearing breeds, crawls it via the normal result-cache path (single worker, `DOG_BACKFILL_DELAY` between requests), and marks it complete. A complete show is **permanently captured and never re-crawled** — the backfill only advances into not-yet-captured history.
 
@@ -196,7 +199,7 @@ The public info page at `/dog/about-crawler` explains in Finnish and English wha
 Current `docker-compose.yml` command:
 
 ```bash
-python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3 --backfill
+python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
 ```
 
 This means:
@@ -207,7 +210,8 @@ This means:
 - Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 - During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
-- Every pass (lowest priority): one off-peak historical backfill step (`--backfill`), bounded to ~25 breeds (`DOG_BACKFILL_BREED_BUDGET`) so a large show is captured across passes. No-op outside the Finnish 00:00–06:00 window or while any user/live result job is pending. See [Historical Backfill](#historical-backfill-phase-c).
+
+The historical `--backfill` pass is no longer part of this command (archived 2026-07; see [Historical Backfill](#historical-backfill-phase-c)).
 
 The web container is started with `DOG_NO_CRAWLER=true`; it does not run the long-lived crawler loop. It may still start an immediate bounded background warmup for a user-requested missing cache.
 
@@ -304,6 +308,8 @@ SECRET_KEY=dev python3 scripts/migrate_dog_to_sql.py
 On the NUC, stop the web + crawler containers first, run the migration against the host `./app/data`, confirm it prints `OK: … round-trip identically`, then start the containers. `dog.db` is not Litestream-replicated; back it up manually.
 
 ## Phase C schema migration (existing dog.db)
+
+> **Historical — ran 2026-06.** This migration and the `--backfill` it preceded are both complete; kept here for reference and for any future fresh-database bring-up.
 
 `scripts/migrate_dog_phase_c.py` adds the Phase C capture fields to an existing `dog.db`: the `dog_result.competitive_placement` column (an additive `ALTER TABLE`) and the `dog_breed_award` table (`create_all`). It is idempotent and additive — it never drops or rewrites rows; pre-Phase-C rows simply have `NULL` competitive_placement and no honor-roll until those shows are (re)crawled. Run it once before enabling `--backfill` on the new image:
 
