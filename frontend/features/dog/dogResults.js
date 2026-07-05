@@ -1137,7 +1137,7 @@ export function getShowResultAvailability(show, now = new Date(), morningHour = 
     return {
       canLoad: true,
       phase: 'unknown',
-      loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
+      loadingNote: 'Tuloksia ei ole vielä välimuistissa; ne haetaan taustalla rauhallisesti.',
     }
   }
 
@@ -1169,7 +1169,7 @@ export function getShowResultAvailability(show, now = new Date(), morningHour = 
   return {
     canLoad: true,
     phase: 'past',
-    loadingNote: 'Ensimmäinen haku voi kestää, koska rotujen tulossivut haetaan taustalla rauhallisesti.',
+    loadingNote: 'Tuloksia ei ole vielä välimuistissa; ne haetaan taustalla rauhallisesti.',
   }
 }
 

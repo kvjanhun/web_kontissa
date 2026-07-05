@@ -540,9 +540,9 @@ export function useDogBrowser() {
       const data = await $fetch(`/api/dog/shows/${show.id}`)
       if (syncToken !== null && syncToken !== routeSyncToken) return
       showDetail.value = data
-    } catch {
+    } catch (error) {
       if (syncToken !== null && syncToken !== routeSyncToken) return
-      detailError.value = 'Näyttelyn tietojen lataaminen epäonnistui.'
+      detailError.value = error?.data?.message || 'Näyttelyn tietojen lataaminen epäonnistui.'
     } finally {
       if (syncToken === null || syncToken === routeSyncToken) {
         detailLoading.value = false
@@ -570,9 +570,9 @@ export function useDogBrowser() {
       const data = await $fetch(url)
       if (syncToken !== null && syncToken !== routeSyncToken) return
       breedResults.value = data
-    } catch {
+    } catch (error) {
       if (syncToken !== null && syncToken !== routeSyncToken) return
-      resultsError.value = 'Tulosten lataaminen epäonnistui.'
+      resultsError.value = error?.data?.message || 'Tulosten lataaminen epäonnistui.'
     } finally {
       if (syncToken === null || syncToken === routeSyncToken) {
         resultsLoading.value = false
@@ -729,7 +729,10 @@ export function useDogBrowser() {
 
   const filteredShows = computed(() => {
     const query = filterText.value.toLowerCase().trim()
-    if (!query) return shows.value
+    // Below the 2-char search threshold the list stays unfiltered, so a single
+    // typed character doesn't put the browse list in a half-filtered state the
+    // backend search (>= 2 chars) never shows.
+    if (query.length < 2) return shows.value
     return shows.value.filter(show =>
       show.name.toLowerCase().includes(query) || show.date?.toLowerCase().includes(query)
     )
