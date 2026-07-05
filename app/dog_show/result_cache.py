@@ -5,13 +5,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 import structlog
 
-from . import config
+from . import config, finals
 from .indexing import (
     _cached_show_detail, _indexed_result_flags_need_refresh, _is_show_recent_by_id,
     _mark_single_probe_breed_result_available, _persist_show_detail_to_index,
     _result_cache_doc_needs_result_refresh,
     _result_breeds_for_cache, _result_breeds_from_index, _result_breeds_with_results,
-    _show_date_for_id, _show_expects_main_bis, _show_result_availability_for_id,
+    _show_date_for_id, _show_result_availability_for_id,
     _update_index_breed_judge, _update_index_breed_result_flag,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
@@ -27,10 +27,9 @@ from .store import (
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _is_recent_show, _local_dt, _result_doc_has_main_bis, _result_doc_has_show_finals,
-    _result_doc_live_bis_grace_finished,
-    _result_doc_live_entry_completion_grace_finished, _show_age_days,
-    _show_result_availability, _utc_iso,
+    _entry_count_from_breeds, _local_dt, _result_doc_has_main_bis,
+    _result_doc_has_show_finals, _result_live_plan, _show_age_days,
+    _show_result_availability, _terminal_status, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -49,7 +48,6 @@ RESULT_LIVE_PROBE_BREED_LIMIT = config.RESULT_LIVE_PROBE_BREED_LIMIT
 RESULT_FINALS_SWEEP_BREED_LIMIT = config.RESULT_FINALS_SWEEP_BREED_LIMIT
 RESULT_LIVE_JOB_STALE_SECONDS = config.RESULT_LIVE_JOB_STALE_SECONDS
 RESULT_IMMEDIATE_WARMUP = config.RESULT_IMMEDIATE_WARMUP_DEFAULT
-RESULT_CACHE_BIS_FINAL_GRACE_SECONDS = config.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
 
 _immediate_warmups = set()
 _immediate_warmups_lock = threading.Lock()
@@ -59,116 +57,72 @@ def _result_cache_doc_is_complete(doc):
     return bool(doc and doc.get("status") == "complete")
 
 def _empty_result_cache_needs_refresh(show_id, doc, now=None):
-    availability_now = datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
+    availability_now = _local_dt(now) if isinstance(now, (int, float)) else now
     return _result_cache_doc_needs_result_refresh(show_id, doc, now=availability_now)
 
 def _availability_now(now):
-    return datetime.datetime.fromtimestamp(now) if isinstance(now, (int, float)) else now
+    # Absolute timestamps are converted to Finnish wall clock, never the
+    # container's UTC clock — the fetch window (06:00 morning / 21:00 evening)
+    # and settle deadlines are Finnish local, and the crawler runs in UTC.
+    return _local_dt(now) if isinstance(now, (int, float)) else now
 
-def _mark_live_bis_state(doc, now):
-    if not isinstance(doc, dict) or not _result_doc_has_main_bis(doc):
+def _show_dict_for_plan(show_id):
+    """Minimal show dict (id/date/month) for the live-plan date parsing."""
+    indexed = _indexed_show(show_id) or {}
+    return {
+        "id": int(show_id),
+        "date": indexed.get("date", ""),
+        "month": indexed.get("month", ""),
+        "title": indexed.get("title", ""),
+    }
+
+def _result_live_plan_for_id(show_id, doc=None, now=None):
+    doc = doc if doc is not None else _load_result_cache_doc(show_id)
+    indexed = _indexed_show(show_id) or {}
+    return _result_live_plan(
+        _show_dict_for_plan(show_id),
+        doc,
+        indexed.get("breeds") or [],
+        now=_availability_now(now if now is not None else time.time()),
+    )
+
+def _mark_terminal_confirmation(doc, indexed_breeds):
+    """Confirm the terminal once a pass adds nothing new to it.
+
+    Stores the terminal signature; when a later pass (with the target already
+    met last time) produces the same signature, the finals — or the final
+    result rows, for a finals-less show — have stopped changing and the show may
+    settle. A late BIS-4 or a correction changes the signature and resets the
+    confirmation, so nothing settles while results are still moving."""
+    if not isinstance(doc, dict):
         return
-
-    detected_at = doc.get("bis_detected_at") or now
-    doc["bis_detected_at"] = detected_at
-    doc["bis_detected_at_iso"] = _utc_iso(detected_at)
-    grace_until = detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
-    doc["live_result_grace_until"] = grace_until
-    doc["live_result_grace_until_iso"] = _utc_iso(grace_until)
-
-def _entry_count_from_breeds(breeds):
-    entry_count = 0
-    entry_count_known = False
-    for breed in breeds or []:
-        try:
-            entry_count += int(breed.get("count"))
-            entry_count_known = True
-        except (TypeError, ValueError):
-            continue
-    return entry_count if entry_count_known else None
-
-def _clear_live_entry_completion_state(doc):
-    for key in (
-        "live_result_entry_count",
-        "live_result_entry_completion_at",
-        "live_result_entry_completion_at_iso",
-        "live_result_entry_grace_until",
-        "live_result_entry_grace_until_iso",
-    ):
-        doc.pop(key, None)
-
-def _mark_live_entry_completion_state(doc, entry_count, now, existing=None):
-    if not isinstance(doc, dict) or not isinstance(entry_count, int) or entry_count <= 0:
+    status = _terminal_status(doc, indexed_breeds)
+    signature = status["signature"]
+    previous = doc.get("terminal_fingerprint")
+    doc["terminal_fingerprint"] = signature
+    if not status["target_met"]:
+        doc["terminal_confirmed"] = False
+        doc["terminal_target_met"] = False
         return
-
-    result_count = len(doc.get("results") or [])
-    if result_count < entry_count:
-        _clear_live_entry_completion_state(doc)
-        return
-
-    detected_at = doc.get("live_result_entry_completion_at")
-    if not detected_at and isinstance(existing, dict):
-        try:
-            existing_result_count = len(existing.get("results") or [])
-        except TypeError:
-            existing_result_count = 0
-        if existing_result_count >= entry_count:
-            detected_at = (
-                existing.get("live_result_entry_completion_at")
-                or existing.get("cached_at")
-                or existing.get("updated_at")
-            )
-
-    detected_at = detected_at or now
-    grace_until = detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
-    doc["live_result_entry_count"] = entry_count
-    doc["live_result_entry_completion_at"] = detected_at
-    doc["live_result_entry_completion_at_iso"] = _utc_iso(detected_at)
-    doc["live_result_entry_grace_until"] = grace_until
-    doc["live_result_entry_grace_until_iso"] = _utc_iso(grace_until)
-
-def _post_show_final_due_at(show_id, now):
-    show_date = _show_date_for_id(show_id)
-    if not show_date:
-        return None
-
-    now_dt = _availability_now(now)
-    today = now_dt.date()
-    if today != show_date + datetime.timedelta(days=1):
-        return None
-
-    final_due = datetime.datetime.combine(show_date + datetime.timedelta(days=1), datetime.time.min)
-    return final_due.timestamp()
-
-def _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
-    final_due_at = _post_show_final_due_at(show_id, now)
-    if not final_due_at:
-        return False
-
-    cached_at = (doc or {}).get("cached_at") or (doc or {}).get("updated_at") or 0
-    return cached_at < final_due_at
+    was_met = bool(doc.get("terminal_target_met"))
+    doc["terminal_target_met"] = True
+    doc["terminal_confirmed"] = bool(was_met and previous == signature)
 
 def _result_cache_ttl_for_show(show_id, now, doc=None):
-    availability = _show_result_availability_for_id(show_id, now=_availability_now(now))
-    if availability.get("show_state") == "live":
-        entry_count = _entry_count_from_breeds(_result_breeds_from_index(show_id))
-        if _result_doc_live_bis_grace_finished(doc, now):
-            return None
-        if _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=entry_count):
-            # Every breed ring is judged, but all-breed shows decide the group
-            # finals and main Best in Show afterwards. Keep polling until BIS-1
-            # is captured instead of freezing the cache right before the finals
-            # publish RYP/BIS placements onto the winners' breed rows.
-            if not _result_doc_has_main_bis(doc) and _show_expects_main_bis(show_id, doc):
-                return RESULT_CACHE_LIVE_TTL
-            return None
-        return RESULT_CACHE_LIVE_TTL
+    plan = _result_live_plan_for_id(show_id, doc=doc, now=now)
+    if plan["phase"] in ("live", "overtime", "rescue"):
+        return plan["ttl"]
+    if plan["phase"] == "upcoming":
+        # Not fetchable yet; fall through to the date-based settled TTL below.
+        pass
+    elif plan["phase"] in ("settled", "settled_incomplete"):
+        # Terminal reached (or deadline hit): fall through to the long settled
+        # TTL / permanent-cache handling below rather than fast-polling.
+        pass
 
     show_date = _show_date_for_id(show_id)
     if show_date:
-        if _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now):
-            return 0
-        today = datetime.datetime.fromtimestamp(now).date()
+        today = _local_dt(now).date()
         age_days = (today - show_date).days
         if age_days > RESULT_AUTO_WINDOW_DAYS:
             return None
@@ -448,28 +402,20 @@ def _all_results_doc_base(show_id, source, existing=None):
         "cached_at": None,
         "total_breeds": existing.get("total_breeds"),
         # Shallow-copy the mutable carry-overs so crawling this doc never mutates
-        # the source `existing` in place — `_mark_live_entry_completion_state`
-        # reads existing["results"] after the crawl to preserve the original
-        # entry-completion time, which a shared (already-extended) list would skew.
+        # the source `existing` in place (a shared, already-extended results list
+        # would skew the finals fingerprint compared after the crawl).
         "completed_breeds": dict(existing.get("completed_breeds") or {}),
         "failed_breeds": dict(existing.get("failed_breeds") or {}),
         "results": list(existing.get("results") or []),
-        "bis_detected_at": existing.get("bis_detected_at"),
-        "bis_detected_at_iso": existing.get("bis_detected_at_iso"),
-        "live_result_grace_until": existing.get("live_result_grace_until"),
-        "live_result_grace_until_iso": existing.get("live_result_grace_until_iso"),
-        "live_result_entry_count": existing.get("live_result_entry_count"),
-        "live_result_entry_completion_at": existing.get("live_result_entry_completion_at"),
-        "live_result_entry_completion_at_iso": existing.get("live_result_entry_completion_at_iso"),
-        "live_result_entry_grace_until": existing.get("live_result_entry_grace_until"),
-        "live_result_entry_grace_until_iso": existing.get("live_result_entry_grace_until_iso"),
         "live_probe_cursor": existing.get("live_probe_cursor", 0),
         "live_probe_breed_count": existing.get("live_probe_breed_count"),
         "live_probe_breed_limit": existing.get("live_probe_breed_limit"),
         "finals_sweep_cursor": existing.get("finals_sweep_cursor", 0),
         "finals_sweep_breed_count": existing.get("finals_sweep_breed_count"),
         "finals_sweep_breed_limit": existing.get("finals_sweep_breed_limit"),
-        "finals_post_bis_sweep_remaining": existing.get("finals_post_bis_sweep_remaining"),
+        "terminal_target_met": existing.get("terminal_target_met"),
+        "terminal_confirmed": existing.get("terminal_confirmed"),
+        "terminal_fingerprint": existing.get("terminal_fingerprint"),
     }
 
 def _breed_result_cache_key(show_id, group, breed_id):
@@ -557,26 +503,26 @@ def _result_breeds_for_live_cache(show_id, breeds, doc, availability, now=None):
         return selected
     return selected + probes
 
-def _finals_resweep_breeds(breeds, completed_breeds, doc, limit=None):
-    """A bounded, rotating slice of already-captured breeds to re-fetch for finals.
+def _finals_resweep_breeds(breeds, completed_breeds, doc, analysis, limit=None):
+    """The targeted breeds to re-fetch this pass to capture missing/late finals.
 
-    All-breed shows append RYP/BIS placements onto the winning breeds' rows after
-    every ring is judged, so those rows do change once — unlike the rest, which are
-    immutable after capture. Rather than re-crawl the whole show on every live pass,
-    re-check a small rotating chunk (cycling via `finals_sweep_cursor`) so the
-    finals land within a few passes without a burst. The caller only invokes this
-    once a main BIS is expected and still missing, so the sweep stops as soon as
-    BIS-1 is captured."""
+    Unlike the old blind rotation over every captured breed, `finals.candidate_
+    breed_keys` returns only the pages that can structurally carry the tokens we
+    still owe: groups missing RYP-1 (their ROP winners), then the RYP-1 winners'
+    pages for the main BIS, then the finals-carrying breeds once for a late
+    BIS-2..4. Bounded per pass and rotated via `finals_sweep_cursor` so a big
+    show's RYP-discovery phase doesn't burst."""
     if limit is None:
         limit = RESULT_FINALS_SWEEP_BREED_LIMIT
     limit = max(0, int(limit or 0))
     if limit <= 0:
         return []
 
+    candidate_keys = finals.candidate_breed_keys(analysis)
+    by_key = {_breed_cache_key_from_breed(breed): breed for breed in breeds or []}
     candidates = [
-        breed for breed in breeds or []
-        if breed.get("group") and breed.get("breed_id")
-        and _breed_cache_key_from_breed(breed) in completed_breeds
+        by_key[key] for key in candidate_keys
+        if key in by_key and key in completed_breeds
     ]
     doc["finals_sweep_breed_count"] = len(candidates)
     doc["finals_sweep_breed_limit"] = limit
@@ -843,16 +789,23 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     crawl all pending breeds in one call (the default for live/auto/queued work)."""
     show_id = int(show_id)
     now = time.time()
-    availability = _show_result_availability_for_id(
-        show_id,
-        now=datetime.datetime.fromtimestamp(now),
-    )
-    if not force and not availability.get("can_fetch", True):
+    availability = _show_result_availability_for_id(show_id, now=_local_dt(now))
+    existing_for_plan = _load_result_cache_doc(show_id)
+    plan = _result_live_plan_for_id(show_id, doc=existing_for_plan, now=now)
+    # Fetch permission is the base availability window OR the finals-aware plan:
+    # the plan adds the final-day evening/night overtime and post-show rescue
+    # that the 21:00 cutoff would deny, while the base window keeps past-show
+    # re-crawls (backfill, forced rescue scripts) working as before. Only truly
+    # not-fetchable moments — upcoming, the pre-06:00 morning, and the between-day
+    # overnight lull — are skipped here; when to *invoke* a fetch is the
+    # scheduler's job (auto candidates / TTL), which does honor the plan window.
+    if not force and not (availability.get("can_fetch", True) or plan.get("can_fetch", False)):
         logger.info(
             "dog_result_cache_skipped",
             show_id=show_id,
             source=source,
             reason=availability.get("reason"),
+            plan_phase=plan.get("phase"),
         )
         return {
             "show_id": show_id,
@@ -900,15 +853,6 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     doc = _all_results_doc_base(show_id, source, existing=existing if seed_from_existing else None)
     if isinstance(existing, dict):
         for key in (
-            "bis_detected_at",
-            "bis_detected_at_iso",
-            "live_result_grace_until",
-            "live_result_grace_until_iso",
-            "live_result_entry_count",
-            "live_result_entry_completion_at",
-            "live_result_entry_completion_at_iso",
-            "live_result_entry_grace_until",
-            "live_result_entry_grace_until_iso",
             "live_probe_cursor",
             "live_probe_breed_count",
             "live_probe_breed_limit",
@@ -969,13 +913,9 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     # produced results. A breed crawled early on a live show day (before its ring
     # was judged) lands in completed_breeds with result_count 0; treating that as
     # a permanent capture froze the whole show at 0 dogs, because every later
-    # live pass saw nothing pending. While the show is live (and on the post-show
-    # morning check, for rings published after the evening cutoff), an empty
-    # capture stays re-fetchable.
-    refetch_window = (
-        (availability.get("show_state") == "live" and availability.get("can_fetch", True))
-        or _result_cache_doc_needs_post_show_final_refresh(show_id, doc, now)
-    )
+    # live pass saw nothing pending. While fetching is permitted (live day,
+    # finals overtime, or post-show rescue) an empty capture stays re-fetchable.
+    refetch_window = plan.get("can_fetch", False)
 
     def _capture_blocks_refetch(breed):
         entry = completed_breeds.get(_breed_cache_key_from_breed(breed))
@@ -993,46 +933,30 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         if not _capture_blocks_refetch(breed)
     ]
 
-    # Finals re-sweep: when every newly-judged breed is already captured but the
-    # show still owes a main BIS, re-check a bounded rotating chunk of captured
-    # breeds so the RYP/BIS placements appended to the winners' rows land — instead
-    # of re-crawling the whole show on every pass. Fires while live, and once on the
-    # post-show morning check (to catch a BIS-1 published after the evening cutoff,
-    # which the live sweep can't see overnight).
-    #
-    # BIS-1..4 each sit on a different winning breed's row, and RYP is decided
-    # before BIS, so by the time BIS-1 appears every finals placement is already
-    # published. Stopping the moment BIS-1 is recorded therefore stranded BIS-2..4
-    # (and late RYP) on breed rows the rotation had not reached yet — Turku KV only
-    # captured 3 of 4 BIS. So once the first main BIS lands we budget exactly one
-    # further full rotation over the captured breeds before settling.
+    # Targeted finals re-sweep: when nothing new is pending but the show still
+    # owes its terminal award (or hasn't yet confirmed the finals are stable),
+    # re-check only the breeds that can structurally carry the missing tokens —
+    # groups still missing RYP-1, then the RYP-1 winners' pages for the main BIS,
+    # then the finals-carrying breeds once for a late BIS-2..4. Showlink appends
+    # these onto the winners' already-captured rows, so the re-fetch replaces
+    # those rows in place (no duplication). This is scoped by finals.py, not a
+    # blind rotation over every captured breed.
     new_result_breeds = [
         breed for breed in pending_breeds
         if breed.get("has_results")
     ]
-    finals_due_window = refetch_window
-    has_main_bis = _result_doc_has_main_bis(doc)
-    expects_main_bis = _show_expects_main_bis(show_id, doc)
-    if (
-        has_main_bis
-        and expects_main_bis
-        and doc.get("finals_post_bis_sweep_remaining") is None
-    ):
-        doc["finals_post_bis_sweep_remaining"] = len(completed_breeds)
-    post_bis_remaining = doc.get("finals_post_bis_sweep_remaining")
-    finals_sweep_active = (not has_main_bis) or (post_bis_remaining or 0) > 0
+    analysis = finals.analyze(doc, breeds_with_results)
+    finals_hunt_active = (
+        analysis["expects_finals"]
+        and not (analysis["target_met"] and doc.get("terminal_confirmed"))
+    )
     finals_resweep = 0
-    if (
-        not new_result_breeds
-        and finals_due_window
-        and expects_main_bis
-        and finals_sweep_active
-    ):
-        resweep_breeds = _finals_resweep_breeds(breeds_with_results, completed_breeds, doc)
+    if not new_result_breeds and refetch_window and finals_hunt_active:
+        resweep_breeds = _finals_resweep_breeds(
+            breeds_with_results, completed_breeds, doc, analysis
+        )
         pending_breeds = pending_breeds + resweep_breeds
         finals_resweep = len(resweep_breeds)
-        if post_bis_remaining is not None:
-            doc["finals_post_bis_sweep_remaining"] = max(0, post_bis_remaining - finals_resweep)
 
     # Bounded pass: crawl at most max_breeds this call; the rest resume next pass.
     pending_before_budget = len(pending_breeds)
@@ -1093,13 +1017,9 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         }
 
     cached_at = time.time()
-    _mark_live_entry_completion_state(
-        doc,
-        _entry_count_from_breeds(show_detail_data.get("breeds", [])),
-        cached_at,
-        existing=existing,
-    )
-    _mark_live_bis_state(doc, cached_at)
+    # Confirm the terminal if this pass added nothing new to it — the stability
+    # check that lets the show settle (see _result_live_plan).
+    _mark_terminal_confirmation(doc, breeds_with_results)
     doc["status"] = "complete"
     doc["cached_at"] = cached_at
     doc["updated_at"] = cached_at
@@ -1170,29 +1090,36 @@ def _auto_result_cache_candidates(now):
         logger.warning("dog_result_cache_auto_show_list_failed", exc_info=True)
         return candidates
 
-    today = datetime.datetime.fromtimestamp(now).date()
-    now_dt = datetime.datetime.fromtimestamp(now)
+    now_local = _local_dt(now)
+    today = now_local.date()
     for show in shows_list:
         show_id = int(show["id"])
-        availability = _show_result_availability(show, now=now_dt)
-        if not availability.get("can_fetch", True):
+        doc = _load_result_cache_doc(show_id)
+        plan = _result_live_plan_for_id(show_id, doc=doc, now=now)
+        phase = plan["phase"]
+        if phase == "upcoming":
             continue
 
-        if availability.get("show_state") == "live":
-            recency_rank = -1
-        else:
-            age_days = _show_age_days(show, today=today)
-            if age_days is None:
-                if _is_recent_show(show.get("month")):
-                    recency_rank = RESULT_AUTO_WINDOW_DAYS + 1
-                else:
-                    continue
-            elif age_days < 0 or age_days > RESULT_AUTO_WINDOW_DAYS:
-                continue
-            else:
-                recency_rank = age_days
+        age_days = _show_age_days(show, today=today)
 
-        if not _result_cache_due(show_id, now=now):
+        fetchable = plan.get("can_fetch", False)
+        # Recent-past initial warming: a show whose crawl never completed (missing
+        # or partial cache) still gets warmed within the auto window even once it
+        # is past its date and no longer finals-owed. A complete cache that merely
+        # lacks its finals is left to the finals rescue (and the deadline), never
+        # re-warmed here.
+        recent_past_warming = (
+            not fetchable
+            and plan["show_state"] == "past"
+            and age_days is not None
+            and 0 <= age_days <= RESULT_AUTO_WINDOW_DAYS
+            and not _result_cache_doc_is_complete(doc)
+        )
+        if not fetchable and not recent_past_warming:
+            continue
+
+        # Reuse the doc already loaded for the plan instead of reloading it.
+        if _result_cache_doc_is_fresh(show_id, doc, now=now):
             continue
 
         indexed_show = _indexed_show(show_id)
@@ -1204,13 +1131,27 @@ def _auto_result_cache_candidates(now):
         ):
             continue
 
-        doc = _load_result_cache_doc(show_id)
-        cache_rank = 0 if not doc else 1
+        # Priority classes so a busy weekend can't starve time-critical work:
+        # 0 brand-new live show (nothing cached yet) -> warm first so the page
+        #   shows something; 1 finals-owed (overtime/rescue) -> the failure this
+        #   redesign fixes; 2 live refresh; 3 recent-past warming. Cheap per pass.
+        if phase == "live":
+            priority = 0 if not doc else 2
+        elif phase in ("overtime", "rescue"):
+            priority = 1
+        else:
+            priority = 3
+        if plan["show_state"] == "live":
+            recency_rank = -1
+        elif age_days is not None:
+            recency_rank = age_days
+        else:
+            recency_rank = RESULT_AUTO_WINDOW_DAYS + 1
         candidates.append({
             "show_id": show_id,
             "source": "auto",
             "job": None,
-            "rank": (cache_rank, recency_rank, show_id),
+            "rank": (priority, recency_rank, show_id),
         })
 
     candidates.sort(key=lambda item: item.get("rank", (99, 99, 0)))

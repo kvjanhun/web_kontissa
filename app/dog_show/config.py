@@ -10,7 +10,23 @@ BREED_RESULT_TTL = 600
 SHOW_ALL_RESULTS_TTL = 86400
 
 RESULT_CACHE_LIVE_TTL = int(os.environ.get("DOG_RESULT_LIVE_TTL", "120"))
-RESULT_CACHE_BIS_FINAL_GRACE_SECONDS = int(os.environ.get("DOG_RESULT_BIS_FINAL_GRACE_SECONDS", "1800"))
+# Finals overtime: after the evening cutoff on a show's final day, a show that
+# still owes its terminal award (main BIS, or the last groups' RYP) keeps
+# fetching at a slower cadence instead of going quiet at 21:00, until the hard
+# nightly stop. The finals are published in the 21:00–23:30 window, so this is
+# where the old evening cutoff silently stranded them.
+RESULT_CACHE_OVERTIME_TTL = int(os.environ.get("DOG_RESULT_OVERTIME_TTL", "600"))
+# Finals overtime and rescue fetching stop at this Finnish local hour (hard
+# nightly stop) and resume at RESULT_SHOW_MORNING_HOUR.
+RESULT_FINALS_NIGHT_STOP_HOUR = int(os.environ.get("DOG_RESULT_FINALS_NIGHT_STOP_HOUR", "1"))
+# Rescue: a past show still owing its terminal award (crawler was down when the
+# finals published) keeps re-fetching the targeted finals pages at this cadence
+# during fetch hours, until the settle deadline.
+RESULT_CACHE_RESCUE_TTL = int(os.environ.get("DOG_RESULT_RESCUE_TTL", "900"))
+# Hard deadline: days after a show's final day past which the cache settles even
+# if its terminal award never appeared (the source itself is sometimes
+# incomplete). Settling then is logged as settled_incomplete, not silent.
+RESULT_SETTLE_DEADLINE_DAYS = int(os.environ.get("DOG_RESULT_SETTLE_DEADLINE_DAYS", "2"))
 RESULT_CACHE_ACTIVE_TTL = int(os.environ.get("DOG_RESULT_ACTIVE_TTL", "21600"))
 RESULT_CACHE_SETTLED_TTL = int(os.environ.get("DOG_RESULT_SETTLED_TTL", "604800"))
 RESULT_CACHE_SETTLED_AFTER_DAYS = int(os.environ.get("DOG_RESULT_SETTLED_AFTER_DAYS", "2"))
@@ -25,9 +41,11 @@ RESULT_LIVE_PROBE_BREED_LIMIT = int(os.environ.get("DOG_RESULT_LIVE_PROBE_BREED_
 # Captured breed results are immutable, so a live refresh re-fetches only newly
 # judged breeds — except the show finals (RYP/BIS-1/BIS JUN/VET), which Showlink
 # appends onto the winners' already-captured breed rows after every ring is
-# judged. Once all breeds are captured but a main BIS is still expected and not
-# yet recorded, re-check a bounded, rotating chunk of captured breeds per pass so
-# the finals land within a few passes instead of re-crawling the whole show.
+# judged. While a show still owes finals, re-check a bounded, rotating chunk of
+# the *targeted* breeds per pass (groups still missing RYP-1, then the RYP-1
+# winners' pages for the main BIS) so the finals land within a few passes without
+# re-crawling the whole show. The candidate set is derived structurally in
+# finals.py, so this only caps how many are re-checked per pass.
 RESULT_FINALS_SWEEP_BREED_LIMIT = int(os.environ.get("DOG_RESULT_FINALS_SWEEP_BREED_LIMIT", "30"))
 RESULT_LIVE_JOB_STALE_SECONDS = int(os.environ.get("DOG_RESULT_LIVE_JOB_STALE_SECONDS", str(RESULT_CACHE_LIVE_TTL)))
 RESULT_IMMEDIATE_MAX_ACTIVE = int(os.environ.get("DOG_RESULT_IMMEDIATE_MAX_ACTIVE", "1"))

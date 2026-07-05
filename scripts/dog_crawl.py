@@ -78,7 +78,6 @@ def main():
         run_auto_results = now >= next_auto_results_at
         run_empty_index = now >= next_empty_index_at
         summary = {}
-        queued_attempted = 0
 
         logger.info(
             "dog_crawler_pass_start",
@@ -104,7 +103,6 @@ def main():
                 auto_recent=False,
                 workers=args.result_workers,
             )
-            queued_attempted = summary["queued_results"].get("attempted", 0)
 
         if run_maintenance and not args.no_index_maintenance:
             index_summary = crawl_index_once(limit=args.limit, delay=args.delay)
@@ -115,15 +113,18 @@ def main():
             summary["next_maintenance_in"] = max(0, round(next_maintenance_at - now))
 
         if run_auto_results and not args.no_results and not args.no_auto_results:
-            if queued_attempted:
-                summary["auto_results"] = {"attempted": 0, "skipped": 1, "reason": "queued_job_active"}
-            else:
-                summary["auto_results"] = crawl_result_cache_once(
-                    limit=auto_result_limit,
-                    delay=args.result_delay,
-                    auto_recent=True,
-                    workers=args.result_workers,
-                )
+            # The auto pass is the only path that refreshes live caches and runs
+            # the finals sweep, so it must NOT be skipped just because queued jobs
+            # ran this cycle — that starvation is exactly what stranded a live
+            # show's finals when weekend browsing kept queueing live-list refresh
+            # jobs. It shares the pass budget instead: any show a queued job just
+            # refreshed is fresh and deduped out by the candidates' own due check.
+            summary["auto_results"] = crawl_result_cache_once(
+                limit=auto_result_limit,
+                delay=args.result_delay,
+                auto_recent=True,
+                workers=args.result_workers,
+            )
             next_auto_results_at = time.time() + auto_results_interval
         else:
             summary["next_auto_results_in"] = max(0, round(next_auto_results_at - now))

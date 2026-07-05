@@ -2,10 +2,12 @@ import datetime
 import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
+from . import finals
 from .config import (
-    FINNISH_MONTHS, RESULT_CACHE_BIS_FINAL_GRACE_SECONDS, RESULT_LOCAL_TIMEZONE,
+    FINNISH_MONTHS, RESULT_CACHE_LIVE_TTL, RESULT_CACHE_OVERTIME_TTL,
+    RESULT_CACHE_RESCUE_TTL, RESULT_FINALS_NIGHT_STOP_HOUR, RESULT_LOCAL_TIMEZONE,
     RESULT_PAUSE_EVENING_HOUR, RESULT_PAUSE_STALL_SECONDS,
-    RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
+    RESULT_SETTLE_DEADLINE_DAYS, RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
 )
 
 RELATIVE_RECENT_LABELS = {"tänään", "huomenna", "today", "tomorrow"}
@@ -138,34 +140,188 @@ def _result_doc_has_show_finals(doc):
                 return True
     return False
 
-def _result_doc_live_bis_grace_finished(doc, now):
-    if not isinstance(doc, dict):
-        return False
-
-    detected_at = doc.get("bis_detected_at")
-    if not detected_at and _result_doc_has_main_bis(doc):
-        detected_at = doc.get("cached_at") or doc.get("updated_at")
-    if not detected_at:
-        return False
-
-    return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
-
-def _result_doc_live_entry_completion_grace_finished(doc, now, entry_count=None):
-    if not isinstance(doc, dict):
-        return False
-
-    detected_at = doc.get("live_result_entry_completion_at")
-    if not detected_at and isinstance(entry_count, int) and entry_count > 0:
+def _entry_count_from_breeds(breeds):
+    """Total catalog entries across a breed list, or None when unknowable."""
+    entry_count = 0
+    entry_count_known = False
+    for breed in breeds or []:
         try:
-            result_count = len(doc.get("results") or [])
-        except TypeError:
-            result_count = 0
-        if result_count >= entry_count:
-            detected_at = doc.get("cached_at") or doc.get("updated_at")
-    if not detected_at:
+            entry_count += int(breed.get("count"))
+            entry_count_known = True
+        except (TypeError, ValueError):
+            continue
+    return entry_count if entry_count_known else None
+
+def _result_doc_entries_complete(doc, entry_count):
+    """True once the doc holds a result row for every catalog entry.
+
+    Absentees mean the row count can legitimately stay below the catalog total,
+    so this only fires when the show has no absentees — an optimistic same-day
+    settle signal for finals-less shows, never the sole settle gate (the show
+    date passing settles them regardless)."""
+    if not isinstance(entry_count, int) or entry_count <= 0:
+        return False
+    try:
+        return len(doc.get("results") or []) >= entry_count
+    except (AttributeError, TypeError):
         return False
 
-    return now >= detected_at + RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
+def _terminal_status(doc, indexed_breeds):
+    """The show's terminal award state, unified across show types.
+
+    Both the live plan and the crawler's confirmation marker read the terminal
+    from here so they never diverge:
+
+    - a show that expects finals is done when `finals.analyze` says the target
+      is met (main BIS + every group's RYP, or BIS-1 for a specialty cluster);
+    - a finals-less show is done on entry completion.
+
+    `signature` is a stable string of the terminal-relevant state; when it stops
+    changing across a pass the terminal is confirmed stable and may settle."""
+    analysis = finals.analyze(doc, indexed_breeds)
+    entry_count = _entry_count_from_breeds(indexed_breeds)
+    entries_complete = _result_doc_entries_complete(doc, entry_count)
+    if analysis["expects_finals"]:
+        target_met = analysis["target_met"]
+        signature = finals.fingerprint_token(analysis)
+    else:
+        target_met = entries_complete
+        try:
+            row_count = len(doc.get("results") or [])
+        except (AttributeError, TypeError):
+            row_count = 0
+        signature = f"entries:{row_count}"
+    return {
+        "analysis": analysis,
+        "expects_finals": analysis["expects_finals"],
+        "entries_complete": entries_complete,
+        "target_met": target_met,
+        "signature": signature,
+    }
+
+def _in_finals_fetch_window(hour, morning_hour, evening_hour, night_stop_hour):
+    """Whether a finals-owed show may be fetched at this Finnish local hour.
+
+    Extends past the normal evening cutoff into a nightly overtime tail so the
+    finals (published ~21:00–23:30) are captured, then hard-stops overnight
+    (night_stop..morning) to stay polite. Fetch allowed 06:00–01:00 by default."""
+    if morning_hour <= hour < evening_hour:
+        return True
+    if hour >= evening_hour:
+        return True
+    return hour < night_stop_hour
+
+def _result_live_plan(
+    show,
+    doc,
+    indexed_breeds,
+    now=None,
+    morning_hour=RESULT_SHOW_MORNING_HOUR,
+    evening_hour=RESULT_SHOW_EVENING_HOUR,
+    night_stop_hour=RESULT_FINALS_NIGHT_STOP_HOUR,
+    deadline_days=RESULT_SETTLE_DEADLINE_DAYS,
+):
+    """The single live/settle decision for a show's whole-show result cache.
+
+    Pure given (show, doc, indexed_breeds, now): both the result-cache TTL path
+    and the show-stats "is this still live?" path derive their answer here, so
+    the two ends never disagree about when a show is finished.
+
+    The terminal is the show's award structure, not a clock:
+
+    - a show that expects finals (multi-group, or finals tokens already present)
+      is not done until its terminal target is captured *and* confirmed stable —
+      every result-bearing group has RYP-1 and the main BIS-1 has landed (a
+      specialty cluster with no group stage settles on BIS-1 alone);
+    - a finals-less show is done on entry completion / its date passing.
+
+    Phases: `live` (normal cadence), `overtime` (final-day evening tail, finals
+    still owed), `rescue` (past date but within the deadline, finals still owed),
+    `settled` / `settled_incomplete` (leave fast-polling). `can_fetch` folds in
+    the Finnish-local fetch window, extended for finals-owed shows.
+    """
+    if now is None:
+        localnow = _local_now()
+    elif isinstance(now, (int, float)):
+        localnow = _local_dt(now)
+    elif isinstance(now, datetime.date) and not isinstance(now, datetime.datetime):
+        localnow = datetime.datetime.combine(now, datetime.time(hour=12))
+    else:
+        localnow = now
+
+    today = localnow.date()
+    hour = localnow.hour
+    start_date, end_date = _parse_show_date_range(show, today=today)
+    availability = _show_result_availability(
+        show, now=localnow, morning_hour=morning_hour, evening_hour=evening_hour
+    )
+    state = availability.get("show_state")
+    morning_hour = availability.get("morning_hour", morning_hour)
+    evening_hour = availability.get("evening_hour", evening_hour)
+
+    status = _terminal_status(doc, indexed_breeds)
+    analysis = status["analysis"]
+    expects_finals = status["expects_finals"]
+    target_met = status["target_met"]
+    # Both finals and finals-less shows require a confirming pass (the crawler's
+    # `_mark_terminal_confirmation`) before settling, so a live show never flips
+    # to "done" the instant its last result row lands.
+    confirmed = bool((doc or {}).get("terminal_confirmed"))
+    settle_by_target = target_met and confirmed
+
+    is_final_day = end_date is None or today >= end_date
+    deadline_date = end_date + datetime.timedelta(days=deadline_days) if end_date else None
+    deadline_passed = bool(deadline_date) and today > deadline_date
+
+    def _plan(phase, ttl, can_fetch):
+        return {
+            "phase": phase,
+            "ttl": ttl,
+            "can_fetch": can_fetch,
+            "show_state": state,
+            "expects_finals": expects_finals,
+            "target_met": target_met,
+            "confirmed": confirmed,
+            "settle_by_target": settle_by_target,
+            "is_final_day": is_final_day,
+            "missing_ryp_groups": sorted(analysis["missing_ryp_groups"]),
+            "has_bis1": analysis["has_bis1"],
+            "analysis": analysis,
+        }
+
+    if state == "upcoming":
+        return _plan("upcoming", None, False)
+
+    if deadline_passed:
+        return _plan("settled" if settle_by_target else "settled_incomplete", None, False)
+
+    if settle_by_target and is_final_day:
+        return _plan("settled", None, False)
+
+    # A finals-less show past its date has nothing left to fetch.
+    if not expects_finals and state == "past":
+        return _plan("settled", None, False)
+
+    in_day = morning_hour <= hour < evening_hour
+
+    if state == "live":
+        if in_day:
+            return _plan("live", RESULT_CACHE_LIVE_TTL, True)
+        # Outside day hours on a live date-range. Only the final day's finals
+        # earn an evening/night overtime tail; earlier days keep the polite
+        # overnight lull between show days.
+        if (
+            is_final_day
+            and expects_finals
+            and not settle_by_target
+            and (hour >= evening_hour or hour < night_stop_hour)
+        ):
+            return _plan("overtime", RESULT_CACHE_OVERTIME_TTL, True)
+        return _plan("live", RESULT_CACHE_LIVE_TTL, False)
+
+    # state == "past", within the deadline, still owing its terminal: rescue.
+    can_fetch = _in_finals_fetch_window(hour, morning_hour, evening_hour, night_stop_hour)
+    return _plan("rescue", RESULT_CACHE_RESCUE_TTL, can_fetch)
 
 def _result_doc_last_result_at(doc):
     """Unix timestamp of the most recent breed that actually produced results.

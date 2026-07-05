@@ -5,13 +5,15 @@ import requests
 from app.api.dog import _show_list_cache, _show_detail_cache, _breed_result_cache, _show_all_results_cache
 from app.api import dog as dog_module
 from app.dog_show import crawler as dog_crawler
+from app.dog_show import finals as dog_finals
 from app.dog_show import indexing as dog_indexing
 from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import showlink as dog_showlink
 from app.dog_show import store as dog_store
 from app.dog_show import db as dog_db
 from app.dog_show.utils import (
-    _is_recent_show, _result_doc_last_result_at, _show_live_phase, _show_result_availability,
+    _is_recent_show, _result_doc_last_result_at, _result_live_plan, _show_live_phase,
+    _show_result_availability,
 )
 
 SAMPLE_SHOW_LIST_HTML = """
@@ -1522,14 +1524,18 @@ def test_live_result_cache_becomes_stale_after_two_minutes(monkeypatch, client):
     assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_doc, now=now) is False
 
 
-def test_live_result_cache_stops_short_ttl_after_bis_grace(monkeypatch, client):
-    now = dog_module.datetime.datetime(2026, 6, 20, 18, 0).timestamp()
+def test_live_result_cache_settles_when_terminal_confirmed(monkeypatch, client):
+    """A live all-breed show keeps polling until its terminal award (every
+    group's RYP-1 + the main BIS-1) is captured AND confirmed stable by a
+    following pass; only then does the cache stop fast-polling."""
+    now = _hel_timestamp(2026, 6, 20, 18)
     seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
-            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
         ],
     })
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
@@ -1537,40 +1543,73 @@ def test_live_result_cache_stops_short_ttl_after_bis_grace(monkeypatch, client):
     base_doc = {
         "status": "complete",
         "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
-        "total_breeds": 1,
-        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
-        "results": [{"name": "BIS Dog", "awards": "SA, ROP, BIS-1"}],
+        "total_breeds": 2,
+        "completed_breeds": {"5:3": {"result_count": 1}, "10:7": {"result_count": 1}},
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1, BIS-1"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+        ],
     }
-    still_settling = dict(
-        base_doc,
-        bis_detected_at=now - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS + 1,
-    )
-    finished = dict(
-        base_doc,
-        bis_detected_at=now - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
-    )
+    # Terminal captured but not yet confirmed stable → keep polling.
+    still_confirming = dict(base_doc)
+    # Confirmed by a following pass → settle.
+    confirmed = dict(base_doc, terminal_target_met=True, terminal_confirmed=True)
 
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, still_settling, now=now) is False
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, finished, now=now) is True
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, still_confirming, now=now) is False
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, confirmed, now=now) is True
 
 
-def test_live_show_stats_stop_after_bis_grace(client):
-    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+def test_live_result_cache_keeps_polling_while_a_group_ryp_missing(monkeypatch, client):
+    """BIS-1 captured but one result-bearing group has no RYP-1 yet — the
+    finals aren't fully published, so the cache must keep polling."""
+    now = _hel_timestamp(2026, 6, 20, 18)
     seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
-            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+        ],
+    })
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+    doc = {
+        "status": "complete",
+        "cached_at": now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        "total_breeds": 2,
+        "completed_breeds": {"5:3": {"result_count": 1}, "10:7": {"result_count": 1}},
+        # group 5 has RYP-1 and BIS-1, group 10 has only ROP — its RYP is pending.
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1, BIS-1"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+        ],
+        "terminal_confirmed": True,  # even a stale confirmation can't settle it
+    }
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, doc, now=now) is False
+
+
+def test_live_show_stats_flip_past_when_terminal_confirmed(client):
+    noon = _hel_timestamp(2026, 6, 20, 12)
+    seed_index_show("13771", {
+        "title": "20.06.2026 Jyväskylä KV",
+        "date": "20.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
         ],
     })
     dog_module._save_result_cache_doc(13771, {
         "status": "complete",
         "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
-        "bis_detected_at": noon - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
-        "total_breeds": 1,
-        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
-        "results": [{"name": "BIS Dog", "awards": "SA, ROP, BIS-1"}],
+        "total_breeds": 2,
+        "completed_breeds": {"5:3": {"result_count": 1}, "10:7": {"result_count": 1}},
+        "results": [
+            {"name": "BIS Dog", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1, BIS-1"},
+            {"name": "Group10", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+        ],
+        "terminal_target_met": True,
+        "terminal_confirmed": True,
     })
 
     stats = dog_module._show_stats_from_index(
@@ -1585,22 +1624,27 @@ def test_live_show_stats_stop_after_bis_grace(client):
     assert "result_count" not in stats
 
 
-def test_live_show_stats_stop_after_entry_completion_grace(client):
-    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+def test_live_show_stats_flip_past_on_confirmed_entry_completion(client):
+    """A finals-less show (single breed, no BIS) settles on entry completion,
+    once the following pass confirms the results stopped changing."""
+    noon = _hel_timestamp(2026, 6, 20, 12)
     seed_index_show("14079", {
         "title": "20.06.2026 Bostoninterrieri",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
-            { "name": "bostoninterrieri", "count": 26, "group": "9", "breed_id": "296", "has_results": True },
+            {"name": "bostoninterrieri", "count": 26, "group": "9", "breed_id": "296", "has_results": True},
         ],
     })
     dog_module._save_result_cache_doc(14079, {
         "status": "complete",
-        "cached_at": noon - dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS - 1,
+        "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
         "total_breeds": 1,
         "completed_breeds": {"9:296": {"name": "bostoninterrieri", "result_count": 26}},
-        "results": [{"name": f"Boston {idx}", "breedName": "bostoninterrieri"} for idx in range(26)],
+        "results": [{"name": f"Boston {idx}", "breedGroup": "9", "breedId": "296",
+                     "breedName": "bostoninterrieri"} for idx in range(26)],
+        "terminal_target_met": True,
+        "terminal_confirmed": True,
     })
 
     stats = dog_module._show_stats_from_index(
@@ -1621,7 +1665,7 @@ def test_live_show_stats_stay_live_until_main_bis(client):
     Show after every breed ring is judged. Entry completion alone (with BIS-1
     still pending) must not flip the stats to "done" — that shut shows like
     Turku KV / Rovaniemi KV down while only BIS JUN/VET had happened."""
-    noon = dog_module.datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    noon = _hel_timestamp(2026, 6, 20, 12)
     seed_index_show("13762", {
         "title": "20.06.2026 Turku KV",
         "date": "20.06.",
@@ -1631,22 +1675,23 @@ def test_live_show_stats_stay_live_until_main_bis(client):
             {"name": "afgaaninvinttikoira", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
         ],
     })
-    grace = dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
     dog_module._save_result_cache_doc(13762, {
         "status": "complete",
-        "cached_at": noon - grace - 1,
-        "live_result_entry_completion_at": noon - grace - 1,
+        "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
         "total_breeds": 2,
         "completed_breeds": {
             "5:3": {"name": "basenji", "result_count": 2},
             "10:7": {"name": "afgaaninvinttikoira", "result_count": 2},
         },
+        # Only junior/veteran BIS so far — the group RYP and main BIS-1 are still
+        # to come, so even a (stale) confirmation flag can't settle it.
         "results": [
             {"name": "Junior", "breedGroup": "10", "breedId": "7", "awards": "SA, JUN ROP, BIS JUN-1"},
             {"name": "Veteran", "breedGroup": "5", "breedId": "3", "awards": "SA, VET ROP, BIS VET-1"},
             {"name": "C", "breedGroup": "5", "breedId": "3", "awards": "SA"},
             {"name": "D", "breedGroup": "10", "breedId": "7", "awards": "EH"},
         ],
+        "terminal_confirmed": True,
     })
 
     stats = dog_module._show_stats_from_index(
@@ -1662,8 +1707,9 @@ def test_live_show_stats_stay_live_until_main_bis(client):
 
 def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
     """All-breed shows decide group finals + Best in Show after every breed ring
-    is judged, so entry completion must not settle the cache before BIS-1."""
-    noon = dog_module.datetime.datetime(2026, 6, 20, 14, 0).timestamp()
+    is judged, so entry completion must not settle the cache before BIS-1 and
+    every group's RYP-1 are captured and confirmed."""
+    noon = _hel_timestamp(2026, 6, 20, 14)
     # Breeds span two FCI groups -> an all-breed show that crowns a main BIS.
     seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
@@ -1676,13 +1722,11 @@ def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
     })
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
-    grace = dog_result_cache.RESULT_CACHE_BIS_FINAL_GRACE_SECONDS
-    # Every breed ring is judged and the entry-completion grace has elapsed, but
-    # the only finals so far are junior/group placements -- no main BIS yet.
+    # Every breed ring is judged, but the only finals so far are junior/group
+    # placements -- no main BIS, and group 10 has no RYP-1 yet.
     no_main_bis = {
         "status": "complete",
         "cached_at": noon - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
-        "live_result_entry_completion_at": noon - grace - 1,
         "total_breeds": 2,
         "completed_breeds": {
             "5:3": {"name": "basenji", "result_count": 2},
@@ -1695,21 +1739,28 @@ def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
             {"name": "D", "breedGroup": "10", "breedId": "7", "awards": "EH"},
         ],
     }
+    # For a multi-day show, the terminal can only be met on the final day.
     with_main_bis = dict(
         no_main_bis,
-        bis_detected_at=noon - grace - 1,
+        cached_at=_hel_timestamp(2026, 6, 21, 14) - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1,
+        terminal_target_met=True,
+        terminal_confirmed=True,
         results=[
             dict(no_main_bis["results"][0]),
             dict(no_main_bis["results"][1], awards="SA, ROP, RYP-1, BIS-1"),
+            {"name": "G10", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
             *no_main_bis["results"][2:],
         ],
     )
 
-    assert dog_result_cache._show_expects_main_bis(13771, no_main_bis) is True
+    assert dog_indexing._show_expects_main_bis(13771, no_main_bis) is True
     # Entry completion alone must not settle an all-breed show without BIS-1.
     assert dog_result_cache._result_cache_doc_is_fresh(13771, no_main_bis, now=noon) is False
-    # Once BIS-1 lands and its grace elapses, the cache settles as before.
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, with_main_bis, now=noon) is True
+    # Once BIS-1 + every group's RYP-1 land and are confirmed on the final day,
+    # the cache settles.
+    assert dog_result_cache._result_cache_doc_is_fresh(
+        13771, with_main_bis, now=_hel_timestamp(2026, 6, 21, 14)
+    ) is True
 
 
 def test_show_finals_detection_ignores_plain_specialty_awards():
@@ -1748,6 +1799,10 @@ def test_show_stats_cache_decouples_polling_from_result_doc_reads(monkeypatch, c
     monkeypatch.setattr(dog_indexing, "_show_result_availability",
                         lambda show, now=None: {"show_state": "live", "can_fetch": True,
                                                 "morning_hour": 6, "evening_hour": 21})
+    # The live/settle decision now runs through _result_live_plan; keep this show
+    # live so the test exercises the stats cache, not the terminal logic.
+    monkeypatch.setattr(dog_indexing, "_result_live_plan",
+                        lambda *a, **k: {"phase": "live", "expects_finals": True})
     calls = {"n": 0}
     real_load = dog_indexing._load_result_cache_doc
     monkeypatch.setattr(dog_indexing, "_load_result_cache_doc",
@@ -1769,23 +1824,40 @@ def test_show_stats_cache_decouples_polling_from_result_doc_reads(monkeypatch, c
     assert calls["n"] == 2
 
 
-def test_finals_resweep_breeds_cycles_captured_breeds_only():
+def test_finals_resweep_targets_missing_ryp_groups_then_bis_finalists():
+    """The re-sweep is structural, not a blind rotation: while a group still
+    lacks RYP-1 it re-checks that group's ROP winners; once every group has
+    RYP-1 but the main BIS is missing, it re-checks exactly the RYP-1 winners
+    (the BIS finalists)."""
     breeds = [
         {"name": "a", "group": "5", "breed_id": "3"},
         {"name": "b", "group": "6", "breed_id": "9"},
-        {"name": "c", "group": "7", "breed_id": "1"},  # not captured -> never swept
+        {"name": "c", "group": "7", "breed_id": "1"},
     ]
-    completed = {"5:3": {}, "6:9": {}}
-    doc = {}
+    completed = {"5:3": {}, "6:9": {}, "7:1": {}}
 
     def keys(selected):
-        return [(b["group"], b["breed_id"]) for b in selected]
+        return sorted((b["group"], b["breed_id"]) for b in selected)
 
-    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("5", "3")]
-    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("6", "9")]
-    # Wraps back to the first captured breed; the uncaptured "c" is never a candidate.
-    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, limit=1)) == [("5", "3")]
-    assert doc["finals_sweep_breed_count"] == 2
+    # Group 5 has its RYP-1; groups 6 and 7 have ROP but no RYP-1 yet.
+    doc = {"results": [
+        {"breedGroup": "5", "breedId": "3", "awards": "ROP, RYP-1"},
+        {"breedGroup": "6", "breedId": "9", "awards": "ROP"},
+        {"breedGroup": "7", "breedId": "1", "awards": "ROP"},
+    ]}
+    analysis = dog_finals.analyze(doc, [dict(b, count=2) for b in breeds])
+    # Only the missing-RYP groups' ROP breeds are candidates (5 already has RYP-1).
+    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc, analysis)) == [("6", "9"), ("7", "1")]
+
+    # Every group now has RYP-1 but the main BIS-1 is still missing → re-check the
+    # RYP-1 winners (the finalists), not every breed.
+    doc2 = {"results": [
+        {"breedGroup": "5", "breedId": "3", "awards": "ROP, RYP-1"},
+        {"breedGroup": "6", "breedId": "9", "awards": "ROP, RYP-1"},
+        {"breedGroup": "7", "breedId": "1", "awards": "ROP, RYP-1"},
+    ]}
+    analysis2 = dog_finals.analyze(doc2, [dict(b, count=2) for b in breeds])
+    assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc2, analysis2)) == [("5", "3"), ("6", "9"), ("7", "1")]
 
 
 def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None):
@@ -1821,6 +1893,12 @@ def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None):
 def _patch_live_refresh(monkeypatch, show_id, detail_breeds, fetcher):
     live = {"show_state": "live", "can_fetch": True, "morning_hour": 6, "evening_hour": 21}
     monkeypatch.setattr(dog_result_cache, "_show_result_availability_for_id", lambda sid, now=None: live)
+    # The crawl's fetch window / finals-hunt gating reads the live plan; force it
+    # live so these fixed-date fixtures behave as an in-progress show.
+    monkeypatch.setattr(dog_result_cache, "_result_live_plan_for_id",
+                        lambda sid, doc=None, now=None: {
+                            "phase": "live", "can_fetch": True,
+                            "ttl": dog_result_cache.RESULT_CACHE_LIVE_TTL})
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda sid: True)
     monkeypatch.setattr(dog_result_cache, "_show_detail_for_result_cache", lambda sid: {
         "id": show_id,
@@ -1898,16 +1976,16 @@ def test_live_refresh_with_all_breeds_captured_skips_fetch_and_row_rewrite(monke
     assert calls["header"] == 1   # only the header/meta was refreshed
 
 
-def test_finals_resweep_recaptures_winner_until_main_bis(monkeypatch, client):
-    """All breeds captured, BIS JUN present but no BIS-1: the refresh re-sweeps the
-    captured breeds (bounded) and the winner's re-fetch lands BIS-1 — without
-    duplicating rows."""
+def test_finals_resweep_recaptures_ryp1_winners_until_main_bis(monkeypatch, client):
+    """All breeds captured with their group RYP-1 but no BIS-1 yet: the refresh
+    re-checks exactly the RYP-1 winners (the BIS finalists) and one of them gains
+    BIS-1 — without duplicating rows."""
     breeds = _seed_live_two_breed_show(
         13902,
         captured=["5:3", "10:7"],
         results=[
-            {"name": "Junior", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, JUN ROP, BIS JUN-1"},
-            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1"},
         ],
     )
     fetched = []
@@ -1915,7 +1993,7 @@ def test_finals_resweep_recaptures_winner_until_main_bis(monkeypatch, client):
     def fake_fetch(sid, breed):
         key = f'{breed["group"]}:{breed["breed_id"]}'
         fetched.append(key)
-        awards = "SA, ROP, RYP-1, BIS-1" if key == "5:3" else "SA, JUN ROP, BIS JUN-1"
+        awards = "SA, ROP, RYP-1, BIS-1" if key == "5:3" else "SA, ROP, RYP-1"
         return {
             "breed": breed,
             "breed_key": key,
@@ -1932,123 +2010,209 @@ def test_finals_resweep_recaptures_winner_until_main_bis(monkeypatch, client):
     summary = dog_module.crawl_result_cache_for_show(13902, source="test", workers=1)
 
     assert summary["status"] == "complete"
-    assert set(fetched) == {"5:3", "10:7"}  # finals re-sweep re-checked the captured breeds
+    assert set(fetched) == {"5:3", "10:7"}  # both RYP-1 winners re-checked for the BIS
     doc = dog_module._load_result_cache_doc(13902)
     # Rows were replaced, not duplicated: still one row per breed.
     assert len(doc["results"]) == 2
     assert dog_result_cache._result_doc_has_main_bis(doc) is True
 
 
-def test_finals_resweep_captures_all_bis_after_bis1_lands(monkeypatch, client):
-    """BIS-1..4 each sit on a different winning breed's row. On a big show the
-    rotating sweep only covers a chunk per pass, so BIS-1 (early in the rotation)
-    lands several passes before BIS-4 (late in the rotation). The sweep must not
-    stop the instant BIS-1 appears, or BIS-4 is stranded — it keeps re-sweeping for
-    one full rotation afterwards. Mirrors Turku KV showing only 3 of 4 BIS."""
+def test_finals_settles_only_after_terminal_confirmed_stable(monkeypatch, client):
+    """After the terminal (all RYP-1 + BIS-1) is captured, the show is not
+    confirmed until a following pass re-checks the finals-carrying breeds and
+    nothing changes. A late BIS-4 landing on the confirm pass resets it; the pass
+    after that confirms."""
     breeds = _seed_live_two_breed_show(
         13903,
         captured=["5:3", "10:7", "6:1", "7:2"],
         results=[
-            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
-            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
-            {"name": "Beagle", "breedName": "beagle", "breedGroup": "6", "breedId": "1", "awards": "SA, ROP"},
-            {"name": "Collie", "breedName": "collie", "breedGroup": "7", "breedId": "2", "awards": "SA, ROP"},
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+            {"name": "Beagle", "breedName": "beagle", "breedGroup": "6", "breedId": "1", "awards": "SA, ROP, RYP-1"},
+            {"name": "Collie", "breedName": "collie", "breedGroup": "7", "breedId": "2", "awards": "SA, ROP, RYP-1"},
         ],
         extra_breeds=[
             {"name": "beagle", "count": 2, "group": "6", "breed_id": "1", "has_results": True},
             {"name": "collie", "count": 2, "group": "7", "breed_id": "2", "has_results": True},
         ],
     )
-    # BIS-1 is on the first breed in the rotation, BIS-4 on the last.
-    finals = {"5:3": "SA, ROP, RYP-1, BIS-1", "7:2": "SA, ROP, RYP-1, BIS-4"}
+    # BIS-1 is on 5:3 from the first pass; BIS-4 lands on 7:2 only from the 2nd
+    # re-fetch of that breed (a late finals placement).
+    fetch_counts = {}
 
     def fake_fetch(sid, breed):
         key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetch_counts[key] = fetch_counts.get(key, 0) + 1
+        awards = "SA, ROP, RYP-1"
+        if key == "5:3":
+            awards = "SA, ROP, RYP-1, BIS-1"
+        elif key == "7:2" and fetch_counts[key] >= 2:
+            awards = "SA, ROP, RYP-1, BIS-4"
         return {
             "breed": breed,
             "breed_key": key,
             "breed_data": {"judge": "Judge", "results": [{}], "awards": []},
             "mapped_results": [{
                 "name": f"Winner-{key}", "breedName": breed["name"],
-                "breedGroup": breed["group"], "breedId": breed["breed_id"],
-                "awards": finals.get(key, "SA, ROP"),
+                "breedGroup": breed["group"], "breedId": breed["breed_id"], "awards": awards,
             }],
             "fetched_at": 2.0,
         }
 
     _patch_live_refresh(monkeypatch, 13903, breeds, fake_fetch)
-    # One breed re-swept per pass, and never treat the just-saved cache as fresh, so
-    # each call advances the rotation by one breed (as it would across live passes).
-    monkeypatch.setattr(dog_result_cache, "RESULT_FINALS_SWEEP_BREED_LIMIT", 1)
     monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
 
-    def awards_present():
+    def tokens():
         doc = dog_module._load_result_cache_doc(13903)
-        return {
-            token.strip().upper()
-            for r in doc["results"]
-            for token in str(r.get("awards") or "").split(",")
-            if token.strip()
-        }
+        return {t.strip().upper() for r in doc["results"]
+                for t in str(r.get("awards") or "").split(",") if t.strip()}
 
-    # Pass 1 lands BIS-1 (first in the rotation); BIS-4 is still un-re-swept.
+    # Pass 1: BIS-1 lands; terminal met but not yet confirmed.
     dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
-    assert "BIS-1" in awards_present()
-    assert "BIS-4" not in awards_present()
+    assert "BIS-1" in tokens()
+    assert dog_module._load_result_cache_doc(13903).get("terminal_confirmed") is False
 
-    # A few more passes complete the post-BIS rotation and reach BIS-4's breed.
-    for _ in range(4):
-        dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
+    # Pass 2: re-checks the finals breeds; the late BIS-4 lands and resets confirmation.
+    dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
+    assert "BIS-4" in tokens()
+    assert dog_module._load_result_cache_doc(13903).get("terminal_confirmed") is False
 
-    tokens = awards_present()
-    assert "BIS-1" in tokens and "BIS-4" in tokens
+    # Pass 3: nothing changes → confirmed stable.
+    dog_module.crawl_result_cache_for_show(13903, source="test", workers=1)
     doc = dog_module._load_result_cache_doc(13903)
+    assert {"BIS-1", "BIS-4"} <= tokens()
+    assert doc.get("terminal_confirmed") is True
     assert len(doc["results"]) == 4  # rows replaced in place, never duplicated
-    # The budgeted post-BIS rotation is spent, so the sweep settles instead of
-    # re-fetching the captured breeds forever.
-    assert doc.get("finals_post_bis_sweep_remaining") == 0
 
 
-def test_past_show_gets_one_final_check_after_day_changes(monkeypatch, client):
-    final_due_at = dog_module.datetime.datetime(2026, 6, 21, 0, 0).timestamp()
-    now = final_due_at + 300
-    show = {
-        "id": 13771,
-        "date": "20.06.",
-        "name": "Jyväskylä KV",
-        "month": "kesäkuu 2026",
-    }
+def test_past_show_owing_finals_is_rescued_until_confirmed(monkeypatch, client):
+    """A show that ended with its finals still unpublished (crawler was down when
+    they landed) stays a fast-poll rescue candidate the day after — until its
+    terminal is captured and confirmed, then it settles."""
+    show = {"id": 13771, "date": "20.06.", "name": "Jyväskylä KV", "month": "kesäkuu 2026"}
     seed_index_show("13771", {
         "title": "20.06.2026 Jyväskylä KV",
         "date": "20.06.",
         "month": "kesäkuu 2026",
         "breeds": [
-            { "name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True },
+            {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+            {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
         ],
     })
     monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: [show])
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
-    stale_before_midnight = {
+    now = _hel_timestamp(2026, 6, 21, 10)  # day after the show, within the deadline
+    # Both groups have RYP-1 but the main BIS-1 never landed — finals still owed.
+    owing = {
         "status": "complete",
-        "cached_at": final_due_at - 60,
-        "total_breeds": 1,
-        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
-        "results": [{"name": "Old Dog", "breedName": "basenji"}],
+        "cached_at": now - 100000,
+        "total_breeds": 2,
+        "completed_breeds": {"5:3": {"result_count": 1}, "10:7": {"result_count": 1}},
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+        ],
     }
-    refreshed_after_midnight = dict(stale_before_midnight, cached_at=final_due_at + 60)
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, owing, now=now) is False
+    dog_module._save_result_cache_doc(13771, owing)
+    assert [c["show_id"] for c in dog_result_cache._auto_result_cache_candidates(now)] == [13771]
 
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_before_midnight, now=now) is False
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, refreshed_after_midnight, now=now) is True
-
-    dog_module._save_result_cache_doc(13771, stale_before_midnight)
-    assert [candidate["show_id"] for candidate in dog_result_cache._auto_result_cache_candidates(now)] == [13771]
-
-    dog_module._save_result_cache_doc(13771, refreshed_after_midnight)
+    # Terminal captured and confirmed → the cache settles and drops out of rescue.
+    confirmed = dict(
+        owing,
+        results=[
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1, BIS-1"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1"},
+        ],
+        terminal_target_met=True,
+        terminal_confirmed=True,
+    )
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, confirmed, now=now) is True
+    dog_module._save_result_cache_doc(13771, confirmed)
     assert dog_result_cache._auto_result_cache_candidates(now) == []
 
-    two_days_later = dog_module.datetime.datetime(2026, 6, 22, 0, 5).timestamp()
-    assert dog_result_cache._result_cache_doc_is_fresh(13771, stale_before_midnight, now=two_days_later) is True
+    # Past the settle deadline, an unconfirmed show stops being rescued (it settles
+    # incomplete — the finals were never published at the source).
+    past_deadline = _hel_timestamp(2026, 6, 23, 10)
+    assert dog_result_cache._result_cache_doc_is_fresh(13771, owing, now=past_deadline) is True
+
+
+def _all_breed_breeds():
+    """Ten one-breed FCI groups → an all-breed show that crowns a main BIS."""
+    return [{"group": str(g), "breed_id": str(g), "count": 2, "has_results": True}
+            for g in range(1, 11)]
+
+
+def _live_plan_doc(*, ryp1_groups=(), bis1=False, **extra):
+    rows = []
+    for g in range(1, 11):
+        awards = "SA, ROP"
+        if g in ryp1_groups:
+            awards += ", RYP-1"
+        if bis1 and g == 1:
+            awards += ", BIS-1"
+        rows.append({"breedGroup": str(g), "breedId": str(g), "awards": awards})
+    return {"status": "complete", "results": rows, **extra}
+
+
+def test_live_plan_final_day_evening_owing_finals_goes_overtime():
+    """The Oulu KV failure: an all-breed final day where only one group's RYP has
+    landed by 21:00. Instead of going quiet at the evening cutoff, the show enters
+    finals overtime and keeps fetching so the rest of the finals are captured."""
+    show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
+    doc = _live_plan_doc(ryp1_groups=(9,))  # only group 9 has RYP-1, no BIS-1
+    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 4, 22))
+    assert plan["phase"] == "overtime"
+    assert plan["can_fetch"] is True
+    assert plan["expects_finals"] is True
+    assert plan["target_met"] is False
+
+
+def test_live_plan_specialty_cluster_settles_on_bis_without_ryp():
+    """A multi-group specialty cluster crowns BIS-1 with no group stage at all
+    (15 such shows in the historical data). It must settle on BIS-1 and never wait
+    for RYP that will never come."""
+    show = {"id": 13093, "date": "14.09.", "month": "syyskuu 2026"}
+    doc = _live_plan_doc(bis1=True, terminal_target_met=True, terminal_confirmed=True)  # BIS-1, zero RYP
+    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 9, 14, 20))
+    assert plan["expects_finals"] is True
+    assert plan["target_met"] is True
+    assert plan["phase"] == "settled"
+
+
+def test_live_plan_non_final_night_stays_quiet_no_overtime():
+    """A multi-day show's first-night lull is not overtime — the finals overtime
+    tail is only for the final day, so earlier nights keep the polite 21:00–06:00
+    quiet window."""
+    show = {"id": 13500, "date": "04.-05.07.", "month": "heinäkuu 2026"}
+    doc = _live_plan_doc(ryp1_groups=(9,))
+    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 4, 22))
+    assert plan["phase"] == "live"
+    assert plan["is_final_day"] is False
+    assert plan["can_fetch"] is False
+
+
+def test_live_plan_rescue_hard_stops_overnight():
+    """Post-show rescue keeps fetching the owed finals during the day, but hard
+    stops between 01:00 and the morning hour."""
+    show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
+    doc = _live_plan_doc(ryp1_groups=(9,))
+    breeds = _all_breed_breeds()
+    day = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 7, 5, 10))
+    night = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 7, 5, 3))
+    assert day["phase"] == "rescue" and day["can_fetch"] is True
+    assert night["phase"] == "rescue" and night["can_fetch"] is False
+
+
+def test_live_plan_settles_incomplete_past_deadline():
+    """Past the 2-day deadline an owed-but-never-published finals settles as
+    settled_incomplete (the source itself is sometimes incomplete)."""
+    show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
+    doc = _live_plan_doc(ryp1_groups=(9,))
+    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 7, 10))
+    assert plan["phase"] == "settled_incomplete"
+    assert plan["can_fetch"] is False
 
 
 def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch, client):

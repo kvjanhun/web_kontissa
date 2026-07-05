@@ -17,6 +17,7 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 | ORM models for dog.db | `models.py` |
 | JSON-shape ↔ row conversion (single source of truth) | `sqlstore.py` |
 | Persistence facade, in-memory `_show_index` mirror, result jobs | `store.py` |
+| Award-structure terminal detection (is a live show finished?) | `finals.py` |
 | Indexed show stats, judge enrichment, show-detail cache helpers | `indexing.py` |
 | Show-list cache refresh | `shows.py` |
 | Breed-index crawler passes | `crawler.py` |

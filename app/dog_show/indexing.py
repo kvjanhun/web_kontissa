@@ -3,6 +3,7 @@ import time
 
 import structlog
 
+from . import finals
 from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS, SHOW_STATS_CACHE_TTL
 from .store import (
     _indexed_show, _load_index, _load_result_cache_doc, _mark_index_dirty, _save_index,
@@ -12,8 +13,7 @@ from .showlink import _source_url
 from .utils import (
     _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
     _parse_show_date, _result_doc_has_main_bis, _result_doc_has_show_finals,
-    _result_doc_last_result_at, _result_doc_live_bis_grace_finished,
-    _result_doc_live_entry_completion_grace_finished, _show_age_days,
+    _result_doc_last_result_at, _result_live_plan, _show_age_days,
     _show_date_state, _show_live_phase, _show_result_availability, _utc_iso,
 )
 
@@ -113,23 +113,14 @@ def _show_item_for_stats(show_id, show=None):
     return _show_list_item_for_id(show_id)
 
 def _show_expects_main_bis(show_id, doc=None):
-    """Whether the show is expected to crown a main Best in Show.
+    """Whether the show is expected to crown show-wide finals (RYP/BIS).
 
-    True for all-breed shows (indexed breeds spanning multiple FCI groups) or
-    any cache that already records show-wide finals (group/junior/veteran BIS).
-    Used to keep the show live through the finals instead of settling the
-    moment every breed ring has finished."""
-    if _result_doc_has_show_finals(doc):
-        return True
+    True for all-breed shows (indexed breeds spanning multiple FCI groups) or any
+    cache that already records show-wide finals tokens. Thin wrapper over
+    `finals.analyze` so the show-type inference lives in one place; kept as a
+    named helper for the crawler/tests."""
     indexed = _indexed_show(show_id) or {}
-    groups = set()
-    for breed in indexed.get("breeds") or []:
-        group = str(breed.get("group") or "").strip()
-        if group.isdigit():
-            groups.add(group)
-            if len(groups) >= 2:
-                return True
-    return False
+    return finals.analyze(doc, indexed.get("breeds") or [])["expects_finals"]
 
 def _compute_show_stats_from_index(show_id, show=None, today=None):
     indexed_show = _show_index.get("shows", {}).get(str(show_id))
@@ -157,27 +148,18 @@ def _compute_show_stats_from_index(show_id, show=None, today=None):
     result_doc = None
     if show_state == "live":
         result_doc = _load_result_cache_doc(show_id)
-        stats_timestamp = _stats_timestamp_for_today(today)
-        if _result_doc_live_bis_grace_finished(result_doc, stats_timestamp):
-            live_finished_by = "bis"
-        elif _result_doc_live_entry_completion_grace_finished(
-            result_doc,
-            stats_timestamp,
-            entry_count=entry_count if entry_count_known else None,
-        ):
-            # Every breed ring is judged, but all-breed shows crown the group
-            # finals and main Best in Show afterwards. Mirror the result-cache
-            # TTL guard: a show still expecting a main BIS (BIS-1 not yet
-            # recorded) stays live rather than settling on breed completion
-            # alone — otherwise the badge reads "done" while only BIS JUN/VET
-            # have happened and the main ring is still to come.
-            awaiting_main_bis = (
-                _show_expects_main_bis(show_id, result_doc)
-                and not _result_doc_has_main_bis(result_doc)
+        # Same terminal decision the result-cache TTL uses, so the "still live?"
+        # badge and the crawler never disagree. A live show flips to "past" once
+        # its terminal award is captured and confirmed stable (main BIS + every
+        # group's RYP, or entry completion for a finals-less show) — never on
+        # breed completion alone while the finals are still to come.
+        plan = _result_live_plan(
+            show_item, result_doc, breeds, now=_stats_timestamp_for_today(today)
+        )
+        if plan["phase"] in ("settled", "settled_incomplete"):
+            live_finished_by = "incomplete" if plan["phase"] == "settled_incomplete" else (
+                "bis" if plan["expects_finals"] else "entries"
             )
-            if not awaiting_main_bis:
-                live_finished_by = "entries"
-        if live_finished_by:
             show_state = "past"
     result_breeds_for_cache = _result_breeds_for_cache(
         show_id,
