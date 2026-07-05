@@ -2910,6 +2910,139 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     assert dog_module._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
 
 
+# --- Cross-show dog-name / owner search (Phase E workstream 2) ---
+
+def _search_result_row(number, name, group="5", breed="3", comp=""):
+    return {
+        "number": number, "name": name, "reg_url": "", "grade": "ERI",
+        "placement": number, "competitive_placement": comp, "awards": "", "critique": "",
+        "gender": "uros", "class_name": "AVO", "breedName": f"breed-{breed}",
+        "breedGroup": group, "breedId": breed,
+        "breedObj": {"name": f"breed-{breed}", "group": group, "breed_id": breed, "judge": "J"},
+    }
+
+
+def _seed_search_doc(show_id, results, completed_breeds=None):
+    """Persist a complete result doc (DogResult rows + optional DogBreedAward rows)
+    into dog.db, plus an index entry so the show is in the searchable set."""
+    from app.dog_show import sqlstore
+    seed_index_show(str(show_id), {
+        "title": f"14.06.2026 Show {show_id}",
+        "breeds": [{"name": "breed-3", "count": len(results), "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    doc = {
+        "version": 1, "status": "complete", "source": "t", "title": f"14.06.2026 Show {show_id}",
+        "source_url": "u", "total_breeds": 1, "started_at": 1.0, "updated_at": 9.0,
+        "cached_at": 9.0, "last_error": None,
+        "completed_breeds": completed_breeds or {}, "failed_breeds": {},
+        "results": results,
+    }
+    with dog_db.session_scope() as session:
+        sqlstore.write_result_doc(session, int(show_id), doc)
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_finds_dog_by_name(mock_get, client):
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(14042, [
+        _search_result_row(1, "Aamun Tähti", comp="PU1"),
+        _search_result_row(2, "Iltatähti"),
+    ])
+
+    resp = client.get("/api/dog/search?q=tähti")
+    assert resp.status_code == 200
+    dog_results = [r for r in resp.get_json()["results"] if r["match"] == "dog"]
+    assert len(dog_results) == 1
+    assert dog_results[0]["show"]["id"] == 14042
+    assert dog_results[0]["breed"] is None
+    assert dog_results[0]["dog_match_count"] == 2  # both names contain "tähti"
+    assert "tähti" in dog_results[0]["dog"].lower()
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_dog_name_unicode_case(mock_get, client):
+    """A fully-uppercase stored name with ä must be found by a lowercase query —
+    SQLite LIKE is only ASCII case-insensitive, so the helper ORs cased variants."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(14043, [_search_result_row(1, "AAMUN TÄHTI")])
+
+    resp = client.get("/api/dog/search?q=tähti")
+    assert resp.status_code == 200
+    dog_shows = {r["show"]["id"] for r in resp.get_json()["results"] if r["match"] == "dog"}
+    assert 14043 in dog_shows
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_finds_owner_from_breed_awards(mock_get, client):
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(
+        14044,
+        [_search_result_row(1, "Some Winner Dog")],
+        completed_breeds={"5:3": {"name": "breed-3", "result_count": 1, "judge": "J", "awards": [
+            {"type": "ROP", "name": "Some Winner Dog", "owner": "Virtanen Sirja", "text": "Some Winner Dog, Om. Virtanen Sirja"},
+        ]}},
+    )
+
+    resp = client.get("/api/dog/search?q=virtanen")
+    assert resp.status_code == 200
+    owner_results = [r for r in resp.get_json()["results"] if r["match"] == "owner"]
+    assert len(owner_results) == 1
+    assert owner_results[0]["show"]["id"] == 14044
+    assert "virtanen" in owner_results[0]["owner"].lower()
+    assert owner_results[0]["owner_match_count"] == 1
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_dog_matches_bounded(mock_get, client):
+    """Dog-name matches are capped at SEARCH_ENTITY_SHOW_LIMIT shows so a common
+    substring can't return the whole database."""
+    from app.dog_show import search as dog_search
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    for i in range(dog_search.SEARCH_ENTITY_SHOW_LIMIT + 5):
+        _seed_search_doc(15000 + i, [_search_result_row(1, "Tähti Dog")])
+
+    resp = client.get("/api/dog/search?q=tähti")
+    assert resp.status_code == 200
+    dog_results = [r for r in resp.get_json()["results"] if r["match"] == "dog"]
+    assert len(dog_results) == dog_search.SEARCH_ENTITY_SHOW_LIMIT
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_short_query_skips_dog_scan(mock_get, client):
+    """Under 3 chars only the show/breed/judge index search runs; the SQL dog/owner
+    scan is skipped so a 2-char query stays cheap."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(14045, [_search_result_row(1, "Tähti Dog")])
+
+    resp = client.get("/api/dog/search?q=tä")
+    assert resp.status_code == 200
+    assert not [r for r in resp.get_json()["results"] if r["match"] in ("dog", "owner")]
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_dog_name_escapes_like_wildcards(mock_get, client):
+    """A literal '%' in the query must not act as a LIKE wildcard."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(14046, [
+        _search_result_row(1, "Sata 100% Varma"),
+        _search_result_row(2, "Tuhat 1000 Tahti"),
+    ])
+
+    resp = client.get("/api/dog/search?q=100%25")  # "100%" URL-encoded
+    assert resp.status_code == 200
+    dog_results = [r for r in resp.get_json()["results"] if r["match"] == "dog" and r["show"]["id"] == 14046]
+    assert len(dog_results) == 1
+    # Only "Sata 100% Varma" matches literally; "1000" is not a wildcard hit.
+    assert dog_results[0]["dog_match_count"] == 1
+    assert "100%" in dog_results[0]["dog"]
+
+
 def test_parse_show_meta_from_title():
     from app.dog_show.indexing import _parse_show_meta_from_title
     # Single date

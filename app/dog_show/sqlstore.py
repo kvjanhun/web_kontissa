@@ -8,7 +8,7 @@ byte-for-byte faithful to what the rest of the package and `/api/dog/*` expect.
 
 import json
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, or_, select
 
 from .models import (
     DogBreed, DogBreedAward, DogMeta, DogResult, DogResultCache, DogResultJob, DogShow,
@@ -366,6 +366,78 @@ def pre_phase_c_result_cache_show_ids(session):
         .distinct()
     )
     return {row[0] for row in session.execute(stmt).all()}
+
+
+# ---------------------------------------------------------------------------
+# Cross-show entity search (dog names, owners) over the captured result rows
+# ---------------------------------------------------------------------------
+# SQLite LIKE is only ASCII case-insensitive, so a name stored as "Tähti" is not
+# matched by "TÄHTI" and vice versa for the å/ä/ö range. We OR together the raw,
+# Unicode-upper, and Unicode-lower forms of the query so either stored casing is
+# found without a normalized column / migration. `%`/`_`/`\` in the query are
+# escaped so a literal "100%" search can't turn into a wildcard.
+
+def _like_patterns(query, min_length=3):
+    """Escaped `%q%` LIKE patterns (raw + upper + lower) or [] if too short."""
+    q = str(query or "").strip()
+    if len(q) < min_length:
+        return []
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    seen = []
+    for variant in (escaped, escaped.upper(), escaped.lower()):
+        if variant not in seen:
+            seen.append(variant)
+    return [f"%{variant}%" for variant in seen]
+
+
+def search_dog_results_by_name(session, query, limit=20, min_length=3):
+    """Shows that ran a dog whose name matches `query`, grouped by show.
+
+    Returns `[{show_id, name, count}]` — one row per show, with a representative
+    matching dog name and how many result rows in that show matched. Newest shows
+    first, bounded by `limit`. Parameterized LIKE only (see `_like_patterns`)."""
+    patterns = _like_patterns(query, min_length)
+    if not patterns:
+        return []
+    condition = or_(*[DogResult.name.like(pattern, escape="\\") for pattern in patterns])
+    rows = session.execute(
+        select(
+            DogResult.show_id,
+            func.min(DogResult.name).label("name"),
+            func.count().label("count"),
+        )
+        .where(condition)
+        .group_by(DogResult.show_id)
+        .order_by(DogResult.show_id.desc())
+        .limit(limit)
+    ).all()
+    return [{"show_id": row[0], "name": row[1], "count": row[2]} for row in rows]
+
+
+def search_breed_award_owners(session, query, limit=20, min_length=3):
+    """Shows where an award-winning dog's owner matches `query`, grouped by show.
+
+    Returns `[{show_id, owner, count}]` — a representative matching owner and the
+    number of honor-roll placements owned by a match in that show. Owners come
+    from the `dog_breed_award` honor roll (`Om.` field), so this surfaces the
+    people/kennels behind the ROP/VSP/SERT winners, which no other column carries.
+    Newest shows first, bounded by `limit`."""
+    patterns = _like_patterns(query, min_length)
+    if not patterns:
+        return []
+    condition = or_(*[DogBreedAward.owner.like(pattern, escape="\\") for pattern in patterns])
+    rows = session.execute(
+        select(
+            DogBreedAward.show_id,
+            func.min(DogBreedAward.owner).label("owner"),
+            func.count().label("count"),
+        )
+        .where(condition)
+        .group_by(DogBreedAward.show_id)
+        .order_by(DogBreedAward.show_id.desc())
+        .limit(limit)
+    ).all()
+    return [{"show_id": row[0], "owner": row[1], "count": row[2]} for row in rows]
 
 
 # ---------------------------------------------------------------------------

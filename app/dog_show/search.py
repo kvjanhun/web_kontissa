@@ -6,10 +6,19 @@ from .indexing import (
     _update_index_breed_judges,
 )
 from .shows import _get_show_list
-from .store import _index_summary, _load_index, _show_index, _show_list_cache
+from .store import (
+    _index_summary, _load_index, _search_breed_award_owners,
+    _search_dog_results_by_name, _show_index, _show_list_cache,
+)
 from .utils import _clean_breed_data, _clean_judge_name
 
 logger = structlog.get_logger(__name__)
+
+# Dog-name / owner search scans the whole result history in SQL, so it only kicks
+# in for queries of at least this length (the show/breed/judge index search keeps
+# its 2-char minimum) and is bounded to this many shows per entity type.
+SEARCH_ENTITY_MIN_LENGTH = 3
+SEARCH_ENTITY_SHOW_LIMIT = 20
 
 def _search_query_variants(query):
     variants = []
@@ -118,8 +127,43 @@ def search_shows_data(query):
                 "match": "show",
             })
 
+    _append_entity_matches(results, searchable_shows, query)
+
     return {
         "query": query,
         "results": results,
         "index": _index_summary(total_show_count=len(searchable_shows)),
     }
+
+
+def _append_entity_matches(results, searchable_shows, query):
+    """Append cross-show dog-name and owner matches after the show/breed/judge
+    results, so those keep ranking first. Each hit is one result per show carrying
+    a `match` type ("dog"/"owner") and a representative name + count. Skips shows
+    not present in the searchable set (defensive — every captured show is indexed)."""
+    if len(str(query or "").strip()) < SEARCH_ENTITY_MIN_LENGTH:
+        return
+
+    for hit in _search_dog_results_by_name(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
+        show = searchable_shows.get(str(hit["show_id"]))
+        if not show:
+            continue
+        results.append({
+            "show": show,
+            "breed": None,
+            "match": "dog",
+            "dog": hit["name"],
+            "dog_match_count": hit["count"],
+        })
+
+    for hit in _search_breed_award_owners(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
+        show = searchable_shows.get(str(hit["show_id"]))
+        if not show:
+            continue
+        results.append({
+            "show": show,
+            "breed": None,
+            "match": "owner",
+            "owner": hit["owner"],
+            "owner_match_count": hit["count"],
+        })

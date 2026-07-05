@@ -178,6 +178,28 @@ def _complete_result_cache_show_ids():
         return set()
 
 
+def _search_dog_results_by_name(query, limit=20):
+    """Cross-show dog-name search: [{show_id, name, count}] newest-first (see
+    sqlstore.search_dog_results_by_name). Read-only; returns [] on any failure."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_dog_results_by_name(session, query, limit=limit)
+    except Exception:
+        logger.exception("dog_search_dog_names_failed")
+        return []
+
+
+def _search_breed_award_owners(query, limit=20):
+    """Cross-show owner search over the honor roll: [{show_id, owner, count}]
+    newest-first (see sqlstore.search_breed_award_owners). Read-only; [] on error."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_breed_award_owners(session, query, limit=limit)
+    except Exception:
+        logger.exception("dog_search_owners_failed")
+        return []
+
+
 # ---------------------------------------------------------------------------
 # Result jobs  (dog_result_job)
 # ---------------------------------------------------------------------------

@@ -41,7 +41,7 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 | GET | `/api/dog/shows/<id>` | Public | Dog show breed list |
 | GET | `/api/dog/shows/<id>/results?group=&breed=` | Public | Breed results |
 | GET | `/api/dog/shows/<id>/all-results` | Public | Whole-show dog results from persisted cache; queues cache warming when missing |
-| GET | `/api/dog/search?q=` | Public | Search shows and indexed breed names |
+| GET | `/api/dog/search?q=` | Public | Search shows, breeds, judges (index), plus dog names & owners across all captured shows (SQL, `q≥3`) |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
 ## Models
