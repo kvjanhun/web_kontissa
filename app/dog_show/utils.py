@@ -8,9 +8,8 @@ from .config import (
     RESULT_CACHE_RESCUE_TTL, RESULT_FINALS_NIGHT_STOP_HOUR, RESULT_LOCAL_TIMEZONE,
     RESULT_PAUSE_EVENING_HOUR, RESULT_PAUSE_STALL_SECONDS,
     RESULT_SETTLE_DEADLINE_DAYS, RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
+    SHOW_RECENT_FUTURE_DAYS, SHOW_RECENT_PAST_DAYS,
 )
-
-RELATIVE_RECENT_LABELS = {"tänään", "huomenna", "today", "tomorrow"}
 
 try:
     _LOCAL_TZ = ZoneInfo(RESULT_LOCAL_TIMEZONE)
@@ -43,29 +42,25 @@ def _local_dt(now=None):
         return datetime.datetime.fromtimestamp(now)
     return datetime.datetime.fromtimestamp(now, _LOCAL_TZ).replace(tzinfo=None)
 
-def _is_recent_show(month_str):
-    """Check if the show month is the current or previous month."""
-    if not month_str:
-        return True  # Default to recent if unknown
-
-    try:
-        m_lower = month_str.lower().strip()
-        if m_lower in RELATIVE_RECENT_LABELS:
+def _show_is_recent(show, today=None):
+    """Whether the show's date range sits inside the "recent" window — the shows
+    whose data still changes: entry counts and result flags of upcoming shows,
+    and the results of just-run ones. Gates the crawler's re-index candidates and
+    the stale-flag re-probes. Unknown dates count as recent (fail open, like the
+    old month-label heuristic this replaced)."""
+    today = today or _local_now().date()
+    start_date, end_date = _parse_show_date_range(show, today=today)
+    if not start_date or not end_date:
+        # No parseable day range; a month label alone still bounds the show.
+        month, year = _month_year_from_label((show or {}).get("month", ""))
+        if not month or not year:
             return True
-
-        now = datetime.datetime.now()
-        cur_year = now.year
-        cur_month = now.month
-
-        prev_month = cur_month - 1 if cur_month > 1 else 12
-        prev_year = cur_year if cur_month > 1 else cur_year - 1
-
-        cur_str = f"{FINNISH_MONTHS[cur_month - 1]} {cur_year}".lower()
-        prev_str = f"{FINNISH_MONTHS[prev_month - 1]} {prev_year}".lower()
-
-        return m_lower == cur_str or m_lower == prev_str
-    except Exception:
-        return True
+        start_date = datetime.date(year, month, 1)
+        end_date = (start_date + datetime.timedelta(days=32)).replace(day=1) - datetime.timedelta(days=1)
+    return (
+        end_date >= today - datetime.timedelta(days=SHOW_RECENT_PAST_DAYS)
+        and start_date <= today + datetime.timedelta(days=SHOW_RECENT_FUTURE_DAYS)
+    )
 
 def _utc_iso(ts):
     if not ts:

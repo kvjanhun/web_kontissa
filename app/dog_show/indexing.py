@@ -6,15 +6,15 @@ import structlog
 
 from .config import SHOW_DETAIL_TTL, FINNISH_MONTHS, SHOW_STATS_CACHE_TTL
 from .store import (
-    _indexed_show, _load_index, _load_result_cache_doc, _mark_index_dirty, _save_index,
-    _show_detail_cache, _show_index, _show_list_cache,
+    _indexed_show, _indexed_show_meta, _indexed_shows, _load_result_cache_doc,
+    _show_list_cache, _write_index_show,
 )
 from .showlink import _source_url
 from .utils import (
-    _clean_breed_data, _clean_breed_list, _clean_judge_name, _is_recent_show,
+    _clean_breed_data, _clean_breed_list, _clean_judge_name,
     _parse_show_date,
     _result_doc_last_result_at, _result_live_plan, _show_age_days,
-    _show_date_state, _show_live_phase, _show_result_availability, _utc_iso,
+    _show_date_state, _show_is_recent, _show_live_phase, _show_result_availability, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -27,13 +27,13 @@ def _show_list_item_for_id(show_id):
     return None
 
 def _indexed_show_as_list_item(show_id):
-    indexed_show = _indexed_show(show_id)
-    if not indexed_show:
+    meta = _indexed_show_meta(show_id)
+    if not meta:
         return None
     return {
         "id": int(show_id),
-        "date": indexed_show.get("date", ""),
-        "month": indexed_show.get("month", ""),
+        "date": meta.get("date", ""),
+        "month": meta.get("month", ""),
     }
 
 def _show_date_for_id(show_id):
@@ -99,11 +99,10 @@ def _result_count_from_cache_doc(show_id, entry_count=None, today=None, doc=None
         return min(count, entry_count)
     return count
 
-def _show_item_for_stats(show_id, show=None):
+def _show_item_for_stats(show_id, show=None, indexed_show=None):
     if show:
         return show
 
-    indexed_show = _show_index.get("shows", {}).get(str(show_id))
     if indexed_show:
         return {
             "id": int(show_id),
@@ -112,8 +111,7 @@ def _show_item_for_stats(show_id, show=None):
         }
     return _show_list_item_for_id(show_id)
 
-def _compute_show_stats_from_index(show_id, show=None, today=None):
-    indexed_show = _show_index.get("shows", {}).get(str(show_id))
+def _compute_show_stats(show_id, indexed_show, show=None, today=None):
     if not indexed_show:
         return None
 
@@ -132,7 +130,7 @@ def _compute_show_stats_from_index(show_id, show=None, today=None):
         except (TypeError, ValueError):
             continue
 
-    show_item = _show_item_for_stats(show_id, show=show)
+    show_item = _show_item_for_stats(show_id, show=show, indexed_show=indexed_show)
     show_state = _show_date_state(show_item, today=today)
     live_finished_by = None
     result_doc = None
@@ -167,7 +165,7 @@ def _compute_show_stats_from_index(show_id, show=None, today=None):
         elif (str(breed.get("group")), str(breed.get("breed_id"))) in result_breed_keys:
             result_breed_count += 1
 
-    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    updated = indexed_show.get("updated_at") or 0
     availability = _show_result_availability(
         show_item,
         now=_stats_now_for_today(today) if today else None,
@@ -219,50 +217,69 @@ def _compute_show_stats_from_index(show_id, show=None, today=None):
 # an explicit `today` is passed (tests), and cleared per-test in the suite.
 _show_stats_cache = {}
 
-def _show_stats_from_index(show_id, show=None, today=None):
+def _show_stats_from_index(show_id, show=None, today=None, indexed_show=None):
     if today is not None:
-        return _compute_show_stats_from_index(show_id, show=show, today=today)
+        return _compute_show_stats(
+            show_id, indexed_show or _indexed_show(show_id), show=show, today=today,
+        )
 
     try:
         key = int(show_id)
     except (TypeError, ValueError):
-        return _compute_show_stats_from_index(show_id, show=show, today=today)
+        return None
 
     now = time.time()
     cached = _show_stats_cache.get(key)
     if cached and (now - cached["ts"]) < SHOW_STATS_CACHE_TTL:
         return cached["stats"]
 
-    stats = _compute_show_stats_from_index(show_id, show=show, today=today)
+    stats = _compute_show_stats(
+        show_id, indexed_show if indexed_show is not None else _indexed_show(show_id), show=show,
+    )
     _show_stats_cache[key] = {"stats": stats, "ts": now}
     return stats
 
 def _shows_with_cached_stats(shows):
+    # Bulk-load the index entries the stats cache doesn't already cover, so a
+    # 15s list poll costs two queries instead of one per show.
+    now = time.time()
+    uncached_ids = [
+        show.get("id") for show in shows
+        if not (
+            (cached := _show_stats_cache.get(show.get("id")))
+            and (now - cached["ts"]) < SHOW_STATS_CACHE_TTL
+        )
+    ]
+    indexed = _indexed_shows(uncached_ids) if uncached_ids else {}
+
     enriched = []
     for show in shows:
         item = dict(show)
-        stats = _show_stats_from_index(show.get("id"), show=show)
+        stats = _show_stats_from_index(
+            show.get("id"), show=show,
+            indexed_show=indexed.get(str(show.get("id"))),
+        )
         if stats:
             item["stats"] = stats
         enriched.append(item)
     return enriched
 
-def _show_from_index_for_search(show_id, indexed_show):
+def _show_from_index_for_search(show_id, indexed_meta, indexed_show=None):
     try:
         sid = int(show_id)
     except (TypeError, ValueError):
         return None
 
-    title = indexed_show.get("title", "")
+    title = indexed_meta.get("title", "")
     show = {
         "id": sid,
-        "date": indexed_show.get("date", ""),
-        "name": indexed_show.get("name") or title,
+        "date": indexed_meta.get("date", ""),
+        "name": indexed_meta.get("name") or title,
         "title": title,
-        "month": indexed_show.get("month", ""),
-        "source_url": indexed_show.get("source_url") or _source_url(sid),
+        "month": indexed_meta.get("month", ""),
+        "source_url": indexed_meta.get("source_url") or _source_url(sid),
     }
-    stats = _show_stats_from_index(sid, show=show)
+    stats = _show_stats_from_index(sid, show=show, indexed_show=indexed_show)
     if stats:
         show["stats"] = stats
     return show
@@ -274,143 +291,6 @@ def _breed_identity_from_result(result):
     if not group or not breed_id:
         return None
     return str(group), str(breed_id)
-
-def _cached_result_breed_map(show_id):
-    doc = _load_result_cache_doc(show_id)
-    if not doc:
-        return {}
-
-    breeds = {}
-    for key, breed_data in (doc.get("completed_breeds") or {}).items():
-        if not isinstance(breed_data, dict) or ":" not in key:
-            continue
-        group, breed_id = key.split(":", 1)
-        breed = _clean_breed_data({
-            "name": breed_data.get("name", ""),
-            "group": group,
-            "breed_id": breed_id,
-            "has_results": True,
-            "judge": breed_data.get("judge", ""),
-        })
-        if breed.get("judge"):
-            breeds[(group, breed_id)] = breed
-
-    for result in doc.get("results") or []:
-        key = _breed_identity_from_result(result)
-        if not key:
-            continue
-        breed = _clean_breed_data(result.get("breedObj") or {})
-        if breed.get("judge"):
-            breed.setdefault("group", key[0])
-            breed.setdefault("breed_id", key[1])
-            breed.setdefault("has_results", True)
-            breeds[key] = breed
-
-    return breeds
-
-def _update_index_breed_judge(show_id, group, breed_id, judge):
-    judge = _clean_judge_name(judge)
-    if not judge:
-        return False
-
-    _load_index()
-    show_data = _show_index.get("shows", {}).get(str(int(show_id)))
-    if not show_data:
-        return False
-
-    for breed in show_data.get("breeds", []) or []:
-        if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
-            current = breed.get("judge")
-            if _clean_judge_name(current) == judge:
-                if current != judge:
-                    breed["judge"] = judge
-                    _mark_index_dirty(show_id)
-                    return True
-                return False
-            breed["judge"] = judge
-            _mark_index_dirty(show_id)
-            return True
-    return False
-
-def _update_index_breed_result_flag(show_id, group, breed_id):
-    _load_index()
-    show_data = _show_index.get("shows", {}).get(str(int(show_id)))
-    if not show_data:
-        return False
-
-    for breed in show_data.get("breeds", []) or []:
-        if str(breed.get("group")) == str(group) and str(breed.get("breed_id")) == str(breed_id):
-            if breed.get("has_results") is True:
-                return False
-            breed["has_results"] = True
-            _mark_index_dirty(show_id)
-            return True
-    return False
-
-def _update_index_breed_judges(show_id, breed_map):
-    updated = False
-    for (group, breed_id), breed in breed_map.items():
-        if _update_index_breed_judge(show_id, group, breed_id, breed.get("judge")):
-            updated = True
-    if updated:
-        _save_index()
-    return updated
-
-def _merge_breed_map_judges_into_breeds(breeds, breed_map):
-    if not breed_map:
-        return False
-
-    updated = False
-    for breed in breeds or []:
-        group = breed.get("group")
-        breed_id = breed.get("breed_id")
-        if not group or not breed_id:
-            continue
-
-        cached_breed = breed_map.get((str(group), str(breed_id)))
-        judge = _clean_judge_name(cached_breed.get("judge") if cached_breed else "")
-        if not judge or _clean_judge_name(breed.get("judge")) == judge:
-            continue
-
-        breed["judge"] = judge
-        updated = True
-
-    return updated
-
-def _index_judge_breed_map(show_id):
-    indexed_show = _indexed_show(show_id)
-    if not indexed_show:
-        return {}
-
-    breed_map = {}
-    for breed in indexed_show.get("breeds", []) or []:
-        judge = _clean_judge_name(breed.get("judge"))
-        group = breed.get("group")
-        breed_id = breed.get("breed_id")
-        if judge and group and breed_id:
-            breed_map[(str(group), str(breed_id))] = {"judge": judge}
-    return breed_map
-
-def _enrich_breeds_with_index_judges(show_id, breeds):
-    try:
-        return _merge_breed_map_judges_into_breeds(
-            breeds,
-            _index_judge_breed_map(show_id),
-        )
-    except Exception as e:
-        logger.warning("dog_detail_index_judge_enrich_failed", show_id=show_id, error=str(e))
-        return False
-
-def _enrich_breeds_with_cached_result_judges(show_id, breeds):
-    try:
-        breed_map = _cached_result_breed_map(show_id)
-        updated = _merge_breed_map_judges_into_breeds(breeds, breed_map)
-        if updated:
-            _update_index_breed_judges(show_id, breed_map)
-        return updated
-    except Exception as e:
-        logger.warning("dog_detail_cached_judge_enrich_failed", show_id=show_id, error=str(e))
-        return False
 
 def _cached_result_breed_state(show_id):
     doc = _load_result_cache_doc(show_id)
@@ -443,8 +323,11 @@ def _cached_result_breed_state(show_id):
     return state
 
 def _merge_persisted_result_state_into_breeds(show_id, breeds):
+    """Fold already-captured judges and result flags into a freshly-parsed breed
+    list before it replaces the show's index rows — a detail page never carries
+    judges, so a re-index without this merge would wipe them."""
     state = {}
-    existing = _show_index.get("shows", {}).get(str(int(show_id))) or {}
+    existing = _indexed_show(show_id) or {}
     for breed in existing.get("breeds", []) or []:
         group = breed.get("group")
         breed_id = breed.get("breed_id")
@@ -487,19 +370,19 @@ def _parse_show_meta_from_title(title):
     if not match:
         # Matches single date like 21.06.2026
         match = re.match(r"^(\d{1,2}\.(\d{1,2})\.(\d{4}))\s+(.+)$", title.strip())
-        
+
     if match:
         full_date_str, month_str, year_str, name = match.groups()
         date_part = full_date_str.replace(f".{year_str}", "")
         if not date_part.endswith("."):
             date_part += "."
-            
+
         month_idx = int(month_str) - 1
         if 0 <= month_idx < 12:
             month = f"{FINNISH_MONTHS[month_idx]} {year_str}"
         else:
             month = ""
-            
+
         return {
             "name": name.strip(),
             "date": date_part,
@@ -512,13 +395,11 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
     if not breeds:
         return
 
-    _load_index()
-    sid = str(int(show_id))
-    existing = _show_index.get("shows", {}).get(sid) or {}
+    existing = _indexed_show_meta(show_id) or {}
     list_item = _show_list_item_for_id(show_id) or {}
     meta = _parse_show_meta_from_title(detail.get("title", ""))
 
-    _show_index.setdefault("shows", {})[sid] = _index_entry_from_detail(
+    entry = _index_entry_from_detail(
         show_id,
         {
             "name": list_item.get("name") or existing.get("name") or meta.get("name") or detail.get("title", ""),
@@ -531,9 +412,7 @@ def _persist_show_detail_to_index(show_id, detail, updated_at):
         },
         updated_at,
     )
-    _show_index["last_updated"] = updated_at
-    _mark_index_dirty(sid)
-    _save_index()
+    _write_index_show(show_id, entry)
 
 def _index_entry_from_detail(show_id, show, detail, updated_at):
     entry = {
@@ -611,55 +490,23 @@ def _indexed_result_flags_need_refresh(show_id, indexed_show=None, now=None):
     if not _is_show_recent_by_id(show_id):
         return False
 
-    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    updated = indexed_show.get("updated_at") or 0
     if updated and (time.time() - updated) < SHOW_DETAIL_TTL:
         return False
 
     availability = _show_result_availability_for_id(show_id, now=now)
     return availability.get("can_fetch", True)
 
-def _show_month_for_id(show_id):
-    _load_index()
-
-    sid = str(show_id)
-    indexed_show = _show_index.get("shows", {}).get(sid)
-    if indexed_show:
-        return indexed_show.get("month", "")
-
-    list_item = _show_list_item_for_id(show_id)
-    if list_item:
-        return list_item.get("month", "")
-
-    return ""
-
 def _is_show_recent_by_id(show_id):
-    return _is_recent_show(_show_month_for_id(show_id))
-
-def _cached_show_detail(show_id, allow_stale=False):
-    cached = _show_detail_cache.get(show_id)
-    if not cached:
-        return None
-
-    if "data" not in cached:
-        return cached if allow_stale else None
-
-    if allow_stale:
-        return cached["data"]
-
-    age = time.time() - cached["ts"]
-    if not _is_show_recent_by_id(show_id) or age < SHOW_DETAIL_TTL:
-        return cached["data"]
-
-    return None
+    return _show_is_recent(_show_list_item_for_id(show_id) or _indexed_show_as_list_item(show_id))
 
 def _show_detail_from_index(show_id):
     indexed_show = _indexed_show(show_id)
     if not indexed_show or not indexed_show.get("breeds"):
         return None
 
-    updated_at = indexed_show.get("updated_at") or _show_index.get("last_updated") or time.time()
+    updated_at = indexed_show.get("updated_at") or time.time()
     breeds = _mark_single_probe_breed_result_available(show_id, indexed_show.get("breeds", []))
-    _enrich_breeds_with_cached_result_judges(show_id, breeds)
     return {
         "id": int(show_id),
         "title": indexed_show.get("title") or indexed_show.get("name", ""),

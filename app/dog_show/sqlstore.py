@@ -1,14 +1,14 @@
-"""Conversion between the legacy JSON shapes and the dog.db ORM rows.
+"""Conversion between the dict shapes the package speaks and the dog.db ORM rows.
 
-This is the single source of truth for how `_show_index`, whole-show result
-docs, and the result-job queue map onto SQL. The migration script and (after the
-store rewrite) `store.py` both go through these helpers, so the round-trip stays
-byte-for-byte faithful to what the rest of the package and `/api/dog/*` expect.
+This is the single source of truth for how show/breed index entries, whole-show
+result docs, and the result-job queue map onto SQL, plus the indexed queries the
+read paths (show detail, stats, search) run directly against dog.db. Everything
+goes through `store.py`, which wraps these helpers in sessions and error handling.
 """
 
 import json
 
-from sqlalchemy import delete, func, or_, select
+from sqlalchemy import delete, exists, func, or_, select, update
 
 from .models import (
     DogBreed, DogBreedAward, DogMeta, DogResult, DogResultCache, DogResultJob, DogShow,
@@ -68,15 +68,6 @@ def write_show(session, show_id, show):
         ))
 
 
-def write_index(session, index):
-    """Replace the entire index (used by the one-off migration)."""
-    session.execute(delete(DogBreed))
-    session.execute(delete(DogShow))
-    for sid, show in (index.get("shows") or {}).items():
-        write_show(session, sid, show)
-    set_meta(session, "last_updated", index.get("last_updated") or 0)
-
-
 def _breed_to_dict(row):
     breed = {
         "name": row.name or "",
@@ -107,36 +98,141 @@ def _show_to_dict(show_row, breed_rows):
     return entry
 
 
-def read_index(session):
-    """Rebuild the `{"shows": {...}, "last_updated": ts}` index dict.
+def _show_meta_dict(show_row):
+    """A show's index entry without its breed list (the cheap metadata read)."""
+    entry = {
+        "title": show_row.title or "",
+        "name": show_row.name or "",
+        "date": show_row.date or "",
+        "month": show_row.month or "",
+        "source_url": show_row.source_url or "",
+        "updated_at": show_row.updated_at or 0,
+        "updated_at_iso": show_row.updated_at_iso,
+    }
+    if show_row.empty_breed_list_confirmed:
+        entry["empty_breed_list_confirmed"] = True
+    return entry
 
-    Uses Core column selects (lightweight Row objects, accessed by name exactly
-    like the ORM entities) rather than full ORM instances — at ~47k breed rows
-    the ORM hydration cost dominates, and this keeps the full reload close to the
-    old whole-file JSON parse it replaces.
-    """
+
+# Column select for breed reads: lightweight Row objects, accessed by name
+# exactly like the ORM entities. Bulk reads touch tens of thousands of breed
+# rows, where ORM instance hydration costs ~10x the raw fetch.
+_BREED_COLUMNS = (
+    DogBreed.show_id, DogBreed.name, DogBreed.entry_count, DogBreed.fci_group,
+    DogBreed.breed_id, DogBreed.has_results, DogBreed.source_url, DogBreed.judge,
+)
+
+
+def _show_breed_rows(session, show_ids):
+    """Breed rows for a set of shows, grouped by show id, in breed-list order."""
+    if not show_ids:
+        return {}
     breeds_by_show = {}
-    breed_cols = session.execute(
-        select(
-            DogBreed.show_id, DogBreed.name, DogBreed.entry_count, DogBreed.fci_group,
-            DogBreed.breed_id, DogBreed.has_results, DogBreed.source_url, DogBreed.judge,
-        ).order_by(DogBreed.show_id, DogBreed.position)
+    rows = session.execute(
+        select(*_BREED_COLUMNS)
+        .where(DogBreed.show_id.in_(show_ids))
+        .order_by(DogBreed.show_id, DogBreed.position)
     )
-    for row in breed_cols:
+    for row in rows:
         breeds_by_show.setdefault(row.show_id, []).append(row)
+    return breeds_by_show
 
+
+def read_show(session, show_id):
+    """One show's full index entry (metadata + breeds) or None."""
+    show_row = session.get(DogShow, int(show_id))
+    if show_row is None:
+        return None
+    return _show_to_dict(show_row, _show_breed_rows(session, [show_row.id]).get(show_row.id, []))
+
+
+def read_show_meta(session, show_id):
+    """One show's index metadata (no breeds) or None."""
+    show_row = session.get(DogShow, int(show_id))
+    if show_row is None:
+        return None
+    return _show_meta_dict(show_row)
+
+
+def read_shows(session, show_ids):
+    """Full index entries for a set of shows: {str(show_id): entry}. Two queries
+    regardless of the number of ids — the bulk read behind list-page stats."""
+    ids = []
+    for sid in show_ids or []:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
+    breeds_by_show = _show_breed_rows(session, ids)
     shows = {}
-    show_cols = session.execute(
-        select(
-            DogShow.id, DogShow.title, DogShow.name, DogShow.date, DogShow.month,
-            DogShow.source_url, DogShow.updated_at, DogShow.updated_at_iso,
-            DogShow.empty_breed_list_confirmed,
-        )
-    )
-    for show_row in show_cols:
+    for show_row in session.execute(select(DogShow).where(DogShow.id.in_(ids))).scalars():
         shows[str(show_row.id)] = _show_to_dict(show_row, breeds_by_show.get(show_row.id, []))
+    return shows
 
-    return {"shows": shows, "last_updated": get_meta_number(session, "last_updated", 0)}
+
+def count_shows(session):
+    return session.execute(select(func.count()).select_from(DogShow)).scalar_one()
+
+
+def index_states(session):
+    """Per-show index state for crawler candidate selection:
+    {str(show_id): {"breed_count": int, "empty_breed_list_confirmed": bool}}."""
+    rows = session.execute(
+        select(
+            DogShow.id,
+            DogShow.empty_breed_list_confirmed,
+            func.count(DogBreed.id).label("breed_count"),
+        )
+        .outerjoin(DogBreed, DogBreed.show_id == DogShow.id)
+        .group_by(DogShow.id)
+    )
+    return {
+        str(row.id): {
+            "breed_count": row.breed_count,
+            "empty_breed_list_confirmed": bool(row.empty_breed_list_confirmed),
+        }
+        for row in rows
+    }
+
+
+def set_breed_judge(session, show_id, fci_group, breed_id, judge, only_missing=False):
+    """Store the (cleaned) judge on a breed's index row. Returns rows changed;
+    no-op when the cleaned judge is empty or already stored. `only_missing`
+    restricts to breeds without a judge (the sweep must not overwrite newer
+    crawler-written values)."""
+    judge = _clean_judge_name(judge)
+    if not judge:
+        return 0
+    stmt = (
+        update(DogBreed)
+        .where(
+            DogBreed.show_id == int(show_id),
+            DogBreed.fci_group == str(fci_group),
+            DogBreed.breed_id == str(breed_id),
+        )
+        .values(judge=judge)
+    )
+    if only_missing:
+        stmt = stmt.where(or_(DogBreed.judge.is_(None), DogBreed.judge == ""))
+    else:
+        stmt = stmt.where(or_(DogBreed.judge.is_(None), DogBreed.judge != judge))
+    return session.execute(stmt).rowcount
+
+
+def set_breed_has_results(session, show_id, fci_group, breed_id):
+    """Flag a breed's index row as having results. Returns rows changed."""
+    return session.execute(
+        update(DogBreed)
+        .where(
+            DogBreed.show_id == int(show_id),
+            DogBreed.fci_group == str(fci_group),
+            DogBreed.breed_id == str(breed_id),
+            DogBreed.has_results.is_(False),
+        )
+        .values(has_results=True)
+    ).rowcount
 
 
 # ---------------------------------------------------------------------------
@@ -419,6 +515,157 @@ def search_breed_award_owners(session, query, limit=20, min_length=3):
 
 
 # ---------------------------------------------------------------------------
+# Show / breed / judge index search
+# ---------------------------------------------------------------------------
+# The /api/dog/search index scan, in SQL. `variants` are the raw query forms
+# (the query itself plus its judge-label-stripped form); each is expanded into
+# escaped raw/upper/lower LIKE patterns like the dog/owner search above. These
+# are infix matches, so they scan the breed table — measured at a few ms for
+# 50k rows, ~200ms for the broadest breed-name queries, on a rate-limited
+# endpoint. No index helps a %substring% LIKE; revisit with FTS5 if it grows.
+
+def _variant_like_patterns(variants, min_length=1):
+    patterns = []
+    for variant in variants or []:
+        for pattern in _like_patterns(variant, min_length=min_length):
+            if pattern not in patterns:
+                patterns.append(pattern)
+    return patterns
+
+
+def _like_any(column, patterns):
+    return or_(*[column.like(pattern, escape="\\") for pattern in patterns])
+
+
+def search_breeds_by_name(session, variants):
+    """Breeds whose name matches: [(show_id, breed_dict)], breed-list order."""
+    patterns = _variant_like_patterns(variants)
+    if not patterns:
+        return []
+    rows = session.execute(
+        select(*_BREED_COLUMNS)
+        .where(_like_any(DogBreed.name, patterns))
+        .order_by(DogBreed.show_id, DogBreed.position)
+    )
+    return [(row.show_id, _breed_to_dict(row)) for row in rows]
+
+
+def search_breeds_by_judge(session, variants):
+    """Breeds whose judge matches and whose name does not: [(show_id, breed_dict)].
+
+    The name exclusion mirrors the per-breed precedence in search assembly — a
+    breed-name match outranks and swallows a judge match on the same breed."""
+    patterns = _variant_like_patterns(variants)
+    if not patterns:
+        return []
+    rows = session.execute(
+        select(*_BREED_COLUMNS)
+        .where(
+            _like_any(DogBreed.judge, patterns),
+            ~_like_any(DogBreed.name, patterns),
+        )
+        .order_by(DogBreed.show_id, DogBreed.position)
+    )
+    return [(row.show_id, _breed_to_dict(row)) for row in rows]
+
+
+def search_show_ids(session, variants):
+    """Ids of shows whose combined name/title/date/month text matches."""
+    patterns = _variant_like_patterns(variants)
+    if not patterns:
+        return []
+    show_text = (
+        func.coalesce(DogShow.name, "") + " " + func.coalesce(DogShow.title, "")
+        + " " + func.coalesce(DogShow.date, "") + " " + func.coalesce(DogShow.month, "")
+    )
+    rows = session.execute(select(DogShow.id).where(_like_any(show_text, patterns)))
+    return [row[0] for row in rows]
+
+
+def indexed_show_ids(session, show_ids):
+    """Which of the given ids exist in the show index (as a set of ints)."""
+    ids = []
+    for sid in show_ids or []:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return set()
+    return {row[0] for row in session.execute(select(DogShow.id).where(DogShow.id.in_(ids)))}
+
+
+# ---------------------------------------------------------------------------
+# One-off sweeps (scripts/dog_sweep_breed_judges.py)
+# ---------------------------------------------------------------------------
+# Fold result-capture state into the breed index wherever older code paths left
+# gaps (judges and result flags used to be healed lazily during GETs; the read
+# paths are now read-only, so the historical gaps are closed once by sweeping).
+
+def _result_breed_correlation():
+    return (
+        (DogResult.show_id == DogBreed.show_id)
+        & (DogResult.fci_group == DogBreed.fci_group)
+        & (DogResult.breed_id == DogBreed.breed_id)
+    )
+
+
+def sweep_breed_judges_from_results(session):
+    """Copy the judge from captured result rows onto index breeds missing one.
+    Returns the number of breed rows updated."""
+    judge_present = _result_breed_correlation() & DogResult.breed_judge.is_not(None) & (DogResult.breed_judge != "")
+    judge_subq = (
+        select(DogResult.breed_judge)
+        .where(judge_present)
+        .order_by(DogResult.seq.desc())
+        .limit(1)
+        .scalar_subquery()
+    )
+    return session.execute(
+        update(DogBreed)
+        .where(or_(DogBreed.judge.is_(None), DogBreed.judge == ""))
+        .where(exists(select(DogResult.id).where(judge_present)))
+        .values(judge=judge_subq)
+    ).rowcount
+
+
+def sweep_breed_judges_from_cache_meta(session):
+    """Copy judges recorded only in completed_breeds cache meta (a zero-result
+    breed has a judged page but no result rows) onto index breeds missing one.
+    Returns the number of breed rows updated."""
+    updated = 0
+    for cache_row in session.execute(select(DogResultCache.show_id, DogResultCache.meta)):
+        if not cache_row.meta:
+            continue
+        try:
+            meta = json.loads(cache_row.meta)
+        except (ValueError, TypeError):
+            continue
+        for key, breed_data in (meta.get("completed_breeds") or {}).items():
+            if not isinstance(breed_data, dict) or ":" not in str(key):
+                continue
+            judge = breed_data.get("judge")
+            if not judge:
+                continue
+            group, _, bid = str(key).partition(":")
+            updated += set_breed_judge(
+                session, cache_row.show_id, group, bid, judge, only_missing=True,
+            )
+    return updated
+
+
+def sweep_breed_result_flags(session):
+    """Flag index breeds that have captured result rows but has_results=False.
+    Returns the number of breed rows updated."""
+    return session.execute(
+        update(DogBreed)
+        .where(DogBreed.has_results.is_(False))
+        .where(exists(select(DogResult.id).where(_result_breed_correlation())))
+        .values(has_results=True)
+    ).rowcount
+
+
+# ---------------------------------------------------------------------------
 # Result jobs  (<-> dog_result_jobs.json)
 # ---------------------------------------------------------------------------
 
@@ -473,21 +720,3 @@ def get_meta_number(session, key, default=0):
         return json.loads(row.value)
     except (ValueError, TypeError):
         return default
-
-
-# ---------------------------------------------------------------------------
-# Index generation counter
-# ---------------------------------------------------------------------------
-# A monotonic integer bumped on every index write. Each process records the
-# generation it last loaded into its in-memory mirror; when the stored value
-# advances (because this process or the crawler wrote), the mirror reloads. This
-# replaces the file-mtime check the JSON store used for cross-process freshness.
-
-def get_index_generation(session):
-    return int(get_meta_number(session, "index_generation", 0))
-
-
-def bump_index_generation(session):
-    new_value = get_index_generation(session) + 1
-    set_meta(session, "index_generation", new_value)
-    return new_value

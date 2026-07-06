@@ -51,7 +51,7 @@ from app.dog_show.parsers import _parse_show_detail  # noqa: E402
 from app.dog_show.result_cache import crawl_result_cache_for_show  # noqa: E402
 from app.dog_show.showlink import _fetch_page, _source_url  # noqa: E402
 from app.dog_show.store import (  # noqa: E402
-    _complete_result_cache_show_ids, _indexed_show, _load_index, _load_result_cache_doc,
+    _complete_result_cache_show_ids, _indexed_show, _load_result_cache_doc,
 )
 
 logger = structlog.get_logger(__name__)
@@ -116,7 +116,6 @@ def main():
     args = parser.parse_args()
 
     dog_db.init_db()
-    _load_index()  # so _indexed_show / _show_date_for_id resolve
 
     if args.shows:
         ordered = _ordered_oldest_first(args.shows)

@@ -1,16 +1,15 @@
 import requests
 import structlog
 
-from .indexing import (
-    _cached_result_breed_map, _show_from_index_for_search, _shows_with_cached_stats,
-    _update_index_breed_judges,
-)
+from .indexing import _show_from_index_for_search, _show_stats_from_index
 from .shows import _get_show_list
 from .store import (
-    _index_summary, _load_index, _search_breed_award_owners,
-    _search_dog_results_by_name, _show_index, _show_list_cache,
+    _index_summary, _indexed_ids_among, _indexed_show, _indexed_shows,
+    _search_breed_award_owners, _search_dog_results_by_name,
+    _search_index_breeds, _search_index_judges, _search_index_show_ids,
+    _show_list_cache,
 )
-from .utils import _clean_breed_data, _clean_judge_name
+from .utils import _clean_judge_name
 
 logger = structlog.get_logger(__name__)
 
@@ -32,11 +31,25 @@ def _text_matches_query_variants(text, variants):
     haystack = str(text or "").lower()
     return any(query in haystack for query in variants)
 
+def _list_show_text(show):
+    return " ".join([
+        show.get("name", ""),
+        show.get("title", ""),
+        show.get("date", ""),
+        show.get("month", ""),
+    ])
+
 
 def search_shows_data(query):
-    query_variants = _search_query_variants(query)
+    """Assemble /api/dog/search results from SQL index scans.
 
-    _load_index()
+    The index queries (breed name, judge, show text) run against dog.db; this
+    function only groups the matches by show and ranks them: per show a breed
+    match outranks a judge match outranks a show-text match, and shows from the
+    current Showlink list come first (in list order), then indexed-only shows
+    newest-first. Cross-show dog/owner matches are appended last.
+    """
+    query_variants = _search_query_variants(query)
 
     try:
         shows = _get_show_list()
@@ -44,72 +57,73 @@ def search_shows_data(query):
         logger.warning("showlink_fetch_failed", endpoint="search", exc_info=True)
         shows = _show_list_cache["data"] or []
 
-    enriched_shows = _shows_with_cached_stats(shows)
-    searchable_shows = {str(show["id"]): show for show in enriched_shows}
-    for sid, indexed_show in _show_index.get("shows", {}).items():
-        if sid in searchable_shows:
-            continue
-        show = _show_from_index_for_search(sid, indexed_show)
-        if show:
-            searchable_shows[sid] = show
+    list_shows_by_id = {str(show["id"]): show for show in shows}
+
+    breed_matches = {}
+    for show_id, breed in _search_index_breeds(query_variants):
+        breed_matches.setdefault(str(show_id), []).append(breed)
+
+    judge_matches = {}
+    for show_id, breed in _search_index_judges(query_variants):
+        judge_matches.setdefault(str(show_id), []).append(breed)
+
+    show_matches = {str(show_id) for show_id in _search_index_show_ids(query_variants)}
+    # The live list can carry shows (or list-only wording) not indexed yet.
+    show_matches.update(
+        sid for sid, show in list_shows_by_id.items()
+        if _text_matches_query_variants(_list_show_text(show), query_variants)
+    )
+
+    matched_ids = set(breed_matches) | set(judge_matches) | show_matches
+    ordered_ids = [sid for sid in list_shows_by_id if sid in matched_ids]
+    ordered_ids += sorted(
+        (sid for sid in matched_ids if sid not in list_shows_by_id),
+        key=lambda sid: int(sid),
+        reverse=True,
+    )
+
+    # A broad breed query can match hundreds of shows; load their index entries
+    # in one bulk read instead of one query per matched show.
+    matched_index_entries = _indexed_shows(sorted(matched_ids)) if matched_ids else {}
+
+    show_payloads = {}
+
+    def _show_payload(sid):
+        if sid in show_payloads:
+            return show_payloads[sid]
+        indexed_entry = matched_index_entries.get(sid)
+        if indexed_entry is None and sid not in matched_ids:
+            indexed_entry = _indexed_show(sid)
+        list_show = list_shows_by_id.get(sid)
+        if list_show:
+            payload = dict(list_show)
+            stats = _show_stats_from_index(sid, show=list_show, indexed_show=indexed_entry)
+            if stats:
+                payload["stats"] = stats
+        else:
+            payload = (
+                _show_from_index_for_search(sid, indexed_entry, indexed_show=indexed_entry)
+                if indexed_entry else None
+            )
+        show_payloads[sid] = payload
+        return payload
 
     results = []
+    for sid in ordered_ids:
+        show = _show_payload(sid)
+        if not show:
+            continue
 
-    for sid, show in searchable_shows.items():
-        sid = str(show["id"])
-        show_text = " ".join([
-            show.get("name", ""),
-            show.get("title", ""),
-            show.get("date", ""),
-            show.get("month", ""),
-        ]).lower()
-        show_matches = any(q in show_text for q in query_variants)
-
-        indexed_show = _show_index["shows"].get(sid)
-        breed_matches = []
-        judge_matches = []
-        seen_breed_keys = set()
-        indexed_breeds = {}
-        if indexed_show:
-            for breed_data in indexed_show.get("breeds", []):
-                cleaned_breed = _clean_breed_data(breed_data)
-                key = (str(cleaned_breed.get("group")), str(cleaned_breed.get("breed_id")))
-                indexed_breeds[key] = cleaned_breed
-                breed_name = cleaned_breed.get("name", "")
-                judge_name = cleaned_breed.get("judge", "")
-                if _text_matches_query_variants(breed_name, query_variants):
-                    breed_matches.append(cleaned_breed)
-                    seen_breed_keys.add(key)
-                elif _text_matches_query_variants(judge_name, query_variants):
-                    judge_matches.append(cleaned_breed)
-                    seen_breed_keys.add(key)
-
-        if not breed_matches:
-            cached_breed_map = _cached_result_breed_map(sid)
-            cached_judge_matches = []
-            for key, cached_breed in cached_breed_map.items():
-                merged_breed = dict(indexed_breeds.get(key) or {})
-                merged_breed.update({k: v for k, v in cached_breed.items() if v not in ("", None)})
-                if (
-                    key not in seen_breed_keys
-                    and _text_matches_query_variants(merged_breed.get("judge", ""), query_variants)
-                ):
-                    cached_judge_matches.append(merged_breed)
-                    seen_breed_keys.add(key)
-            if cached_judge_matches:
-                judge_matches.extend(cached_judge_matches)
-                _update_index_breed_judges(sid, cached_breed_map)
-
-        if breed_matches:
-            for breed_data in breed_matches:
+        if sid in breed_matches:
+            for breed_data in breed_matches[sid]:
                 results.append({
                     "show": show,
                     "breed": breed_data,
                     "match": "breed",
                 })
-        elif judge_matches:
+        elif sid in judge_matches:
             judges = []
-            for breed_data in judge_matches:
+            for breed_data in judge_matches[sid]:
                 judge = _clean_judge_name(breed_data.get("judge"))
                 if judge and judge not in judges:
                     judges.append(judge)
@@ -118,34 +132,40 @@ def search_shows_data(query):
                 "breed": None,
                 "match": "judge",
                 "judge": ", ".join(judges),
-                "judge_match_count": len(judge_matches),
+                "judge_match_count": len(judge_matches[sid]),
             })
-        elif show_matches:
+        else:
             results.append({
                 "show": show,
                 "breed": None,
                 "match": "show",
             })
 
-    _append_entity_matches(results, searchable_shows, query)
+    _append_entity_matches(results, _show_payload, query)
+
+    list_only_count = len(set(list_shows_by_id) - {
+        str(sid) for sid in _indexed_ids_among(list(list_shows_by_id))
+    })
+    summary = _index_summary()
+    summary["total_show_count"] = summary["indexed_show_count"] + list_only_count
 
     return {
         "query": query,
         "results": results,
-        "index": _index_summary(total_show_count=len(searchable_shows)),
+        "index": summary,
     }
 
 
-def _append_entity_matches(results, searchable_shows, query):
+def _append_entity_matches(results, show_payload, query):
     """Append cross-show dog-name and owner matches after the show/breed/judge
     results, so those keep ranking first. Each hit is one result per show carrying
     a `match` type ("dog"/"owner") and a representative name + count. Skips shows
-    not present in the searchable set (defensive — every captured show is indexed)."""
+    without a resolvable payload (defensive — every captured show is indexed)."""
     if len(str(query or "").strip()) < SEARCH_ENTITY_MIN_LENGTH:
         return
 
     for hit in _search_dog_results_by_name(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
-        show = searchable_shows.get(str(hit["show_id"]))
+        show = show_payload(str(hit["show_id"]))
         if not show:
             continue
         results.append({
@@ -157,7 +177,7 @@ def _append_entity_matches(results, searchable_shows, query):
         })
 
     for hit in _search_breed_award_owners(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
-        show = searchable_shows.get(str(hit["show_id"]))
+        show = show_payload(str(hit["show_id"]))
         if not show:
             continue
         results.append({

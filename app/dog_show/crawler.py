@@ -2,14 +2,12 @@ import time
 
 import structlog
 
-from .indexing import _index_entry_from_detail
+from .indexing import _index_entry_from_detail, _merge_persisted_result_state_into_breeds
 from .parsers import _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
-from .store import (
-    _index_summary, _load_index, _mark_index_dirty, _save_index, _show_detail_cache, _show_index,
-)
-from .utils import _is_recent_show
+from .store import _index_states, _index_summary, _write_index_show
+from .utils import _show_is_recent
 
 logger = structlog.get_logger(__name__)
 
@@ -19,11 +17,11 @@ def _update_index_show(show):
     detail = _parse_show_detail(soup, sid)
     show_updated = time.time()
 
-    _show_index["shows"][str(sid)] = _index_entry_from_detail(sid, show, detail, show_updated)
-    _show_index["last_updated"] = show_updated
-    _mark_index_dirty(sid)
-    _save_index()
-    _show_detail_cache.pop(sid, None)
+    # Detail pages carry no judges, so a re-index must fold the already-captured
+    # judges and result flags back in before the wholesale row replacement.
+    merged_breeds = _merge_persisted_result_state_into_breeds(sid, detail.get("breeds") or [])
+    entry = _index_entry_from_detail(sid, show, {**detail, "breeds": merged_breeds}, show_updated)
+    _write_index_show(sid, entry)
 
     logger.info("dog_crawler_indexed_show", show_id=sid, breed_count=len(detail["breeds"]))
     return detail
@@ -58,23 +56,22 @@ def crawl_index_once(limit=None, delay=1.5):
 
     This is intentionally called by a standalone process, not by Flask workers.
     """
-    _load_index()
     shows_list = _get_show_list()
     if not shows_list:
         logger.info("dog_crawler_index_pass_complete", total=0, updated=0, failed=0, skipped=0)
         return {"total": 0, "updated": 0, "skipped": 0}
 
+    index_states = _index_states()
     missing = []
     empty_indexed = []
     recent = []
     for show in shows_list:
-        sid = str(show["id"])
-        indexed_show = _show_index["shows"].get(sid)
-        if not indexed_show:
+        state = index_states.get(str(show["id"]))
+        if not state:
             missing.append(show)
-        elif not indexed_show.get("breeds") and not indexed_show.get("empty_breed_list_confirmed"):
+        elif not state["breed_count"] and not state["empty_breed_list_confirmed"]:
             empty_indexed.append(show)
-        elif _is_recent_show(show.get("month")):
+        elif _show_is_recent(show):
             recent.append(show)
 
     to_update = empty_indexed + missing + recent
@@ -100,7 +97,6 @@ def crawl_index_once(limit=None, delay=1.5):
 
 def crawl_empty_index_once(limit=20, delay=0.5):
     """Repair stale empty breed indexes created by older parser versions."""
-    _load_index()
     shows_list = _get_show_list()
     if not shows_list:
         logger.info(
@@ -113,10 +109,11 @@ def crawl_empty_index_once(limit=20, delay=0.5):
         )
         return {"total": 0, "updated": 0, "failed": 0, "skipped": 0, "empty_candidates": 0}
 
+    index_states = _index_states()
     candidates = []
     for show in shows_list:
-        indexed_show = _show_index["shows"].get(str(show["id"]))
-        if indexed_show and not indexed_show.get("breeds") and not indexed_show.get("empty_breed_list_confirmed"):
+        state = index_states.get(str(show["id"]))
+        if state and not state["breed_count"] and not state["empty_breed_list_confirmed"]:
             candidates.append(show)
 
     to_update = candidates

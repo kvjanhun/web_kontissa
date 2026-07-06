@@ -13,114 +13,149 @@ INDEX_DIR = config.INDEX_DIR
 RESULT_JOB_STALE_SECONDS = config.RESULT_JOB_STALE_SECONDS
 RESULT_JOB_BACKOFF_SECONDS = config.RESULT_JOB_BACKOFF_SECONDS
 
-# In-memory working caches. `_show_index` stays the shared, mutated-in-place
-# mirror of the breed index that indexing.py, search.py, crawler.py, and
-# app/api/dog.py all read; only its backing store changed (dog.db, not JSON).
+# The only in-memory cache left: the 30-minute Showlink show-list fetch gate
+# (see shows._get_show_list). Everything else is read from dog.db per request.
 _show_list_cache = {"data": None, "ts": 0}
-_show_detail_cache = {}
-_breed_result_cache = {}
-_show_all_results_cache = {}
-_show_index = {"shows": {}, "last_updated": 0}
-
-# Cross-process freshness: the index generation we last loaded into _show_index.
-# None means "never loaded" so the first _load_index() always reads. Bumped in
-# the DB on every write; when the stored value moves ahead of this, we reload.
-_index_generation = None
-
-# Wall-clock of the last generation check, to throttle rebuilds (see _load_index).
-_last_index_check_ts = 0.0
-
-# Show ids whose mirror entry changed since the last flush. _save_index() writes
-# only these (one show = a handful of rows) instead of rewriting all ~47k breed
-# rows every time a single judge or result flag is folded in.
-_dirty_index_show_ids = set()
-
-
-def _mark_index_dirty(show_id):
-    """Record that _show_index["shows"][show_id] changed and needs flushing."""
-    _dirty_index_show_ids.add(str(int(show_id)))
 
 
 # ---------------------------------------------------------------------------
 # Breed index  (dog_show + dog_breed + dog_meta)
 # ---------------------------------------------------------------------------
 
-def _load_index(force=False):
-    """Refresh the in-memory mirror when the DB generation has advanced.
-
-    Cheap generation check on every call (a single keyed lookup), full rebuild
-    only when something actually changed — mirroring the old mtime-gated JSON
-    reload. Returns True when the mirror was reloaded.
-
-    Throttle: once the mirror exists, skip the check entirely for
-    INDEX_RELOAD_MIN_INTERVAL seconds. A single request re-enters this several
-    times (once per live show, via _result_cache_due), and a busy live show makes
-    the crawler bump the generation often, so without a floor each call did a full
-    read_index rebuild and starved the workers. force=True (used after our own
-    writes) always bypasses the throttle.
-    """
-    global _index_generation, _last_index_check_ts
-
-    now = time.time()
-    if (
-        not force
-        and _index_generation is not None
-        and (now - _last_index_check_ts) < config.INDEX_RELOAD_MIN_INTERVAL
-    ):
-        return False
-
+def _indexed_show(show_id):
+    """One show's full index entry (metadata + breeds) or None."""
     try:
         with dog_db.session_scope() as session:
-            generation = sqlstore.get_index_generation(session)
-            _last_index_check_ts = now
-            if not force and _index_generation is not None and generation == _index_generation:
-                return False
-            new_index = sqlstore.read_index(session)
+            return sqlstore.read_show(session, show_id)
+    except (TypeError, ValueError):
+        return None
     except Exception:
-        logger.exception("dog_index_load_failed")
+        logger.exception("dog_indexed_show_read_failed", show_id=show_id)
+        return None
+
+
+def _indexed_show_meta(show_id):
+    """One show's index metadata (no breeds) or None."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_show_meta(session, show_id)
+    except (TypeError, ValueError):
+        return None
+    except Exception:
+        logger.exception("dog_indexed_show_meta_read_failed", show_id=show_id)
+        return None
+
+
+def _indexed_shows(show_ids):
+    """Bulk read of full index entries: {str(show_id): entry}."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_shows(session, show_ids)
+    except Exception:
+        logger.exception("dog_indexed_shows_read_failed")
+        return {}
+
+
+def _index_states():
+    """Crawler candidate selection: per-show breed counts + empty-confirmed flags."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.index_states(session)
+    except Exception:
+        logger.exception("dog_index_states_read_failed")
+        return {}
+
+
+def _write_index_show(show_id, entry):
+    """Persist one show's index entry (metadata + wholesale breed list) and
+    advance the index-wide last_updated stamp."""
+    def _write(session):
+        sqlstore.write_show(session, show_id, entry)
+        current = sqlstore.get_meta_number(session, "last_updated", 0)
+        sqlstore.set_meta(session, "last_updated", max(current, entry.get("updated_at") or time.time()))
+
+    dog_db.run_write(_write, op="index_show")
+
+
+def _update_index_breed_judge(show_id, group, breed_id, judge):
+    """Store a freshly-captured judge on the breed's index row. True if changed."""
+    try:
+        return dog_db.run_write(
+            lambda session: sqlstore.set_breed_judge(session, show_id, group, breed_id, judge),
+            op="breed_judge",
+        ) > 0
+    except Exception:
+        logger.exception("dog_breed_judge_update_failed", show_id=show_id)
         return False
 
-    _show_index.clear()
-    _show_index.update(new_index)
-    _index_generation = generation
-    _dirty_index_show_ids.clear()
-    logger.info("dog_index_loaded", count=len(_show_index.get("shows", {})))
-    return True
 
-
-def _save_index():
-    """Flush dirty mirror shows to dog.db and bump the index generation.
-
-    Every mutation path calls _load_index() before mutating, so the mirror is
-    the current DB state plus our one-show change; we therefore adopt the bumped
-    generation as our own (like the JSON store recorded the new file mtime) and
-    skip reloading our own write. Other processes still see the bump and reload.
-    Writes are per-show, so two processes editing different shows never clobber
-    each other the way the old whole-file JSON write could.
-    """
-    global _index_generation
-
-    dirty = list(_dirty_index_show_ids)
-    if not dirty:
-        return
-
-    def _write(session):
-        for sid in dirty:
-            show = _show_index.get("shows", {}).get(sid)
-            if show is None:
-                continue
-            sqlstore.write_show(session, sid, show)
-        sqlstore.set_meta(session, "last_updated", _show_index.get("last_updated") or 0)
-        return sqlstore.bump_index_generation(session)
-
+def _update_index_breed_result_flag(show_id, group, breed_id):
+    """Flag the breed's index row as having results. True if changed."""
     try:
-        new_generation = dog_db.run_write(_write, op="index_save")
+        return dog_db.run_write(
+            lambda session: sqlstore.set_breed_has_results(session, show_id, group, breed_id),
+            op="breed_result_flag",
+        ) > 0
     except Exception:
-        logger.exception("dog_index_save_failed")
-        return
+        logger.exception("dog_breed_flag_update_failed", show_id=show_id)
+        return False
 
-    _dirty_index_show_ids.clear()
-    _index_generation = new_generation
+
+def _search_index_breeds(variants):
+    """Breed-name matches over the whole index: [(show_id, breed_dict)]."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_breeds_by_name(session, variants)
+    except Exception:
+        logger.exception("dog_search_breeds_failed")
+        return []
+
+
+def _search_index_judges(variants):
+    """Judge matches (excluding breed-name matches): [(show_id, breed_dict)]."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_breeds_by_judge(session, variants)
+    except Exception:
+        logger.exception("dog_search_judges_failed")
+        return []
+
+
+def _search_index_show_ids(variants):
+    """Ids of indexed shows whose name/title/date/month text matches."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_show_ids(session, variants)
+    except Exception:
+        logger.exception("dog_search_show_ids_failed")
+        return []
+
+
+def _indexed_ids_among(show_ids):
+    """Which of the given ids are in the index, as a set of ints."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.indexed_show_ids(session, show_ids)
+    except Exception:
+        logger.exception("dog_indexed_ids_failed")
+        return set()
+
+
+def _index_summary(total_show_count=None):
+    indexed_count = 0
+    updated = 0
+    try:
+        with dog_db.session_scope() as session:
+            indexed_count = sqlstore.count_shows(session)
+            updated = sqlstore.get_meta_number(session, "last_updated", 0)
+    except Exception:
+        logger.exception("dog_index_summary_failed")
+    return {
+        "last_updated": updated or None,
+        "last_updated_iso": _utc_iso(updated),
+        "indexed_show_count": indexed_count,
+        "total_show_count": total_show_count,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -137,7 +172,7 @@ def _load_result_cache_doc(show_id):
 
 
 def _save_result_cache_doc(show_id, doc):
-    """Full rewrite of a whole-show result doc (final complete save / migration)."""
+    """Full rewrite of a whole-show result doc (final complete save)."""
     dog_db.run_write(
         lambda session: sqlstore.write_result_doc(session, show_id, doc),
         op="result_cache_doc",
@@ -311,22 +346,3 @@ def _result_job_due(job, now=None, stale_seconds=None):
         if (now - updated_at) < stale_seconds:
             return False
     return (job.get("next_attempt_at") or 0) <= now
-
-
-# ---------------------------------------------------------------------------
-# Small read helpers used across the package
-# ---------------------------------------------------------------------------
-
-def _indexed_show(show_id):
-    _load_index()
-    return _show_index.get("shows", {}).get(str(show_id))
-
-
-def _index_summary(total_show_count=None):
-    updated = _show_index.get("last_updated") or 0
-    return {
-        "last_updated": updated or None,
-        "last_updated_iso": _utc_iso(updated),
-        "indexed_show_count": len(_show_index.get("shows", {})),
-        "total_show_count": total_show_count,
-    }

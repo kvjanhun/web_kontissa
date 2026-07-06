@@ -1,27 +1,22 @@
-import time
-
 import requests
 import structlog
 from flask import Blueprint, jsonify, request as flask_request
 
 from app import limiter
-from app.dog_show.config import BREED_RESULT_TTL, RESULT_RETRY_AFTER_SECONDS
+from app.dog_show.config import RESULT_RETRY_AFTER_SECONDS
 from app.dog_show.indexing import (
-    _cached_show_detail, _enrich_breeds_with_cached_result_judges,
-    _enrich_breeds_with_index_judges, _is_show_recent_by_id,
-    _mark_single_probe_breed_result_available, _show_detail_from_index,
-    _show_result_availability_for_id, _show_stats_from_index, _shows_with_cached_stats,
+    _show_detail_from_index, _show_result_availability_for_id,
+    _show_stats_from_index, _shows_with_cached_stats,
 )
 from app.dog_show.result_cache import (
-    _breed_results_from_all_results_cache, _cached_all_results_response,
+    _all_results_response, _breed_results_from_all_results_cache,
     _enrich_breeds_with_result_progress, _queue_live_result_cache_refresh,
     _queue_live_result_cache_refreshes, _result_cache_progress,
 )
 from app.dog_show.search import search_shows_data
 from app.dog_show.shows import _get_show_list
 from app.dog_show.store import (
-    _breed_result_cache, _index_summary, _load_result_cache_doc,
-    _queue_result_cache_job, _show_detail_cache, _show_list_cache,
+    _index_summary, _load_result_cache_doc, _queue_result_cache_job, _show_list_cache,
 )
 
 logger = structlog.get_logger(__name__)
@@ -85,29 +80,11 @@ def show_detail(show_id):
     # fetches Showlink pages for detail; a show missing from the index (a brand
     # new listing) is picked up by the crawler's index pass within minutes.
     try:
-        cached = _cached_show_detail(show_id)
-        if cached:
-            data = dict(cached)
-            data["breeds"] = _mark_single_probe_breed_result_available(show_id, data.get("breeds", []))
-            updated_from_index = _enrich_breeds_with_index_judges(show_id, data.get("breeds", []))
-            updated_from_results = _enrich_breeds_with_cached_result_judges(show_id, data.get("breeds", []))
-            progress_updated = _enrich_breeds_with_result_progress(show_id, data.get("breeds", []))
-            _queue_live_result_cache_refresh(show_id)
-            _attach_show_detail_stats(show_id, data)
-            if updated_from_index or updated_from_results or progress_updated:
-                existing_cache = _show_detail_cache.get(show_id) or {}
-                _show_detail_cache[show_id] = {
-                    "data": data,
-                    "ts": existing_cache.get("ts", time.time()),
-                }
-            return jsonify(data)
-
         indexed = _show_detail_from_index(show_id)
         if indexed:
             _enrich_breeds_with_result_progress(show_id, indexed.get("breeds", []))
             _queue_live_result_cache_refresh(show_id)
             _attach_show_detail_stats(show_id, indexed)
-            _show_detail_cache[show_id] = {"data": indexed, "ts": time.time()}
             return jsonify(indexed)
 
         return jsonify({
@@ -137,19 +114,9 @@ def breed_results(show_id):
     if group_num < 1 or group_num > 10 or breed_num < 1:
         return jsonify({"error": "Parameters group and breed are outside the supported range"}), 400
 
-    cache_key = (show_id, group, breed)
-    now = time.time()
-    is_recent = _is_show_recent_by_id(show_id)
-
     try:
-        if cache_key in _breed_result_cache:
-            cached = _breed_result_cache[cache_key]
-            if not is_recent or (now - cached["ts"]) < BREED_RESULT_TTL:
-                return jsonify(cached["data"])
-
         persisted = _breed_results_from_all_results_cache(show_id, group, breed)
         if persisted:
-            _breed_result_cache[cache_key] = {"data": persisted, "ts": now}
             return jsonify(persisted)
 
         # Not in the whole-show cache. The web tier does not fetch Showlink result
@@ -173,7 +140,7 @@ def breed_results(show_id):
 def show_all_results(show_id):
     try:
         availability = _show_result_availability_for_id(show_id)
-        cached = _cached_all_results_response(show_id, allow_stale=True)
+        cached = _all_results_response(show_id, allow_stale=True)
         if cached:
             cached["availability"] = availability
             if cached.get("cache", {}).get("stale") and availability.get("can_fetch", True):

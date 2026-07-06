@@ -2,10 +2,10 @@
 
 Dog data lives in its own SQLite file (`dog.db`), separate from the main
 `site.db`. We deliberately do NOT use the Flask-SQLAlchemy `db` object here:
-dog writes happen in background warmup threads and in the standalone
-`scripts/dog_crawl.py` process, neither of which has a Flask app/request
-context. A plain engine with a thread-local scoped session works identically in
-web requests, worker threads, and the crawler process.
+dog writes happen in the standalone `scripts/dog_crawl.py` process (and its
+fetch worker threads) and in one-off scripts, none of which has a Flask
+app/request context. A plain engine with a thread-local scoped session works
+identically in web requests, worker threads, and the crawler process.
 
 This is a permanent store, not a cache: historical rows are never evicted.
 """
@@ -42,7 +42,7 @@ _current_uri = None
 def _make_engine(uri):
     connect_args = {}
     if uri.startswith("sqlite"):
-        # Sessions are used across threads (warmup workers, bg indexer), so the
+        # Sessions are used across threads (the crawler's fetch workers), so the
         # single connection must not enforce same-thread access.
         connect_args["check_same_thread"] = False
     engine = create_engine(uri, future=True, connect_args=connect_args)

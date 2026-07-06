@@ -6,18 +6,17 @@ import pytest
 from unittest.mock import patch, MagicMock
 import requests
 from app.api import dog as dog_module
-from app.dog_show.store import (
-    _breed_result_cache, _show_all_results_cache, _show_detail_cache, _show_list_cache,
-)
+from app.dog_show.store import _show_list_cache
 from app.dog_show import crawler as dog_crawler
 from app.dog_show import finals as dog_finals
 from app.dog_show import indexing as dog_indexing
 from app.dog_show import result_cache as dog_result_cache
 from app.dog_show import showlink as dog_showlink
+from app.dog_show import sqlstore as dog_sqlstore
 from app.dog_show import store as dog_store
 from app.dog_show import db as dog_db
 from app.dog_show.utils import (
-    _is_recent_show, _result_doc_last_result_at, _result_live_plan, _show_live_phase,
+    _result_doc_last_result_at, _result_live_plan, _show_is_recent, _show_live_phase,
     _show_result_availability, _utc_iso,
 )
 
@@ -175,14 +174,6 @@ def clear_caches(monkeypatch, tmp_path):
 
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
-    _show_detail_cache.clear()
-    _breed_result_cache.clear()
-    _show_all_results_cache.clear()
-    dog_store._show_index["shows"].clear()
-    dog_store._show_index["last_updated"] = 0
-    dog_store._index_generation = None
-    dog_store._dirty_index_show_ids.clear()
-    dog_store._last_index_check_ts = 0.0
     dog_indexing._show_stats_cache.clear()
     yield
     # Release the per-test database file so its WAL handles don't leak.
@@ -198,19 +189,9 @@ def _current_month_label():
 
 
 def seed_index_show(show_id, show):
-    """Seed one show into the dog index the way the app does — mutate the shared
-    mirror, mark it dirty, flush to dog.db, then reload so the mirror reflects
-    exactly what was persisted (normalized breed dicts, generation advanced)."""
-    sid = str(int(show_id))
-    dog_store._show_index.setdefault("shows", {})[sid] = show
-    updated = show.get("updated_at")
-    if updated:
-        dog_store._show_index["last_updated"] = max(
-            dog_store._show_index.get("last_updated") or 0, updated
-        )
-    dog_store._mark_index_dirty(sid)
-    dog_store._save_index()
-    dog_store._load_index(force=True)
+    """Seed one show into the dog index the way the app's writers do — one
+    wholesale row write through the store facade, read back per request."""
+    dog_store._write_index_show(show_id, show)
 
 @patch("app.dog_show.showlink._SESSION.get")
 def test_fetch_page_advertises_crawler_identity(mock_get):
@@ -592,7 +573,7 @@ def test_show_result_availability_handles_showlink_today_section():
         now=datetime.datetime(2026, 6, 20, 12, 0),
     )
 
-    assert _is_recent_show("Tänään") is True
+    assert _show_is_recent(show, today=datetime.date(2026, 6, 20)) is True
     assert availability["can_fetch"] is True
     assert availability["show_state"] == "live"
     assert availability["start_date"] == "2026-06-20"
@@ -655,44 +636,6 @@ def test_show_detail_not_indexed_returns_not_ready(client):
     data = resp.get_json()
     assert data["status"] == "not_indexed"
     assert data["message"]
-
-
-@patch("app.dog_show.showlink._SESSION.get")
-def test_recent_show_detail_cache_expiry_falls_back_to_index(mock_get, client):
-    """An expired in-memory detail cache is replaced from the persisted index,
-    never by a web-tier Showlink fetch."""
-    seed_index_show("14042", {
-        "title": "14.06.2026 Basenji",
-        "month": _current_month_label(),
-        "breeds": [
-            {"name": "basenji", "count": 78, "group": "5", "breed_id": "3", "has_results": True},
-        ],
-    })
-    _show_detail_cache[14042] = {
-        "data": {"id": 14042, "title": "stale", "breeds": []},
-        "ts": 0,
-    }
-
-    resp = client.get("/api/dog/shows/14042")
-
-    assert resp.status_code == 200
-    assert resp.get_json()["title"] == "14.06.2026 Basenji"
-    mock_get.assert_not_called()
-
-
-@patch("app.dog_show.showlink._SESSION.get")
-def test_old_show_detail_cache_is_reused(mock_get, client):
-    seed_index_show("14042", {"month": "tammikuu 2000", "breeds": []})
-    _show_detail_cache[14042] = {
-        "data": {"id": 14042, "title": "cached old show", "breeds": []},
-        "ts": 0,
-    }
-
-    resp = client.get("/api/dog/shows/14042")
-
-    assert resp.status_code == 200
-    assert resp.get_json()["title"] == "cached old show"
-    mock_get.assert_not_called()
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -833,7 +776,10 @@ def test_show_detail_marks_single_breed_specialty_as_result_fetchable(mock_get, 
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, client):
+def test_judge_sweep_folds_zero_result_cache_judges_into_index(mock_get, client):
+    """A judged breed that produced no result rows carries its judge only in the
+    completed_breeds cache meta; the one-off sweep folds it into the index, and
+    the read-only detail endpoint then serves it."""
     seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "name": "Pertunmaa Pentunäyttely",
@@ -868,12 +814,15 @@ def test_show_detail_merges_cached_result_judges_without_fetching(mock_get, clie
         "results": [],
     })
 
+    with dog_db.session_scope() as session:
+        assert dog_sqlstore.sweep_breed_judges_from_cache_meta(session) == 1
+
     resp = client.get("/api/dog/shows/13992")
 
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["breeds"][0]["judge"] == "Tarja Kolkka"
-    assert dog_store._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
+    assert dog_store._indexed_show("13992")["breeds"][0]["judge"] == "Tarja Kolkka"
     mock_get.assert_not_called()
 
 
@@ -929,109 +878,37 @@ def test_persist_show_detail_preserves_cached_result_flags(client):
         ],
     }, 3)
 
-    breed = dog_store._show_index["shows"]["13771"]["breeds"][0]
+    breed = dog_store._indexed_show("13771")["breeds"][0]
     assert breed["has_results"] is True
     assert breed["judge"] == "Pietro Marino"
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_cached_show_detail_merges_cached_result_judges(mock_get, client):
-    _show_detail_cache[13992] = {
-        "data": {
-            "id": 13992,
-            "title": "27.07.2025 Pertunmaa Pentunäyttely",
-            "breeds": [
-                {
-                    "name": "sileäkarvainen noutaja",
-                    "count": 1,
-                    "group": "8",
-                    "breed_id": "124",
-                    "has_results": True,
-                },
-            ],
-            "source_url": dog_showlink._source_url(13992),
-        },
-        "ts": time.time(),
-    }
-    seed_index_show("13992", {
-        "title": "27.07.2025 Pertunmaa Pentunäyttely",
-        "month": "heinäkuu 2025",
-        "breeds": [
-            {
-                "name": "sileäkarvainen noutaja",
-                "count": 1,
-                "group": "8",
-                "breed_id": "124",
-                "has_results": True,
-            },
-        ],
-    })
-    dog_store._save_result_cache_doc(13992, {
-        "version": dog_result_cache.RESULT_CACHE_VERSION,
-        "show_id": 13992,
-        "status": "complete",
-        "title": "27.07.2025 Pertunmaa Pentunäyttely",
-        "source_url": dog_showlink._source_url(13992),
-        "cached_at": 1001,
-        "completed_breeds": {
-            "8:124": {
-                "name": "sileäkarvainen noutaja",
-                "result_count": 1,
-                "judge": "Tarja Kolkka",
-            },
-        },
-        "failed_breeds": {},
-        "results": [],
-    })
-
-    resp = client.get("/api/dog/shows/13992")
-
-    assert resp.status_code == 200
-    assert resp.get_json()["breeds"][0]["judge"] == "Tarja Kolkka"
-    assert _show_detail_cache[13992]["data"]["breeds"][0]["judge"] == "Tarja Kolkka"
-    mock_get.assert_not_called()
-
-
-@patch("app.dog_show.showlink._SESSION.get")
-def test_cached_show_detail_merges_index_judges(mock_get, client):
-    _show_detail_cache[14042] = {
-        "data": {
-            "id": 14042,
-            "title": "Basenji Show 2026",
-            "breeds": [
-                {
-                    "name": "basenji",
-                    "count": 3,
-                    "group": "5",
-                    "breed_id": "3",
-                    "has_results": True,
-                },
-            ],
-            "source_url": dog_showlink._source_url(14042),
-        },
-        "ts": time.time(),
-    }
+def test_crawler_reindex_preserves_captured_judges(mock_get, client):
+    """A maintenance re-index parses the detail page, which never carries judges.
+    The wholesale row replacement must fold the already-captured judges back in
+    instead of wiping them until the next result crawl."""
     seed_index_show("14042", {
-        "title": "Basenji Show 2026",
-        "source_url": dog_showlink._source_url(14042),
+        "title": "14.06.2026 Basenji",
+        "name": "Basenji",
+        "date": "14.06.",
+        "month": "kesäkuu 2026",
         "breeds": [
-            {
-                "name": "basenji",
-                "count": 3,
-                "group": "5",
-                "breed_id": "3",
-                "has_results": True,
-                "judge": "Paula Steele",
-            },
+            {"name": "basenji", "count": 78, "group": "5", "breed_id": "3",
+             "has_results": True, "judge": "Paula Steele"},
         ],
     })
+    mock_resp = MagicMock()
+    mock_resp.text = SAMPLE_SHOW_DETAIL_HTML
+    mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
 
-    resp = client.get("/api/dog/shows/14042")
+    dog_crawler._update_index_show({"id": 14042, "name": "Basenji", "date": "14.06.", "month": "kesäkuu 2026"})
 
-    assert resp.status_code == 200
-    assert resp.get_json()["breeds"][0]["judge"] == "Paula Steele"
-    assert _show_detail_cache[14042]["data"]["breeds"][0]["judge"] == "Paula Steele"
-    mock_get.assert_not_called()
+    breeds = dog_store._indexed_show("14042")["breeds"]
+    assert breeds[0]["name"] == "basenji"
+    assert breeds[0]["judge"] == "Paula Steele"
+    assert breeds[0]["has_results"] is True
 
 
 SAMPLE_GENERAL_SHOW_MAIN_HTML = """
@@ -1189,8 +1066,8 @@ def test_crawl_index_uses_aggregate_breed_results_link(mock_get, client):
     assert data["breeds"][0]["breed_id"] == "88"
     assert data["breeds"][0]["has_results"] is True
     assert data["breeds"][1]["name"] == "gordoninsetteri"
-    assert len(dog_store._show_index["shows"]["13934"]["breeds"]) == 2
-    assert "empty_breed_list_confirmed" not in dog_store._show_index["shows"]["13934"]
+    assert len(dog_store._indexed_show("13934")["breeds"]) == 2
+    assert "empty_breed_list_confirmed" not in dog_store._indexed_show("13934")
     mock_get.assert_not_called()
 
 
@@ -1227,8 +1104,8 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
     summary = dog_crawler.crawl_index_once(limit=1, delay=0)
 
     assert summary["updated"] == 1
-    assert len(dog_store._show_index["shows"]["14042"]["breeds"]) == 2
-    assert dog_store._show_index["shows"]["14042"]["breeds"][0]["name"] == "basenji"
+    assert len(dog_store._indexed_show("14042")["breeds"]) == 2
+    assert dog_store._indexed_show("14042")["breeds"][0]["name"] == "basenji"
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
@@ -1266,8 +1143,8 @@ def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch
 
     assert summary["updated"] == 1
     assert summary["empty_candidates"] == 1
-    assert len(dog_store._show_index["shows"]["14042"]["breeds"]) == 2
-    assert len(dog_store._show_index["shows"]["14043"]["breeds"]) == 1
+    assert len(dog_store._indexed_show("14042")["breeds"]) == 2
+    assert len(dog_store._indexed_show("14043")["breeds"]) == 1
     assert len(mock_get.call_args_list) == 2
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
@@ -1293,9 +1170,6 @@ def test_get_breed_results_from_whole_show_cache(mock_get, monkeypatch, client):
     summary = dog_result_cache.crawl_result_cache_for_show(14042, delay=0, source="test", workers=1)
     assert summary["status"] == "complete"
     mock_get.reset_mock()
-    # Clear the in-memory breed cache the crawl warmed, so this exercises the
-    # persisted whole-show extraction path.
-    _breed_result_cache.clear()
 
     resp = client.get("/api/dog/shows/14042/results?group=5&breed=3")
     assert resp.status_code == 200
@@ -1384,7 +1258,7 @@ def test_result_crawl_reads_floatleft_breed_header_and_backfills_index(mock_get,
     assert data["breed"] == "sileäkarvainen noutaja"
     assert data["judge"] == "Pietro Marino"
     assert data["results"][0]["name"] == "Almanza Blast From The Past"
-    assert dog_store._show_index["shows"]["13771"]["breeds"][0]["judge"] == "Pietro Marino"
+    assert dog_store._indexed_show("13771")["breeds"][0]["judge"] == "Pietro Marino"
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -1794,7 +1668,7 @@ def test_all_breed_cache_keeps_polling_until_main_bis(monkeypatch, client):
         ],
     )
 
-    indexed_breeds = dog_store._show_index["shows"]["13771"]["breeds"]
+    indexed_breeds = dog_store._indexed_show("13771")["breeds"]
     assert dog_finals.analyze(no_main_bis, indexed_breeds)["expects_finals"] is True
     # Entry completion alone must not settle an all-breed show without BIS-1.
     assert dog_result_cache._result_cache_doc_is_fresh(13771, no_main_bis, now=noon) is False
@@ -2269,7 +2143,9 @@ def test_live_plan_settles_incomplete_past_deadline():
     assert plan["can_fetch"] is False
 
 
-def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch, client):
+def test_all_results_response_marks_stale_live_cache(monkeypatch, client):
+    """The /all-results payload is built straight from the persisted doc: fresh
+    within the live TTL, and served-but-flagged stale (allow_stale) once past it."""
     now = datetime.datetime(2026, 6, 20, 12, 0).timestamp()
     seed_index_show("13771", {
         "title": "20.-21.06.2026 Jyväskylä KV",
@@ -2281,44 +2157,30 @@ def test_stale_memory_cache_does_not_hide_refreshed_live_disk_cache(monkeypatch,
     })
     monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
     monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
-    old_cached_at = now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1
-    _show_all_results_cache[13771] = {
-        "ts": old_cached_at,
-        "data": {
-            "show_id": 13771,
-            "title": "old memory cache",
-            "source_url": dog_showlink._source_url(13771),
-            "results": [{"name": "Old Memory Dog", "breedName": "basenji"}],
-            "cache": {
-                "status": "complete",
-                "stale": False,
-                "total_breeds": 1,
-                "cached_at": old_cached_at,
-            },
-        },
-    }
+    cached_at = now - dog_result_cache.RESULT_CACHE_LIVE_TTL - 1
     dog_store._save_result_cache_doc(13771, {
         "version": dog_result_cache.RESULT_CACHE_VERSION,
         "show_id": 13771,
         "status": "complete",
-        "title": "fresh disk cache",
+        "title": "persisted cache",
         "source_url": dog_showlink._source_url(13771),
-        "started_at": now - 20,
-        "updated_at": now - 10,
-        "cached_at": now - 10,
+        "started_at": cached_at - 20,
+        "updated_at": cached_at,
+        "cached_at": cached_at,
         "total_breeds": 1,
         "completed_breeds": {"5:3": {"name": "basenji", "result_count": 2}},
         "failed_breeds": {},
         "results": [
-            {"name": "Fresh Disk Dog 1", "breedName": "basenji"},
-            {"name": "Fresh Disk Dog 2", "breedName": "basenji"},
+            {"name": "Disk Dog 1", "breedName": "basenji"},
+            {"name": "Disk Dog 2", "breedName": "basenji"},
         ],
     })
 
-    data = dog_result_cache._cached_all_results_response(13771, allow_stale=True)
+    assert dog_result_cache._all_results_response(13771, allow_stale=False) is None
 
-    assert [dog["name"] for dog in data["results"]] == ["Fresh Disk Dog 1", "Fresh Disk Dog 2"]
-    assert data["cache"]["stale"] is False
+    data = dog_result_cache._all_results_response(13771, allow_stale=True)
+    assert [dog["name"] for dog in data["results"]] == ["Disk Dog 1", "Disk Dog 2"]
+    assert data["cache"]["stale"] is True
 
 
 def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, client):
@@ -2496,7 +2358,10 @@ def test_breed_results_reuses_persisted_whole_show_cache(mock_get, client):
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_cached_breed_results_backfill_index_judge(mock_get, client):
+def test_breed_results_surface_judge_from_result_rows(mock_get, client):
+    """When the index row has no judge yet, the breed-results payload still
+    carries the judge preserved on the captured result rows (read-only — the
+    one-off sweep, not the GET, is what folds it into the index)."""
     seed_index_show("13992", {
         "title": "27.07.2025 Pertunmaa Pentunäyttely",
         "name": "Pertunmaa Pentunäyttely",
@@ -2542,7 +2407,8 @@ def test_cached_breed_results_backfill_index_judge(mock_get, client):
     assert resp.status_code == 200
     data = resp.get_json()
     assert data["judge"] == "Tarja Kolkka"
-    assert dog_store._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
+    # The GET is read-only; the index row stays judgeless until swept/crawled.
+    assert "judge" not in dog_store._indexed_show("13992")["breeds"][0]
     mock_get.assert_not_called()
 
 
@@ -2618,7 +2484,7 @@ def test_crawl_result_cache_refreshes_stale_recent_index_before_fetching_results
 
     assert summary["status"] == "complete"
     assert mock_get.call_count == 2
-    assert dog_store._show_index["shows"]["14042"]["breeds"][0]["has_results"] is True
+    assert dog_store._indexed_show("14042")["breeds"][0]["has_results"] is True
     doc = dog_store._load_result_cache_doc(14042)
     assert doc["total_breeds"] == 1
     assert doc["completed_breeds"]["5:3"]["result_count"] == 1
@@ -2675,7 +2541,7 @@ def test_crawl_result_cache_refreshes_live_index_with_partial_result_flags(mock_
 
     assert summary["status"] == "complete"
     assert mock_get.call_count == 3
-    indexed_breeds = dog_store._show_index["shows"]["13771"]["breeds"]
+    indexed_breeds = dog_store._indexed_show("13771")["breeds"]
     assert [breed["has_results"] for breed in indexed_breeds] == [True, True]
     doc = dog_store._load_result_cache_doc(13771)
     assert doc["total_breeds"] == 2
@@ -2721,7 +2587,7 @@ def test_crawl_result_cache_probes_unchecked_live_breeds(mock_get, monkeypatch):
     requested_urls = [call.args[0] for call in mock_get.call_args_list]
     assert requested_urls[0].endswith("Id=13771&R=5&RO=3")
     assert requested_urls[1].endswith("Id=13771&R=8&RO=124")
-    indexed_breeds = dog_store._show_index["shows"]["13771"]["breeds"]
+    indexed_breeds = dog_store._indexed_show("13771")["breeds"]
     assert [breed["has_results"] for breed in indexed_breeds] == [True, True, False]
     doc = dog_store._load_result_cache_doc(13771)
     assert doc["total_breeds"] == 2
@@ -2934,7 +2800,6 @@ def test_search_shows_by_breed(mock_get, client):
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
 
-    from app.dog_show.store import _show_index
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "breeds": [
@@ -3004,7 +2869,6 @@ def test_search_shows_by_judge(mock_get, client):
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
 
-    from app.dog_show.store import _show_index
     seed_index_show("14042", {
         "title": "14.06.2026 Basenji",
         "breeds": [
@@ -3066,7 +2930,7 @@ def test_search_finds_indexed_only_show_by_cleaned_judge(mock_get, client):
 
 
 @patch("app.dog_show.showlink._SESSION.get")
-def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
+def test_judge_sweep_makes_result_row_judges_searchable(mock_get, client):
     mock_resp_list = MagicMock()
     mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
     mock_resp_list.status_code = 200
@@ -3115,6 +2979,15 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     })
     mock_get.return_value = mock_resp_list
 
+    # Judge search reads the breed index only; the one-off sweep is what folds a
+    # judge captured on result rows into the index for a pre-rewrite show.
+    resp = client.get("/api/dog/search?q=kolkka")
+    assert resp.status_code == 200
+    assert resp.get_json()["results"] == []
+
+    with dog_db.session_scope() as session:
+        assert dog_sqlstore.sweep_breed_judges_from_results(session) == 1
+
     resp = client.get("/api/dog/search?q=kolkka")
 
     assert resp.status_code == 200
@@ -3125,7 +2998,7 @@ def test_search_finds_judge_from_whole_show_result_cache(mock_get, client):
     assert data["results"][0]["judge"] == "Tarja Kolkka"
     assert data["results"][0]["judge_match_count"] == 1
     assert data["results"][0]["match"] == "judge"
-    assert dog_store._show_index["shows"]["13992"]["breeds"][0]["judge"] == "Tarja Kolkka"
+    assert dog_store._indexed_show("13992")["breeds"][0]["judge"] == "Tarja Kolkka"
 
 
 # --- Cross-show dog-name / owner search (Phase E workstream 2) ---
@@ -3499,3 +3372,159 @@ def test_append_result_breed_idempotent_on_resave():
     assert (_dog_row_count(DogResult, 9100), _dog_row_count(DogBreedAward, 9100)) == (2, 1)
 
 
+
+
+# ---------------------------------------------------------------------------
+# SQL-first read paths: sqlstore query functions, sweeps, recency window
+# ---------------------------------------------------------------------------
+
+def _seed_two_shows():
+    seed_index_show("9200", {
+        "title": "14.06.2026 Vaasa KV", "name": "Vaasa KV", "date": "14.06.",
+        "month": "kesäkuu 2026", "source_url": "u1", "updated_at": 100.0,
+        "breeds": [
+            {"name": "basenji", "count": 78, "group": "5", "breed_id": "3",
+             "has_results": True, "judge": "Paula Steele"},
+            {"name": "beagle", "count": 12, "group": "6", "breed_id": "9", "has_results": False},
+        ],
+    })
+    seed_index_show("9201", {
+        "title": "empty show", "name": "Empty", "date": "15.06.",
+        "month": "kesäkuu 2026", "source_url": "u2", "updated_at": 50.0,
+        "breeds": [], "empty_breed_list_confirmed": True,
+    })
+
+
+def test_sqlstore_read_show_and_meta():
+    _seed_two_shows()
+    with dog_db.session_scope() as session:
+        show = dog_sqlstore.read_show(session, 9200)
+        assert show["title"] == "14.06.2026 Vaasa KV"
+        assert [b["name"] for b in show["breeds"]] == ["basenji", "beagle"]
+        assert show["breeds"][0]["judge"] == "Paula Steele"
+        assert "judge" not in show["breeds"][1]
+
+        meta = dog_sqlstore.read_show_meta(session, 9201)
+        assert meta["name"] == "Empty"
+        assert meta["empty_breed_list_confirmed"] is True
+        assert "breeds" not in meta
+
+        assert dog_sqlstore.read_show(session, 424242) is None
+        assert dog_sqlstore.read_show_meta(session, 424242) is None
+
+
+def test_sqlstore_read_shows_bulk_and_index_states():
+    _seed_two_shows()
+    with dog_db.session_scope() as session:
+        shows = dog_sqlstore.read_shows(session, [9200, "9201", 424242, "junk"])
+        assert sorted(shows) == ["9200", "9201"]
+        assert len(shows["9200"]["breeds"]) == 2
+
+        assert dog_sqlstore.count_shows(session) == 2
+        states = dog_sqlstore.index_states(session)
+        assert states["9200"] == {"breed_count": 2, "empty_breed_list_confirmed": False}
+        assert states["9201"] == {"breed_count": 0, "empty_breed_list_confirmed": True}
+
+
+def test_sqlstore_set_breed_judge_semantics():
+    _seed_two_shows()
+
+    def _judges():
+        show = dog_store._indexed_show("9200")
+        return [b.get("judge") for b in show["breeds"]]
+
+    with dog_db.session_scope() as session:
+        # Cleans the Showlink label and writes where missing.
+        assert dog_sqlstore.set_breed_judge(session, 9200, "6", "9", "TuomariTarja Kolkka") == 1
+        # Same cleaned judge again is a no-op.
+        assert dog_sqlstore.set_breed_judge(session, 9200, "6", "9", "Tarja Kolkka") == 0
+        # Empty/whitespace judge is a no-op.
+        assert dog_sqlstore.set_breed_judge(session, 9200, "5", "3", "  ") == 0
+        # only_missing never overwrites an existing judge.
+        assert dog_sqlstore.set_breed_judge(session, 9200, "5", "3", "Other Judge", only_missing=True) == 0
+        # The default write path does replace a changed judge.
+        assert dog_sqlstore.set_breed_judge(session, 9200, "5", "3", "Other Judge") == 1
+    assert _judges() == ["Other Judge", "Tarja Kolkka"]
+
+
+def test_sqlstore_search_precedence_and_unicode_case():
+    seed_index_show("9300", {
+        "title": "14.06.2026 Näyttely", "name": "Näyttely", "date": "14.06.",
+        "month": "kesäkuu 2026", "source_url": "u", "updated_at": 1.0,
+        "breeds": [
+            {"name": "SILEÄKARVAINEN NOUTAJA", "count": 5, "group": "8", "breed_id": "124",
+             "has_results": True, "judge": "Tarja Kolkka"},
+            {"name": "kolkkaterrieri", "count": 2, "group": "6", "breed_id": "9",
+             "has_results": True, "judge": "Kolkka Tarja"},
+        ],
+    })
+    with dog_db.session_scope() as session:
+        # Unicode-uppercase stored name found by a lowercase query.
+        names = dog_sqlstore.search_breeds_by_name(session, ["sileäkarvainen"])
+        assert [(sid, b["breed_id"]) for sid, b in names] == [(9300, "124")]
+
+        # A judge match on a name-matched breed is swallowed by the breed match:
+        # "kolkka" matches breed 9 by name and both judges, so only breed 124
+        # surfaces as a judge hit.
+        judges = dog_sqlstore.search_breeds_by_judge(session, ["kolkka"])
+        assert [(sid, b["breed_id"]) for sid, b in judges] == [(9300, "124")]
+        assert dog_sqlstore.search_breeds_by_judge(session, ["sileäkarvainen"]) == []
+
+        # Show text matches on the combined name/title/date/month string.
+        assert dog_sqlstore.search_show_ids(session, ["näyttely"]) == [9300]
+        assert dog_sqlstore.search_show_ids(session, ["kesäkuu 2026"]) == [9300]
+        assert dog_sqlstore.search_show_ids(session, ["nomatch"]) == []
+
+        assert dog_sqlstore.indexed_show_ids(session, [9300, 424242, "junk"]) == {9300}
+
+
+def test_sweep_folds_result_rows_into_index_flags_and_judges():
+    seed_index_show("9400", {
+        "title": "14.06.2024 Sweep Show", "name": "Sweep", "date": "14.06.",
+        "month": "kesäkuu 2024", "source_url": "u", "updated_at": 1.0,
+        "breeds": [
+            {"name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": False},
+        ],
+    })
+    with dog_db.session_scope() as session:
+        dog_sqlstore.write_result_doc(session, 9400, {
+            "version": 1, "status": "complete", "source": "t", "title": "T", "source_url": "u",
+            "total_breeds": 1, "started_at": 1.0, "updated_at": 2.0, "cached_at": 2.0,
+            "last_error": None, "failed_breeds": {},
+            "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1, "judge": "Paula Steele"}},
+            "results": [{"number": 1, "name": "Dog", "breedGroup": "5", "breedId": "3",
+                         "breedName": "basenji", "breedObj": {"judge": "Paula Steele"}}],
+        })
+
+    with dog_db.session_scope() as session:
+        assert dog_sqlstore.sweep_breed_judges_from_results(session) == 1
+        assert dog_sqlstore.sweep_breed_result_flags(session) == 1
+        # Idempotent.
+        assert dog_sqlstore.sweep_breed_judges_from_results(session) == 0
+        assert dog_sqlstore.sweep_breed_judges_from_cache_meta(session) == 0
+        assert dog_sqlstore.sweep_breed_result_flags(session) == 0
+
+    breed = dog_store._indexed_show("9400")["breeds"][0]
+    assert breed["judge"] == "Paula Steele"
+    assert breed["has_results"] is True
+
+
+def test_show_is_recent_date_window():
+    today = datetime.date(2026, 7, 6)
+    def recent(show):
+        return _show_is_recent(show, today=today)
+
+    assert recent({"date": "05.07.", "month": "heinäkuu 2026"}) is True
+    assert recent({"date": "20.06.2026", "month": "kesäkuu 2026"}) is True
+    # 45 days back inclusive, then out of the window.
+    assert recent({"date": "22.05.2026", "month": "toukokuu 2026"}) is True
+    assert recent({"date": "21.05.2026", "month": "toukokuu 2026"}) is False
+    # 31 days ahead inclusive, then out.
+    assert recent({"date": "06.08.2026", "month": "elokuu 2026"}) is True
+    assert recent({"date": "07.08.2026", "month": "elokuu 2026"}) is False
+    # Month-label fallback when the day range is unparseable.
+    assert recent({"date": "", "month": "heinäkuu 2026"}) is True
+    assert recent({"date": "", "month": "tammikuu 2000"}) is False
+    # Truly unknown dates fail open.
+    assert recent({"date": "", "month": ""}) is True
+    assert recent(None) is True

@@ -1,15 +1,13 @@
 """ORM models for the /dog persistent database (dog.db).
 
-Storage layout vs. the old JSON shapes:
-
-- `dog_show_index.json` -> `DogShow` (per-show metadata) + `DogBreed` (breed list,
-  carrying the per-breed judge that search and the detail page read). Global
+- `DogShow` + `DogBreed`: the breed index — per-show metadata and breed lists,
+  carrying the per-breed judge that search and the detail page read. Global
   `last_updated` lives in `DogMeta`.
-- `dog_result_cache/<id>.json` -> `DogResultCache` (one row per show holding the
-  doc metadata + completed/failed breeds + live-tracking fields as a JSON blob)
-  plus normalized `DogResult` rows (one per dog result — the part that scales to
-  100k+ rows and powers cross-dog/judge queries later).
-- `dog_result_jobs.json` -> `DogResultJob`.
+- `DogResultCache` + `DogResult`: whole-show result docs — one header row per
+  show (doc metadata + completed/failed breeds + live-tracking fields as a JSON
+  blob) plus normalized result rows (one per dog result — the part that scales
+  to 100k+ rows and powers cross-dog/judge queries).
+- `DogResultJob`: the durable crawler job queue.
 
 Column names avoid SQL reserved words (`fci_group` not `group`); the store layer
 maps these back to the dict keys the rest of the package expects.

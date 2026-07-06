@@ -6,8 +6,16 @@ REQUEST_TIMEOUT = 10
 
 SHOW_LIST_TTL = 1800
 SHOW_DETAIL_TTL = 600
-BREED_RESULT_TTL = 600
 SHOW_ALL_RESULTS_TTL = 86400
+
+# The "recent" window: shows whose data still changes and is therefore worth
+# re-checking (breed lists / entry counts firm up before a show; results and
+# judges arrive through the show weekend). The crawler re-indexes recent shows
+# on its maintenance pass; everything outside the window is settled history.
+# Date-range based (see utils._show_is_recent); roughly the old current-or-
+# previous-month label heuristic, made explicit.
+SHOW_RECENT_PAST_DAYS = int(os.environ.get("DOG_SHOW_RECENT_PAST_DAYS", "45"))
+SHOW_RECENT_FUTURE_DAYS = int(os.environ.get("DOG_SHOW_RECENT_FUTURE_DAYS", "31"))
 
 RESULT_CACHE_LIVE_TTL = int(os.environ.get("DOG_RESULT_LIVE_TTL", "120"))
 # Finals overtime: after the evening cutoff on a show's final day, a show that
@@ -57,13 +65,6 @@ RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "2
 RESULT_PAUSE_STALL_SECONDS = int(os.environ.get("DOG_RESULT_PAUSE_STALL_SECONDS", "7200"))
 RESULT_PAUSE_EVENING_HOUR = int(os.environ.get("DOG_RESULT_PAUSE_EVENING_HOUR", "17"))
 
-# Minimum seconds between full in-memory index rebuilds per process. The generation
-# check is cheap, but a busy live show makes the crawler bump the generation often,
-# and one /api/dog/shows hit re-checks it several times (once per live show, via
-# _result_cache_due). Without a floor each of those did a full read_index rebuild,
-# which starved the request workers. Bounding rebuilds to once per interval costs
-# at most this much mirror staleness, invisible to the show list and stats.
-INDEX_RELOAD_MIN_INTERVAL = float(os.environ.get("DOG_INDEX_RELOAD_MIN_INTERVAL", "1.0"))
 # Per-show stats cache TTL (seconds). The /dog page polls /api/dog/shows every 15s
 # whenever a live show is present, and a live show's stats reconstruct its whole-show
 # result doc (thousands of rows) from SQLite. Caching the computed stats this long

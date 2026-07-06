@@ -5,23 +5,22 @@ import structlog
 
 from . import config, finals
 from .indexing import (
-    _cached_show_detail, _indexed_result_flags_need_refresh, _is_show_recent_by_id,
+    _indexed_result_flags_need_refresh, _is_show_recent_by_id,
     _mark_single_probe_breed_result_available, _persist_show_detail_to_index,
     _result_cache_doc_needs_result_refresh,
     _result_breeds_for_cache, _result_breeds_from_index,
     _show_date_for_id, _show_result_availability_for_id,
-    _update_index_breed_judge, _update_index_breed_result_flag,
 )
 from .parsers import _parse_breed_results, _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
-    _append_result_breed, _breed_result_cache,
+    _append_result_breed,
     _defer_result_cache_job,
-    _heartbeat_result_cache_job, _indexed_show, _load_index, _load_result_cache_doc,
+    _heartbeat_result_cache_job, _indexed_show, _load_result_cache_doc,
     _load_result_jobs, _remove_result_cache_job, _result_job_due, _queue_result_cache_job,
-    _save_index, _save_result_cache_doc, _save_result_cache_header, _set_result_job_running,
-    _show_all_results_cache, _show_detail_cache, _show_index,
+    _save_result_cache_doc, _save_result_cache_header, _set_result_job_running,
+    _update_index_breed_judge, _update_index_breed_result_flag,
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
@@ -131,7 +130,7 @@ def _live_index_result_flags_need_refresh(show_id, indexed_show=None, now=None):
     if availability.get("show_state") != "live":
         return False
 
-    updated = indexed_show.get("updated_at") or _show_index.get("last_updated") or 0
+    updated = indexed_show.get("updated_at") or 0
     return not updated or (now - updated) >= RESULT_CACHE_LIVE_TTL
 
 def _result_job_stale_seconds_for_show(show_id, now=None):
@@ -159,19 +158,6 @@ def _result_cache_doc_is_fresh(show_id, doc, now=None):
     if ttl is None:
         return True
     return (now - cached_at) < ttl
-
-def _cached_all_results_doc(cached):
-    cached_data = cached.get("data") or {}
-    cache_meta = cached_data.get("cache") or {}
-    cached_at = cache_meta.get("cached_at") or cached.get("ts")
-    return {
-        "status": "complete",
-        "total_breeds": cache_meta.get("total_breeds"),
-        "completed_breeds": {},
-        "results": cached_data.get("results") or [],
-        "cached_at": cached_at,
-        "updated_at": cached_at,
-    }
 
 def _result_cache_due(show_id, now=None):
     doc = _load_result_cache_doc(show_id)
@@ -238,26 +224,10 @@ def _result_response_from_doc(show_id, doc, stale=False):
         },
     }
 
-def _cached_all_results_response(show_id, allow_stale=False):
+def _all_results_response(show_id, allow_stale=False):
+    """The /all-results payload straight from the persisted doc, or None when
+    the cache is missing, owed a rebuild, or (unless allowed) stale."""
     now = time.time()
-
-    cached = _show_all_results_cache.get(int(show_id))
-    if cached and cached.get("data"):
-        cached_data = cached["data"]
-        cached_doc = _cached_all_results_doc(cached)
-        if _empty_result_cache_needs_refresh(show_id, cached_doc, now=now):
-            _show_all_results_cache.pop(int(show_id), None)
-        else:
-            stale = not _result_cache_doc_is_fresh(show_id, cached_doc, now=now)
-            if stale:
-                _show_all_results_cache.pop(int(show_id), None)
-            else:
-                data = dict(cached_data)
-                if data.get("cache"):
-                    data["cache"] = dict(data["cache"])
-                    data["cache"]["status"] = "complete"
-                    data["cache"]["stale"] = False
-                return data
 
     doc = _load_result_cache_doc(show_id)
     if not _result_cache_doc_is_complete(doc):
@@ -270,12 +240,7 @@ def _cached_all_results_response(show_id, allow_stale=False):
     if stale and not allow_stale:
         return None
 
-    response = _result_response_from_doc(show_id, doc, stale=stale)
-    _show_all_results_cache[int(show_id)] = {
-        "data": response,
-        "ts": doc.get("cached_at") or doc.get("updated_at") or now,
-    }
-    return response
+    return _result_response_from_doc(show_id, doc, stale=stale)
 
 def _breed_results_from_all_results_cache(show_id, group, breed):
     doc = _load_result_cache_doc(show_id)
@@ -304,9 +269,6 @@ def _breed_results_from_all_results_cache(show_id, group, breed):
                 breed_obj = item
                 break
     breed_obj = _clean_breed_data(breed_obj or {})
-    if breed_obj.get("judge") and _update_index_breed_judge(show_id, group, breed, breed_obj.get("judge")):
-        _save_index()
-
     fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
     breed_completed = (doc.get("completed_breeds") or {}).get(f"{group}:{breed}") or {}
     return {
@@ -357,14 +319,6 @@ def _show_detail_for_result_cache(show_id):
                 "breeds": breeds,
             }
 
-    cached = _cached_show_detail(show_id, allow_stale=True)
-    if cached and cached.get("breeds"):
-        cached_breeds = cached.get("breeds") or []
-        if not indexed_needs_result_refresh:
-            detail = dict(cached)
-            detail["breeds"] = _mark_single_probe_breed_result_available(show_id, cached_breeds)
-            return detail
-
     soup = _fetch_page(_source_url(show_id))
     detail = _parse_show_detail(soup, show_id)
     fetched_at = time.time()
@@ -375,7 +329,6 @@ def _show_detail_for_result_cache(show_id):
         _persist_show_detail_to_index(show_id, detail, fetched_at)
     except Exception as exc:
         logger.warning("dog_result_cache_detail_index_persist_failed", show_id=show_id, error=str(exc))
-    _show_detail_cache[int(show_id)] = {"data": detail, "ts": fetched_at}
     return detail
 
 def _all_results_doc_base(show_id, source, existing=None):
@@ -408,9 +361,6 @@ def _all_results_doc_base(show_id, source, existing=None):
         "terminal_confirmed": existing.get("terminal_confirmed"),
         "terminal_fingerprint": existing.get("terminal_fingerprint"),
     }
-
-def _breed_result_cache_key(show_id, group, breed_id):
-    return (int(show_id), str(group), str(breed_id))
 
 def _map_breed_results_to_all_results(show_id, breed, breed_data):
     group = str(breed.get("group", ""))
@@ -682,11 +632,6 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     mapped_results = item["mapped_results"]
     judge = _clean_judge_name(item["breed_data"].get("judge"))
 
-    _breed_result_cache[_breed_result_cache_key(show_id, group, breed_id)] = {
-        "data": item["breed_data"],
-        "ts": fetched_at,
-    }
-
     result_count = len(mapped_results)
     if result_count:
         breed["has_results"] = True
@@ -717,13 +662,12 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     if not preserve_existing_complete:
         _append_result_breed(show_id, doc, group, breed_id, mapped_results)
     _heartbeat_result_cache_job(show_id)
-    updated_index = False
-    if result_count and _update_index_breed_result_flag(show_id, group, breed_id):
-        updated_index = True
-    if judge and _update_index_breed_judge(show_id, group, breed_id, judge):
-        updated_index = True
-    if updated_index:
-        _save_index()
+    # Fold the capture into the breed index at capture time — the index is the
+    # only judge/result-flag source the read paths consult.
+    if result_count:
+        _update_index_breed_result_flag(show_id, group, breed_id)
+    if judge:
+        _update_index_breed_judge(show_id, group, breed_id, judge)
 
 def _crawl_missing_breed_results(show_id, pending_breeds, doc, delay, workers, preserve_existing_complete):
     workers = max(1, int(workers or 1))
@@ -988,8 +932,6 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     else:
         _save_result_cache_doc(show_id, doc)
 
-    response = _result_response_from_doc(show_id, doc)
-    _show_all_results_cache[show_id] = {"data": response, "ts": cached_at}
     logger.info(
         "dog_result_cache_complete",
         show_id=show_id,
