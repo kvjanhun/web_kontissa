@@ -1,6 +1,6 @@
 # /dog SQL-first rewrite — retire the in-memory index mirror
 
-Status: draft
+Status: shipped
 Date: 2026-07-06
 
 ## Objective
@@ -71,3 +71,13 @@ No `/api/dog/*` response changes. New SQLite indexes on `dog_breed(name)`, `dog_
 1. Index creation path: allow `CREATE INDEX IF NOT EXISTS` in `db.init_db()` (arguably table-creation, not migration), or ship a reviewed one-off? My lean: `init_db()` — idempotent, additive, and fresh test DBs need them anyway.
 2. Drop `_show_all_results_cache` outright, or keep a 4-entry LRU? My lean: drop, measure, add back only if `/all-results` p95 on the NUC says otherwise.
 3. The judge sweep: one-off script vs. first-deploy crawler pass. My lean: one-off script (visible, reviewable, deletable after).
+
+## Revision (2026-07-06, shipped)
+
+Deviations from the plan as written:
+
+- **No new SQL indexes.** Search is infix `%query%` LIKE, which B-tree indexes cannot serve; measured scans on the production-size db came in at 80–500 ms per search request (worst = broadest breed query) and single-digit ms for detail/all-results, so the existing indexes (`show_id` FKs, `ix_result_breed`, `ix_breed_judge`) are sufficient. Question 1 became moot. Bulk breed reads use Core column selects (`_BREED_COLUMNS`) — ORM hydration was 10x the fetch cost at ~40k rows.
+- **All response caches dropped, none replaced** (question 2: drop, measured, no LRU needed). `_show_stats_cache` (20s) and `_show_list_cache` kept as planned.
+- **Sweep** shipped as `scripts/dog_sweep_breed_judges.py` (question 3: one-off script). It also folds `has_results` flags and judges recorded only in zero-result `completed_breeds` meta. Local run healed 914 judges + 2 flags; needs one run on the NUC after deploy.
+- **Extra fix surfaced by the rewrite:** `crawler._update_index_show` used to wipe judges on every recent-show re-index (detail pages carry no judges) and relied on the lazy read-path healing to restore them. It now merges persisted judges/result flags before the wholesale row replacement (`_merge_persisted_result_state_into_breeds`), so capture-time folding fully replaces the write-backs.
+- **Recency unified** on `utils._show_is_recent` (date-range window, `DOG_SHOW_RECENT_PAST_DAYS`=45 / `DOG_SHOW_RECENT_FUTURE_DAYS`=31, month-label fallback, unknown fails open); `_is_recent_show` (month-label equality) deleted.
