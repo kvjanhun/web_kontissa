@@ -693,6 +693,29 @@ describe('show date result availability', () => {
 })
 
 describe('createShowBreedGroups', () => {
+  it('attaches each breed\'s honor roll sorted for display', () => {
+    const groups = createShowBreedGroups({
+      breeds: [{ name: 'Basenji', count: 2, group: '6', breed_id: '123', has_results: true }],
+      dogs: [],
+      allDogsLoaded: true,
+      breedAwards: {
+        '6:123': [
+          { type: 'ROP kasvattaja', name: "Kennel's", owner: 'Breeder B', text: "Kennel's, Om. Breeder B" },
+          { type: 'VSP', name: 'Second Dog', owner: 'Owner Two', text: 'Second Dog, Om. Owner Two' },
+          { type: 'ROP', name: 'First Dog', owner: 'Owner One', text: 'First Dog, Om. Owner One' },
+        ],
+      },
+    })
+    expect(groups[0].awards.map(award => award.type)).toEqual(['ROP', 'VSP', 'ROP kasvattaja'])
+    // A breed with no honor roll gets an empty list, not undefined.
+    const bare = createShowBreedGroups({
+      breeds: [{ name: 'Akita', count: 1, group: '5', breed_id: '10', has_results: true }],
+      dogs: [],
+      allDogsLoaded: true,
+    })
+    expect(bare[0].awards).toEqual([])
+  })
+
   const breeds = [
     {
       name: 'Basenji',

@@ -111,6 +111,19 @@ function critiqueKey(dog) {
           </button>
         </div>
 
+        <!-- Breed honor roll (ROP/VSP/SERT winners with owners + the breeder
+             award) — same card markup as the single-breed page. -->
+        <div v-if="group.awards?.length" class="dog-awards dog-breed-group-awards">
+          <div
+            v-for="(award, index) in group.awards"
+            :key="index"
+            class="dog-award-card"
+          >
+            <span class="dog-award-type">{{ award.type }}</span>
+            <span class="dog-award-text">{{ award.text }}</span>
+          </div>
+        </div>
+
         <div class="dog-results-grid">
           <DogResultCard
             v-for="dog in group.dogs"

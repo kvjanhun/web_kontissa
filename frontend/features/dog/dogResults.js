@@ -182,6 +182,7 @@ export function createShowBreedGroups({
   resultsOnly = false,
   allowUncheckedResults = false,
   filters = {},
+  breedAwards = {},
 } = {}) {
   const q = query.toLowerCase().trim()
   const dogsByBreed = {}
@@ -242,6 +243,7 @@ export function createShowBreedGroups({
       resultProgressLabel: progress.label,
       sortIndex: order,
       dogs: breedMatch ? breedDogs : matchingDogs,
+      awards: sortBreedAwards(breedAwards[key] || []),
     }
     order += 1
   }
@@ -271,6 +273,7 @@ export function createShowBreedGroups({
       resultProgressLabel: progress.label,
       sortIndex: order,
       dogs: matchingDogs,
+      awards: sortBreedAwards(breedAwards[key] || []),
     }
     order += 1
   }

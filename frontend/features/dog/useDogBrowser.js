@@ -84,6 +84,9 @@ export function useDogBrowser() {
   const allDogsLoaded = ref(false)
   const allDogsError = ref('')
   const allDogsResults = ref([])
+  // Per-breed honor rolls from /all-results ("group:breed_id" -> award list),
+  // rendered inside expanded breed rows.
+  const allDogsBreedAwards = ref({})
   const allDogsProgress = ref(null)
 
   // Cross-show dog profile (?dog=<reg_id>). The reg number contains a slash
@@ -208,6 +211,7 @@ export function useDogBrowser() {
     allDogsLoaded.value = false
     allDogsError.value = ''
     allDogsResults.value = []
+    allDogsBreedAwards.value = {}
     allDogsProgress.value = null
     clearLiveDetailPoll()
     clearMorningAutoLoad()
@@ -334,6 +338,7 @@ export function useDogBrowser() {
       gender: dogGenderFilter.value,
       placement: dogPlacementFilter.value,
     },
+    breedAwards: allDogsBreedAwards.value,
   }))
 
   // Grouping is only worth offering once there is more than one breed to sort.
@@ -413,6 +418,7 @@ export function useDogBrowser() {
         return
       }
       allDogsResults.value = data.results || []
+      allDogsBreedAwards.value = data.breed_awards || {}
       allDogsProgress.value = data.cache || null
       allDogsLoaded.value = true
       if (data.cache?.stale && liveDetailPollingAvailable.value) {
@@ -561,6 +567,7 @@ export function useDogBrowser() {
     allDogsLoaded.value = false
     allDogsError.value = ''
     allDogsResults.value = []
+    allDogsBreedAwards.value = {}
     allDogsProgress.value = null
     expandedBreedGroups.value = new Set()
     collapsedBreedSections.value = new Set()

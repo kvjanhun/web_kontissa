@@ -732,6 +732,12 @@ test.describe('Dog Show Browser', () => {
               },
             },
           ],
+          breed_awards: {
+            '6:123': [
+              { type: 'ROP', name: 'Aamun Tähti', owner: 'Omistaja Onerva', text: 'Aamun Tähti, Om. Omistaja Onerva' },
+              { type: 'ROP kasvattaja', name: "Aamun Kennel's", owner: 'Kasvattaja Kaisa', text: "Aamun Kennel's, Om. Kasvattaja Kaisa" },
+            ],
+          },
           fetched_at: 1781431200,
           fetched_at_iso: '2026-06-14T10:00:00Z',
         }),
@@ -746,12 +752,17 @@ test.describe('Dog Show Browser', () => {
     // expand on demand.
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     await expect(page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')).toBeVisible()
-    await expect(page.getByText('Aamun Tähti')).toHaveCount(0)
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toHaveCount(0)
     // With every breed group collapsed there is nothing on screen to expand.
     await expect(page.getByRole('button', { name: 'Näytä kaikki arvostelut' })).toHaveCount(0)
     await page.getByRole('button', { name: /Basenji/ }).click()
-    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toBeVisible()
     await expect(page.getByText('Iltatähti')).toBeVisible()
+
+    // The expanded row shows the breed honor roll — owners and the breeder
+    // award (a kennel, which appears on no dog card) become visible here.
+    await expect(page.getByText('Aamun Tähti, Om. Omistaja Onerva')).toBeVisible()
+    await expect(page.getByText("Aamun Kennel's, Om. Kasvattaja Kaisa")).toBeVisible()
 
     // Expand/collapse-all critiques appears once an open group has a critique.
     await expect(page.getByText('Hieno basenji')).toHaveCount(0)
@@ -764,7 +775,7 @@ test.describe('Dog Show Browser', () => {
     await page.locator('select').first().selectOption('eri')
 
     // Aamun Tähti (ERI) should be visible, Iltatähti (EH) should be hidden
-    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toBeVisible()
     await expect(page.getByText('Iltatähti')).not.toBeVisible()
     await page.locator('select').first().selectOption('')
 
@@ -772,28 +783,28 @@ test.describe('Dog Show Browser', () => {
     const genderSelect = page.locator('select').filter({ has: page.locator('option[value="narttu"]') })
     await genderSelect.selectOption('narttu')
     await expect(page.getByText('Iltatähti')).toBeVisible()
-    await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).not.toBeVisible()
     await genderSelect.selectOption('')
 
     // PU/PN best-of-sex placement filter.
     const placementSelect = page.locator('select').filter({ has: page.locator('option[value="PU"]') })
     await placementSelect.selectOption('PU')
-    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toBeVisible()
     await expect(page.getByText('Iltatähti')).not.toBeVisible()
     await placementSelect.selectOption('')
 
     // Search text for 'Aamun'
     await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Aamun')
-    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toBeVisible()
 
     // Non-matching search
     const showSearchInput = page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...')
     await showSearchInput.fill('Mustikki')
-    await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).not.toBeVisible()
 
     await page.getByRole('button', { name: 'Tyhjennä haku' }).click()
     await expect(showSearchInput).toHaveValue('')
-    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti', { exact: true })).toBeVisible()
   })
 
   test('show winners summary and PU/PN chips render from the whole-show cache', async ({ page }) => {

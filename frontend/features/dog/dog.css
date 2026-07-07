@@ -1124,6 +1124,11 @@
   margin-bottom: 1.5rem;
   overflow: hidden;
 }
+/* Inside an expanded breed row the honor roll sits between the actions link
+   and the result cards — tighter spacing than the standalone breed page. */
+.dog-breed-group-awards {
+  margin: 0 0 0.75rem;
+}
 .dog-award-card {
   display: flex;
   align-items: center;
