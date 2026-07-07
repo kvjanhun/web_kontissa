@@ -53,7 +53,7 @@ function onBrandClick(event) {
 
     <div class="dog-top-center">
       <span class="dog-top-divider" aria-hidden="true"></span>
-      <button v-if="currentView === 'detail'" class="dog-back-link" aria-label="Näyttelyt" @click="$emit('go-list')">
+      <button v-if="currentView === 'detail' || currentView === 'dog'" class="dog-back-link" aria-label="Näyttelyt" @click="$emit('go-list')">
         <svg class="dog-back-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="160 208 80 128 160 48" />
         </svg>

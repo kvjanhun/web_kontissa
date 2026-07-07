@@ -39,20 +39,23 @@ Query state:
 - No query opens the show list.
 - `?show=<show_id>` opens one show.
 - `?show=<show_id>&group=<group>&breed=<breed>` opens one breed result page.
+- `?dog=<reg_id>` opens a cross-show dog profile (`DogProfileView.vue`, `currentView === 'dog'`). Reg ids contain a slash (`FI44694/25`), so the value stays a query param and is `encodeURIComponent`-ed when fetching.
 
 Client API calls:
 
 - `GET /api/dog/shows`: show list, index status, and compact row stats.
-- `GET /api/dog/search?q=<query>`: indexed show, breed, and judge search (two-char minimum); three-plus-char queries also match dog names and owners across all captured shows. The backend orders results by show date, newest first, across every match type — render them in response order. Results carry a `match` type (`show`/`breed`/`judge`/`dog`/`owner`) that `DogShowListView.vue` renders as a tag; a `dog` hit opens its show with the whole-show search pre-filled to the dog's name (`onSelectSearchResult`).
+- `GET /api/dog/search?q=<query>`: indexed show, breed, and judge search (two-char minimum); three-plus-char queries also match dogs, owners, and breeder-award kennels across all captured shows. The backend orders results by show date, newest first, across every match type — render them in response order. Results carry a `match` type (`show`/`breed`/`judge`/`dog`/`owner`/`kennel`) that `DogShowListView.vue` renders as a tag. A `dog` hit with a `reg_id` opens the dog profile; a reg-less `dog` hit opens its show with the whole-show search pre-filled to the dog's name; `owner`/`kennel` hits carry `group`/`breed_id` and open that breed's result page, where the honor roll shows the match (`onSelectSearchResult`).
 - `GET /api/dog/shows/<show_id>`: show detail and breed list.
 - `GET /api/dog/shows/<show_id>/results?group=<group>&breed=<breed>`: one breed result page.
 - `GET /api/dog/shows/<show_id>/all-results`: whole-show persisted cache. A warming response keeps the progress card visible and should be polled using `retry_after`.
+- `GET /api/dog/dogs?reg=<reg_id>`: the dog profile — every captured result for one registration number, entries pre-sorted newest show first. One request per profile; no polling.
 
 The frontend must not fan out across all breed result pages. Any full-show filtering must go through `/all-results`.
 
 ## Behavior To Preserve
 
-- Empty list search browses by month; two or more characters uses backend indexed search (show/breed/judge), and three or more also returns cross-show dog-name / owner matches tagged `Koira` / `Omistaja`.
+- Empty list search browses by month; two or more characters uses backend indexed search (show/breed/judge), and three or more also returns cross-show matches tagged `Koira` / `Omistaja` / `Kasvattaja`. Registered-dog hits are one row per dog (career counts, opens the profile); reg-less dog rows keep the per-show open-and-prefill behavior.
+- The dog profile (`?dog=`) groups entries by show, newest first; the show header opens the show and the breed line above each card opens that breed's result page. Loading/error/empty states go through `DogStateBlock`; the top bar shows the same `Näyttelyt` back link as the detail view.
 - While indexing is incomplete, the list polls `/api/dog/shows` for index stats.
 - Live rows display `Käynnissä` and result progress as `n/N tulosta` when available. A
   multi-day show in its nightly/evening lull (backend `stats.is_paused`) instead shows

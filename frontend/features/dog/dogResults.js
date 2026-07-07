@@ -48,6 +48,21 @@ export function isNumericString(value) {
   return /^\d+$/.test(String(value))
 }
 
+// Captured rows carry the raw Showlink section heading ("Urokset"/"Nartut");
+// E2E fixtures and older docs use the singular forms. Normalize both so gender
+// display and filtering work on real data.
+export function normalizeGender(value) {
+  const gender = String(value || '').toLowerCase().trim()
+  if (gender.startsWith('uros')) return 'uros'
+  if (gender.startsWith('nartt')) return 'narttu'
+  return ''
+}
+
+export function genderSymbol(value) {
+  const gender = normalizeGender(value)
+  return gender === 'uros' ? '♂' : gender === 'narttu' ? '♀' : ''
+}
+
 export function normalizeGrade(grade) {
   return (grade || '').toLowerCase().trim()
 }

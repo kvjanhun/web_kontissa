@@ -213,6 +213,7 @@ URL state is kept in query params:
 
 - `?show=<show_id>` opens a show.
 - `?show=<show_id>&group=<group>&breed=<breed>` opens a breed result page.
+- `?dog=<reg_id>` opens the cross-show dog profile (one `GET /api/dog/dogs` request; entries grouped by show, newest first; the show header and per-entry breed line deep-link back into the show/breed views).
 
 Important UI behavior:
 

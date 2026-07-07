@@ -1,6 +1,7 @@
 <script setup>
 import { computed, watch } from 'vue'
 import DogBreedResultsView from './components/DogBreedResultsView.vue'
+import DogProfileView from './components/DogProfileView.vue'
 import DogShowDetailView from './components/DogShowDetailView.vue'
 import DogShowListView from './components/DogShowListView.vue'
 import DogTopBar from './components/DogTopBar.vue'
@@ -37,6 +38,9 @@ const {
   allDogsProgressPercent,
   allDogsProgressText,
   allDogsAvailability,
+  dogProfile,
+  dogProfileLoading,
+  dogProfileError,
   collapsedMonths,
   expandedCritiques,
   showSearchPlaceholder,
@@ -77,6 +81,8 @@ const {
   goToDetail,
   openShow,
   openBreed,
+  openProfileEntry,
+  retryDogProfile,
   onBreedGroupClick,
   isBreedGroupExpanded,
   toggleMonth,
@@ -87,6 +93,7 @@ const {
 const pageTitle = computed(() => {
   if (currentView.value === 'detail') return showDetail.value?.title || selectedShow.value?.name || ''
   if (currentView.value === 'results') return breedResults.value?.breed || selectedBreed.value?.name || ''
+  if (currentView.value === 'dog') return dogProfile.value?.name || 'Koiraprofiili'
   return 'Näyttelytulokset'
 })
 
@@ -175,6 +182,20 @@ watch(pageTitle, (title) => {
         @toggle-all-critiques="toggleAllCritiques"
         @toggle-breed-section="toggleBreedSection"
         @toggle-all-breed-sections="toggleAllBreedSections"
+      />
+
+      <DogProfileView
+        v-else-if="currentView === 'dog'"
+        key="dog"
+        :dog-profile="dogProfile"
+        :profile-loading="dogProfileLoading"
+        :profile-error="dogProfileError"
+        :expanded-critiques="expandedCritiques"
+        @retry-profile="retryDogProfile"
+        @open-entry="openProfileEntry"
+        @open-show="openShow"
+        @toggle-critique="toggleCritique"
+        @go-list="goToList"
       />
 
       <DogBreedResultsView

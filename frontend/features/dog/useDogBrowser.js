@@ -82,6 +82,13 @@ export function useDogBrowser() {
   const allDogsResults = ref([])
   const allDogsProgress = ref(null)
 
+  // Cross-show dog profile (?dog=<reg_id>). The reg number contains a slash
+  // (FI44694/25), so it lives in a query param and is URL-encoded on fetch.
+  const selectedDogReg = ref('')
+  const dogProfile = ref(null)
+  const dogProfileLoading = ref(false)
+  const dogProfileError = ref('')
+
   const collapsedMonths = ref(new Set())
   const expandedCritiques = ref(new Set())
   const expandedBreedGroups = ref(new Set())
@@ -159,6 +166,7 @@ export function useDogBrowser() {
       showId: firstQueryValue(route.query.show),
       groupId: firstQueryValue(route.query.group),
       breedId: firstQueryValue(route.query.breed),
+      dogReg: firstQueryValue(route.query.dog),
     }
   }
 
@@ -170,6 +178,10 @@ export function useDogBrowser() {
     showDetail.value = null
     selectedBreed.value = null
     breedResults.value = null
+    selectedDogReg.value = ''
+    dogProfile.value = null
+    dogProfileLoading.value = false
+    dogProfileError.value = ''
     detailLoading.value = false
     detailError.value = ''
     resultsLoading.value = false
@@ -595,6 +607,34 @@ export function useDogBrowser() {
     }
   }
 
+  async function fetchDogProfile(regId, options = {}) {
+    const { syncToken = null } = options
+    selectedDogReg.value = regId
+    currentView.value = 'dog'
+    dogProfileLoading.value = true
+    dogProfileError.value = ''
+    dogProfile.value = null
+    expandedCritiques.value = new Set()
+    try {
+      const data = await $fetch(`/api/dog/dogs?reg=${encodeURIComponent(regId)}`)
+      if (syncToken !== null && syncToken !== routeSyncToken) return
+      dogProfile.value = data
+    } catch (error) {
+      if (syncToken !== null && syncToken !== routeSyncToken) return
+      dogProfileError.value = (error?.status || error?.statusCode) === 404
+        ? 'Koiraa ei löytynyt.'
+        : 'Koiran tietojen lataaminen epäonnistui.'
+    } finally {
+      if (syncToken === null || syncToken === routeSyncToken) {
+        dogProfileLoading.value = false
+      }
+    }
+  }
+
+  function retryDogProfile() {
+    if (selectedDogReg.value) fetchDogProfile(selectedDogReg.value)
+  }
+
   function onSearchInput() {
     clearTimeout(searchTimer)
     const query = filterText.value.trim()
@@ -638,10 +678,23 @@ export function useDogBrowser() {
         breed: result.breed.breed_id,
       }, { scrollToTop: true })
     }
-    // A dog-name hit opens the show and pre-fills the whole-show search with the
-    // matched dog's name, so the auto-loaded results land straight on that dog.
-    // fetchShowDetail does not clear breedSearchQuery, so setting it before the
-    // route change survives the navigation.
+    // A registered dog opens its cross-show profile.
+    if (result.match === 'dog' && result.reg_id) {
+      return openDogProfile(result.reg_id)
+    }
+    // Owner/kennel hits come from a breed honor roll and carry its coordinates,
+    // so they open the exact breed result page where that honor roll is shown.
+    if ((result.match === 'owner' || result.match === 'kennel') && result.group && result.breed_id) {
+      return pushDogQuery({
+        show: result.show.id,
+        group: result.group,
+        breed: result.breed_id,
+      }, { scrollToTop: true })
+    }
+    // A reg-less dog hit opens the show and pre-fills the whole-show search with
+    // the matched dog's name, so the auto-loaded results land straight on that
+    // dog. fetchShowDetail does not clear breedSearchQuery, so setting it before
+    // the route change survives the navigation.
     if (result.match === 'dog' && result.dog) {
       breedSearchQuery.value = result.dog
     }
@@ -670,6 +723,23 @@ export function useDogBrowser() {
       group: breed.group,
       breed: breed.breed_id,
     }, { scrollToTop: true })
+  }
+
+  function openDogProfile(regId) {
+    if (!regId) return
+    return pushDogQuery({ dog: regId }, { scrollToTop: true })
+  }
+
+  function openProfileEntry(entry) {
+    if (!entry?.show?.id) return
+    if (entry.fci_group && entry.breed_id) {
+      return pushDogQuery({
+        show: entry.show.id,
+        group: entry.fci_group,
+        breed: entry.breed_id,
+      }, { scrollToTop: true })
+    }
+    return pushDogQuery({ show: entry.show.id }, { scrollToTop: true })
   }
 
   function onBreedGroupClick(group) {
@@ -793,6 +863,7 @@ export function useDogBrowser() {
     firstQueryValue(route.query.show) || '',
     firstQueryValue(route.query.group) || '',
     firstQueryValue(route.query.breed) || '',
+    firstQueryValue(route.query.dog) || '',
   ].join('|'))
 
   watch(resultBreedFilterAvailable, (available, wasAvailable) => {
@@ -843,7 +914,23 @@ export function useDogBrowser() {
 
   async function syncRouteState() {
     const syncToken = ++routeSyncToken
-    const { showId, groupId, breedId } = getRouteSelection()
+    const { showId, groupId, breedId, dogReg } = getRouteSelection()
+
+    // ?dog=<reg_id> owns the route: the profile view is a top-level screen.
+    if (dogReg) {
+      const profileMatches = dogProfile.value && dogProfile.value.reg_id === dogReg
+      if (!profileMatches) {
+        await fetchDogProfile(dogReg, { syncToken })
+        if (syncToken !== routeSyncToken) return
+      } else {
+        selectedDogReg.value = dogReg
+        currentView.value = 'dog'
+        dogProfileLoading.value = false
+        dogProfileError.value = ''
+      }
+      scrollDogPageToTop()
+      return
+    }
 
     if (!showId || !isNumericString(showId)) {
       resetDogSelection()
@@ -973,6 +1060,10 @@ export function useDogBrowser() {
     allDogsProgressPercent,
     allDogsProgressText,
     allDogsAvailability,
+    selectedDogReg,
+    dogProfile,
+    dogProfileLoading,
+    dogProfileError,
     collapsedMonths,
     expandedCritiques,
     showSearchPlaceholder,
@@ -1015,6 +1106,9 @@ export function useDogBrowser() {
     goToDetail,
     openShow,
     openBreed,
+    openDogProfile,
+    openProfileEntry,
+    retryDogProfile,
     onBreedGroupClick,
     isBreedGroupExpanded,
     toggleMonth,

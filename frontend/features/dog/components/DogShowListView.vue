@@ -124,7 +124,7 @@ defineEmits([
       <div v-else-if="searchResults.length" class="dog-search-results-list">
         <button
           v-for="result in searchResults"
-          :key="result.show.id + '-' + result.match + '-' + (result.breed ? result.breed.breed_id : '')"
+          :key="result.show.id + '-' + result.match + '-' + (result.breed ? result.breed.breed_id : (result.reg_id || result.dog || result.owner || result.kennel || '') + '-' + (result.breed_id || ''))"
           class="dog-show-row"
           @click="$emit('select-search-result', result)"
         >
@@ -164,13 +164,24 @@ defineEmits([
               <span v-else-if="result.match === 'dog'" class="dog-search-breed-tag">
                 Koira
                 <span v-if="result.dog" class="dog-search-judge-sub">
-                  {{ result.dog }}<template v-if="result.dog_match_count > 1"> +{{ result.dog_match_count - 1 }} muuta</template>
+                  <template v-if="result.reg_id">
+                    {{ result.dog }} · {{ result.show_count }} {{ result.show_count === 1 ? 'näyttely' : 'näyttelyä' }} · {{ result.dog_match_count }} {{ result.dog_match_count === 1 ? 'tulos' : 'tulosta' }}
+                  </template>
+                  <template v-else>
+                    {{ result.dog }}<template v-if="result.dog_match_count > 1"> +{{ result.dog_match_count - 1 }} muuta</template>
+                  </template>
                 </span>
               </span>
               <span v-else-if="result.match === 'owner'" class="dog-search-breed-tag">
                 Omistaja
                 <span v-if="result.owner" class="dog-search-judge-sub">
-                  {{ result.owner }}<template v-if="result.owner_match_count > 1"> · {{ result.owner_match_count }} tulosta</template>
+                  {{ result.owner }}<template v-if="result.winner"> · {{ result.winner }}</template><template v-if="result.breed_name"> ({{ result.breed_name }})</template>
+                </span>
+              </span>
+              <span v-else-if="result.match === 'kennel'" class="dog-search-breed-tag">
+                Kasvattaja
+                <span v-if="result.kennel" class="dog-search-judge-sub">
+                  {{ result.kennel }}<template v-if="result.breed_name"> ({{ result.breed_name }})</template>
                 </span>
               </span>
               <span v-else class="dog-search-breed-tag">Näyttely</span>

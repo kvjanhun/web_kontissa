@@ -164,7 +164,7 @@ test.describe('Dog Show Browser', () => {
     await expect(page.getByRole('button', { name: /Paula Steele/ })).toHaveCount(0)
   })
 
-  test('search surfaces dog-name and owner matches with their own tags', async ({ page }) => {
+  test('search surfaces dog, owner, and kennel matches with their own tags', async ({ page }) => {
     await page.route('**/api/dog/shows', async route => {
       await route.fulfill({
         contentType: 'application/json',
@@ -181,12 +181,25 @@ test.describe('Dog Show Browser', () => {
           query: 'tähti',
           results: [
             {
+              // Registered dog: aggregated across shows, opens the profile.
+              show: { id: 14041, date: YESTERDAY_FULL_DATE, name: 'Näyttely C', month: 'Tällä viikolla' },
+              breed: null, match: 'dog', dog: 'Iltatähti', reg_id: 'FI11111/20', gender: 'Nartut',
+              dog_match_count: 5, show_count: 4,
+            },
+            {
+              // Reg-less fallback: per-show hit, opens the show pre-filled.
               show: { id: 14042, date: YESTERDAY_FULL_DATE, name: 'Näyttely A', month: 'Tällä viikolla' },
               breed: null, match: 'dog', dog: 'Aamun Tähti', dog_match_count: 3,
             },
             {
               show: { id: 15050, date: YESTERDAY_FULL_DATE, name: 'Näyttely B', month: 'Tällä viikolla' },
-              breed: null, match: 'owner', owner: 'Tähti Pia', owner_match_count: 4,
+              breed: null, match: 'owner', owner: 'Tähti Pia', winner: 'Voittaja Koira',
+              group: '2', breed_id: '143', breed_name: 'rottweiler', owner_match_count: 4,
+            },
+            {
+              show: { id: 15050, date: YESTERDAY_FULL_DATE, name: 'Näyttely B', month: 'Tällä viikolla' },
+              breed: null, match: 'kennel', kennel: "Tähtikennel's", owner: 'Tähti Pia',
+              group: '2', breed_id: '143', breed_name: 'rottweiler', kennel_match_count: 1,
             },
           ],
           index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
@@ -208,17 +221,142 @@ test.describe('Dog Show Browser', () => {
     await page.goto('/dog')
     await page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...').fill('tähti')
 
-    await expect(page.locator('.dog-search-breed-tag', { hasText: 'Koira' })).toBeVisible()
+    await expect(page.locator('.dog-search-breed-tag', { hasText: 'Koira' }).first()).toBeVisible()
+    await expect(page.getByText('Iltatähti · 4 näyttelyä · 5 tulosta')).toBeVisible()
     await expect(page.getByText('Aamun Tähti +2 muuta')).toBeVisible()
     await expect(page.locator('.dog-search-breed-tag', { hasText: 'Omistaja' })).toBeVisible()
-    await expect(page.getByText('Tähti Pia · 4 tulosta')).toBeVisible()
+    await expect(page.getByText('Tähti Pia · Voittaja Koira (rottweiler)')).toBeVisible()
+    await expect(page.locator('.dog-search-breed-tag', { hasText: 'Kasvattaja' })).toBeVisible()
+    await expect(page.getByText("Tähtikennel's (rottweiler)")).toBeVisible()
 
-    // A dog hit opens its show and pre-fills the whole-show search with the dog name.
-    // (The cache stays "warming" here, so the input keeps its unloaded placeholder;
-    // assert the value by the input's class rather than the widened placeholder.)
+    // A reg-less dog hit opens its show and pre-fills the whole-show search with
+    // the dog name. (The cache stays "warming" here, so the input keeps its
+    // unloaded placeholder; assert the value by the input's class.)
     await page.getByRole('button', { name: /Aamun Tähti/ }).click()
     await expect(page).toHaveURL(/\/dog\?show=14042$/)
     await expect(page.locator('.dog-breed-search .dog-search-input')).toHaveValue('Aamun Tähti')
+  })
+
+  test('a registered dog search hit opens the cross-show profile', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+    await page.route('**/api/dog/search**', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          query: 'iltatähti',
+          results: [
+            {
+              show: { id: 14041, date: YESTERDAY_FULL_DATE, name: 'Näyttely C', month: 'Tällä viikolla' },
+              breed: null, match: 'dog', dog: 'Iltatähti', reg_id: 'FI11111/20', gender: 'Nartut',
+              dog_match_count: 2, show_count: 2,
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+    await page.route('**/api/dog/dogs**', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          reg_id: 'FI11111/20',
+          name: 'Iltatähti',
+          gender: 'Nartut',
+          reg_url: 'https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20',
+          owner: 'Tähti Pia',
+          show_count: 2,
+          result_count: 2,
+          entries: [
+            {
+              show: { id: 14041, name: 'Näyttely C', title: `${YESTERDAY_FULL_DATE} Näyttely C`, date: YESTERDAY_FULL_DATE, month: CURRENT_MONTH_LABEL },
+              breed_name: 'rottweiler', fci_group: '2', breed_id: '143', judge: 'Tarja Kolkka',
+              class_name: 'AVO', grade: 'ERI', placement: 1, competitive_placement: 'PN1',
+              awards: 'SERT, ROP', critique: 'Erinomainen kokonaisuus.', number: 12,
+              reg_url: 'https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20',
+              gender: 'Nartut',
+            },
+            {
+              show: { id: 13000, name: 'Vanha Näyttely', title: '10.05.2025 Vanha Näyttely', date: '10.05.2025', month: 'toukokuu 2025' },
+              breed_name: 'rottweiler', fci_group: '2', breed_id: '143', judge: 'J Toinen',
+              class_name: 'JUN', grade: 'EH', placement: 2, competitive_placement: '',
+              awards: '', critique: '', number: 8,
+              reg_url: 'https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20',
+              gender: 'Nartut',
+            },
+          ],
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByPlaceholder('Hae näyttelyä, rotua, tuomaria tai koiraa...').fill('iltatähti')
+    await page.getByRole('button', { name: /Iltatähti/ }).click()
+
+    // Profile view: header identity + per-show groups, newest first.
+    await expect(page).toHaveURL(/\/dog\?dog=FI11111(%2F|\/)20/)
+    await expect(page.locator('.dog-profile-name')).toHaveText(/Iltatähti/)
+    await expect(page.locator('.dog-profile-reg')).toHaveText('FI11111/20')
+    await expect(page.getByText('Om. Tähti Pia')).toBeVisible()
+    await expect(page.getByText('2 näyttelyä · 2 tulosta')).toBeVisible()
+    const showHeads = page.locator('.dog-profile-show-name')
+    await expect(showHeads).toHaveCount(2)
+    await expect(showHeads.nth(0)).toHaveText('Näyttely C')
+    await expect(showHeads.nth(1)).toHaveText('Vanha Näyttely')
+    await expect(page.getByText('SERT', { exact: true })).toBeVisible()
+
+    // Back to the list via the top-bar back link.
+    await page.getByRole('button', { name: 'Näyttelyt' }).click()
+    await expect(page).toHaveURL(/\/dog$/)
+  })
+
+  test('a dog profile deep link loads directly', async ({ page }) => {
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+    await page.route('**/api/dog/dogs**', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          reg_id: 'FI22222/21',
+          name: 'Suora Linkki',
+          gender: 'Urokset',
+          reg_url: 'https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21',
+          owner: null,
+          show_count: 1,
+          result_count: 1,
+          entries: [
+            {
+              show: { id: 14041, name: 'Näyttely C', title: `${YESTERDAY_FULL_DATE} Näyttely C`, date: YESTERDAY_FULL_DATE, month: CURRENT_MONTH_LABEL },
+              breed_name: 'basenji', fci_group: '5', breed_id: '3', judge: 'Tarja Kolkka',
+              class_name: 'AVO', grade: 'ERI', placement: 1, competitive_placement: 'PU2',
+              awards: 'VASERT', critique: '', number: 3,
+              reg_url: 'https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21',
+              gender: 'Urokset',
+            },
+          ],
+        }),
+      })
+    })
+
+    await page.goto('/dog?dog=FI22222%2F21')
+
+    await expect(page.locator('.dog-profile-name')).toHaveText(/Suora Linkki/)
+    await expect(page.getByText('1 näyttely · 1 tulos')).toBeVisible()
+    await expect(page.getByText('VASERT')).toBeVisible()
   })
 
   test('paused multi-day show shows Jatkuu, today’s results, and a date range', async ({ page }) => {
