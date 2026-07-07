@@ -226,6 +226,7 @@ Important UI behavior:
 - On the show date after 06:00, whole-show data auto-loads but the UI warns that classes and results can fill in gradually as the day progresses.
 - While `/all-results` is warming (live or still-crawling shows), the page shows an animated progress card and polls the API using `retry_after`.
 - Grade filtering keeps `HYL`, `EVA`, and `POISSA` separate.
+- Both filter panels (whole-show and single-breed) also filter by gender (`Sukupuoli`) and PU/PN best-of-sex placement, with per-option counts. Stored gender values are the raw Showlink headings `Urokset`/`Nartut`; the frontend normalizes them (`normalizeGender` in `dogResults.js`) for display and filtering.
 
 ## Operational Commands
 

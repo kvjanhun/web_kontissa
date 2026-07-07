@@ -52,6 +52,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  dogGenderFilter: {
+    type: String,
+    default: '',
+  },
+  dogPlacementFilter: {
+    type: String,
+    default: '',
+  },
   allDogsLoaded: {
     type: Boolean,
     default: false,
@@ -89,6 +97,14 @@ const props = defineProps({
     default: () => [],
   },
   availableShowAwards: {
+    type: Array,
+    default: () => [],
+  },
+  availableShowGenders: {
+    type: Array,
+    default: () => [],
+  },
+  availableShowPlacements: {
     type: Array,
     default: () => [],
   },
@@ -155,6 +171,8 @@ const emit = defineEmits([
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
+  'update:dogGenderFilter',
+  'update:dogPlacementFilter',
   'update:showGroupMode',
   'retry-all-dogs',
   'breed-group-click',
@@ -252,6 +270,8 @@ function toggleAllVisibleCritiques() {
         :dog-grade-filter="dogGradeFilter"
         :dog-class-filter="dogClassFilter"
         :dog-award-filter="dogAwardFilter"
+        :dog-gender-filter="dogGenderFilter"
+        :dog-placement-filter="dogPlacementFilter"
         :all-dogs-loaded="allDogsLoaded"
         :all-dogs-loading="allDogsLoading"
         :all-dogs-error="allDogsError"
@@ -262,11 +282,15 @@ function toggleAllVisibleCritiques() {
         :available-show-grades="availableShowGrades"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
+        :available-show-genders="availableShowGenders"
+        :available-show-placements="availableShowPlacements"
         @update:breedSearchQuery="$emit('update:breedSearchQuery', $event)"
         @update:resultBreedsOnly="$emit('update:resultBreedsOnly', $event)"
         @update:dogGradeFilter="$emit('update:dogGradeFilter', $event)"
         @update:dogClassFilter="$emit('update:dogClassFilter', $event)"
         @update:dogAwardFilter="$emit('update:dogAwardFilter', $event)"
+        @update:dogGenderFilter="$emit('update:dogGenderFilter', $event)"
+        @update:dogPlacementFilter="$emit('update:dogPlacementFilter', $event)"
         @retry-all-dogs="$emit('retry-all-dogs')"
       />
 

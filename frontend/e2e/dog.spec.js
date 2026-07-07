@@ -692,9 +692,11 @@ test.describe('Dog Show Browser', () => {
               reg_url: '',
               grade: 'ERI',
               placement: 1,
+              competitive_placement: 'PU1',
               awards: '',
               critique: 'Hieno basenji',
-              gender: 'uros',
+              // Real captured rows carry the plural section headings, not 'uros'.
+              gender: 'Urokset',
               class_name: 'JUN',
               breedName: 'Basenji',
               breedGroup: '6',
@@ -713,9 +715,10 @@ test.describe('Dog Show Browser', () => {
               reg_url: '',
               grade: 'EH',
               placement: 2,
+              competitive_placement: 'PN1',
               awards: '',
               critique: '',
-              gender: 'narttu',
+              gender: 'Nartut',
               class_name: 'NUO',
               breedName: 'Basenji',
               breedGroup: '6',
@@ -763,6 +766,21 @@ test.describe('Dog Show Browser', () => {
     // Aamun Tähti (ERI) should be visible, Iltatähti (EH) should be hidden
     await expect(page.getByText('Aamun Tähti')).toBeVisible()
     await expect(page.getByText('Iltatähti')).not.toBeVisible()
+    await page.locator('select').first().selectOption('')
+
+    // Gender filter: real rows carry 'Urokset'/'Nartut'; the filter normalizes.
+    const genderSelect = page.locator('select').filter({ has: page.locator('option[value="narttu"]') })
+    await genderSelect.selectOption('narttu')
+    await expect(page.getByText('Iltatähti')).toBeVisible()
+    await expect(page.getByText('Aamun Tähti')).not.toBeVisible()
+    await genderSelect.selectOption('')
+
+    // PU/PN best-of-sex placement filter.
+    const placementSelect = page.locator('select').filter({ has: page.locator('option[value="PU"]') })
+    await placementSelect.selectOption('PU')
+    await expect(page.getByText('Aamun Tähti')).toBeVisible()
+    await expect(page.getByText('Iltatähti')).not.toBeVisible()
+    await placementSelect.selectOption('')
 
     // Search text for 'Aamun'
     await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Aamun')

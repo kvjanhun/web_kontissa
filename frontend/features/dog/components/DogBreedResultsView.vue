@@ -4,7 +4,7 @@ import DogMetaBar from './DogMetaBar.vue'
 import DogResultCard from './DogResultCard.vue'
 import DogResultFilters from './DogResultFilters.vue'
 import DogStateBlock from './DogStateBlock.vue'
-import { sortBreedAwards } from '../dogResults.js'
+import { genderSymbol, normalizeGender, sortBreedAwards } from '../dogResults.js'
 
 const props = defineProps({
   breedResults: {
@@ -43,6 +43,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  dogGenderFilter: {
+    type: String,
+    default: '',
+  },
+  dogPlacementFilter: {
+    type: String,
+    default: '',
+  },
   availableGrades: {
     type: Array,
     default: () => [],
@@ -52,6 +60,14 @@ const props = defineProps({
     default: () => [],
   },
   availableAwards: {
+    type: Array,
+    default: () => [],
+  },
+  availableGenders: {
+    type: Array,
+    default: () => [],
+  },
+  availablePlacements: {
     type: Array,
     default: () => [],
   },
@@ -75,6 +91,8 @@ const emit = defineEmits([
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
+  'update:dogGenderFilter',
+  'update:dogPlacementFilter',
   'toggle-critique',
   'toggle-all-critiques',
 ])
@@ -171,13 +189,19 @@ function toggleAllVisible() {
         :grade-filter="dogGradeFilter"
         :class-filter="dogClassFilter"
         :award-filter="dogAwardFilter"
+        :gender-filter="dogGenderFilter"
+        :placement-filter="dogPlacementFilter"
         :grade-options="availableGrades"
         :available-classes="availableClasses"
         :available-awards="availableAwards"
+        :available-genders="availableGenders"
+        :available-placements="availablePlacements"
         @update:searchQuery="$emit('update:dogSearchQuery', $event)"
         @update:gradeFilter="$emit('update:dogGradeFilter', $event)"
         @update:classFilter="$emit('update:dogClassFilter', $event)"
         @update:awardFilter="$emit('update:dogAwardFilter', $event)"
+        @update:genderFilter="$emit('update:dogGenderFilter', $event)"
+        @update:placementFilter="$emit('update:dogPlacementFilter', $event)"
       />
 
       <div class="dog-results-meta-row-header">
@@ -240,8 +264,8 @@ function toggleAllVisible() {
           class="dog-gender-group"
         >
           <h2 class="dog-gender-heading">
-            <span class="dog-gender-symbol">{{ gender === 'uros' ? '♂' : gender === 'narttu' ? '♀' : '🐾' }}</span>
-            {{ gender === 'uros' ? 'Urokset' : gender === 'narttu' ? 'Nartut' : gender }}
+            <span class="dog-gender-symbol">{{ genderSymbol(gender) || '🐾' }}</span>
+            {{ normalizeGender(gender) === 'uros' ? 'Urokset' : normalizeGender(gender) === 'narttu' ? 'Nartut' : gender }}
           </h2>
 
           <div v-for="(dogs, className) in classes" :key="className" class="dog-class-section">

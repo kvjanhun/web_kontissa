@@ -3,7 +3,9 @@ import { useRoute, useRouter } from '#app'
 import {
   availableAwardsFromResults,
   availableClassesFromResults,
+  availableGendersFromResults,
   availableGradesFromResults,
+  availablePlacementsFromResults,
   buildDogQuery,
   buildShowWinnersGroups,
   createShowBreedGroups,
@@ -75,6 +77,8 @@ export function useDogBrowser() {
   const dogGradeFilter = ref('')
   const dogClassFilter = ref('')
   const dogAwardFilter = ref('')
+  const dogGenderFilter = ref('')
+  const dogPlacementFilter = ref('')
 
   const allDogsLoading = ref(false)
   const allDogsLoaded = ref(false)
@@ -197,6 +201,8 @@ export function useDogBrowser() {
     dogGradeFilter.value = ''
     dogClassFilter.value = ''
     dogAwardFilter.value = ''
+    dogGenderFilter.value = ''
+    dogPlacementFilter.value = ''
 
     allDogsLoading.value = false
     allDogsLoaded.value = false
@@ -296,6 +302,8 @@ export function useDogBrowser() {
       grade: dogGradeFilter.value,
       className: dogClassFilter.value,
       award: dogAwardFilter.value,
+      gender: dogGenderFilter.value,
+      placement: dogPlacementFilter.value,
     }))
     return sortDogsByAwardFilter(filtered, dogAwardFilter.value)
   })
@@ -306,7 +314,9 @@ export function useDogBrowser() {
       resultBreedsOnly.value ||
       dogGradeFilter.value ||
       dogClassFilter.value ||
-      dogAwardFilter.value
+      dogAwardFilter.value ||
+      dogGenderFilter.value ||
+      dogPlacementFilter.value
     )
   ))
 
@@ -321,6 +331,8 @@ export function useDogBrowser() {
       grade: dogGradeFilter.value,
       className: dogClassFilter.value,
       award: dogAwardFilter.value,
+      gender: dogGenderFilter.value,
+      placement: dogPlacementFilter.value,
     },
   }))
 
@@ -347,6 +359,8 @@ export function useDogBrowser() {
   ))
   const availableShowClasses = computed(() => availableClassesFromResults(allDogsResults.value || []))
   const availableShowAwards = computed(() => availableAwardsFromResults(allDogsResults.value || []))
+  const availableShowGenders = computed(() => availableGendersFromResults(allDogsResults.value || []))
+  const availableShowPlacements = computed(() => availablePlacementsFromResults(allDogsResults.value || []))
   const showAwardResultGroups = computed(() => groupResultsByAwardFilter(
     allDogsAfterShowFilters.value,
     dogAwardFilter.value,
@@ -899,6 +913,8 @@ export function useDogBrowser() {
     grade: dogGradeFilter.value,
     className: dogClassFilter.value,
     award: dogAwardFilter.value,
+    gender: dogGenderFilter.value,
+    placement: dogPlacementFilter.value,
   }))
 
   const availableGrades = computed(() => (
@@ -906,6 +922,8 @@ export function useDogBrowser() {
   ))
   const availableClasses = computed(() => availableClassesFromResults(breedResults.value?.results || []))
   const availableAwards = computed(() => availableAwardsFromResults(breedResults.value?.results || []))
+  const availableGenders = computed(() => availableGendersFromResults(breedResults.value?.results || []))
+  const availablePlacements = computed(() => availablePlacementsFromResults(breedResults.value?.results || []))
   const resultsByGenderAndClass = computed(() => groupResultsByGenderAndClass(filteredDogResults.value))
   const awardResultGroups = computed(() => groupResultsByAwardFilter(
     filteredDogResults.value,
@@ -1054,6 +1072,8 @@ export function useDogBrowser() {
     dogGradeFilter,
     dogClassFilter,
     dogAwardFilter,
+    dogGenderFilter,
+    dogPlacementFilter,
     allDogsLoading,
     allDogsLoaded,
     allDogsError,
@@ -1079,6 +1099,8 @@ export function useDogBrowser() {
     availableShowGrades,
     availableShowClasses,
     availableShowAwards,
+    availableShowGenders,
+    availableShowPlacements,
     showAwardResultGroups,
     showWinnersGroups,
     showRypByGroup,
@@ -1094,6 +1116,8 @@ export function useDogBrowser() {
     availableGrades,
     availableClasses,
     availableAwards,
+    availableGenders,
+    availablePlacements,
     resultsByGenderAndClass,
     awardResultGroups,
     loadAllShowResults,

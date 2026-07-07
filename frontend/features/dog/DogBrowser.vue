@@ -32,6 +32,8 @@ const {
   dogGradeFilter,
   dogClassFilter,
   dogAwardFilter,
+  dogGenderFilter,
+  dogPlacementFilter,
   allDogsLoading,
   allDogsLoaded,
   allDogsError,
@@ -56,6 +58,8 @@ const {
   availableShowGrades,
   availableShowClasses,
   availableShowAwards,
+  availableShowGenders,
+  availableShowPlacements,
   showAwardResultGroups,
   showWinnersGroups,
   showRypByGroup,
@@ -69,6 +73,8 @@ const {
   availableGrades,
   availableClasses,
   availableAwards,
+  availableGenders,
+  availablePlacements,
   resultsByGenderAndClass,
   awardResultGroups,
   loadAllShowResults,
@@ -145,6 +151,8 @@ watch(pageTitle, (title) => {
         v-model:dog-grade-filter="dogGradeFilter"
         v-model:dog-class-filter="dogClassFilter"
         v-model:dog-award-filter="dogAwardFilter"
+        v-model:dog-gender-filter="dogGenderFilter"
+        v-model:dog-placement-filter="dogPlacementFilter"
         v-model:show-group-mode="showGroupMode"
         :show-detail="showDetail"
         :detail-loading="detailLoading"
@@ -162,6 +170,8 @@ watch(pageTitle, (title) => {
         :available-show-grades="availableShowGrades"
         :available-show-classes="availableShowClasses"
         :available-show-awards="availableShowAwards"
+        :available-show-genders="availableShowGenders"
+        :available-show-placements="availableShowPlacements"
         :show-breed-groups="showBreedGroups"
         :show-breed-sections="showBreedSections"
         :breed-grouping-available="breedGroupingAvailable"
@@ -205,6 +215,8 @@ watch(pageTitle, (title) => {
         v-model:dog-grade-filter="dogGradeFilter"
         v-model:dog-class-filter="dogClassFilter"
         v-model:dog-award-filter="dogAwardFilter"
+        v-model:dog-gender-filter="dogGenderFilter"
+        v-model:dog-placement-filter="dogPlacementFilter"
         :breed-results="breedResults"
         :results-loading="resultsLoading"
         :results-error="resultsError"
@@ -213,6 +225,8 @@ watch(pageTitle, (title) => {
         :available-grades="availableGrades"
         :available-classes="availableClasses"
         :available-awards="availableAwards"
+        :available-genders="availableGenders"
+        :available-placements="availablePlacements"
         :results-by-gender-and-class="resultsByGenderAndClass"
         :award-result-groups="awardResultGroups"
         :expanded-critiques="expandedCritiques"

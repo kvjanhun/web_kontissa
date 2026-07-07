@@ -56,6 +56,14 @@ const props = defineProps({
     type: String,
     default: '',
   },
+  dogGenderFilter: {
+    type: String,
+    default: '',
+  },
+  dogPlacementFilter: {
+    type: String,
+    default: '',
+  },
   availableShowGrades: {
     type: Array,
     default: () => [],
@@ -68,6 +76,14 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
+  availableShowGenders: {
+    type: Array,
+    default: () => [],
+  },
+  availableShowPlacements: {
+    type: Array,
+    default: () => [],
+  },
 })
 
 defineEmits([
@@ -76,11 +92,19 @@ defineEmits([
   'update:dogGradeFilter',
   'update:dogClassFilter',
   'update:dogAwardFilter',
+  'update:dogGenderFilter',
+  'update:dogPlacementFilter',
   'retry-all-dogs',
 ])
 
 const gradeOptions = computed(() => (
   props.availableShowGrades?.length ? props.availableShowGrades : DOG_GRADE_OPTIONS
+))
+const genderFilterAvailable = computed(() => (
+  props.availableShowGenders?.some(option => option.count > 0)
+))
+const placementFilterAvailable = computed(() => (
+  props.availableShowPlacements?.some(option => option.count > 0)
 ))
 </script>
 
@@ -168,6 +192,44 @@ const gradeOptions = computed(() => (
           <option value="">Kaikki luokat</option>
           <option v-for="className in availableShowClasses" :key="className" :value="className">
             {{ className }}
+          </option>
+        </select>
+      </div>
+
+      <div v-if="allDogsLoaded && genderFilterAvailable" class="dog-filter-col dog-show-gender-filter">
+        <label class="dog-filter-label">Sukupuoli</label>
+        <select
+          :value="dogGenderFilter"
+          class="dog-filter-select"
+          @change="$emit('update:dogGenderFilter', $event.target.value)"
+        >
+          <option
+            v-for="option in availableShowGenders"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.count === 0 && option.value !== dogGenderFilter"
+            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+          >
+            {{ gradeOptionLabel(option) }}
+          </option>
+        </select>
+      </div>
+
+      <div v-if="allDogsLoaded && placementFilterAvailable" class="dog-filter-col dog-show-placement-filter">
+        <label class="dog-filter-label">PU/PN-sijoitus</label>
+        <select
+          :value="dogPlacementFilter"
+          class="dog-filter-select"
+          @change="$emit('update:dogPlacementFilter', $event.target.value)"
+        >
+          <option
+            v-for="option in availableShowPlacements"
+            :key="option.value"
+            :value="option.value"
+            :disabled="option.count === 0 && option.value !== dogPlacementFilter"
+            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+          >
+            {{ gradeOptionLabel(option) }}
           </option>
         </select>
       </div>

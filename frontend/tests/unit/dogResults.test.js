@@ -1,8 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
   availableAwardsFromResults,
+  availableGendersFromResults,
   availableGradesFromResults,
+  availablePlacementsFromResults,
+  genderMatchesFilter,
+  genderSymbol,
   gradeOptionLabel,
+  normalizeGender,
+  placementMatchesFilter,
   awardMatchesFilter,
   buildDogQuery,
   buildShowWinnersGroups,
@@ -77,6 +83,72 @@ describe('gradeOptionLabel', () => {
   it('appends the count when present and leaves the "all" option bare', () => {
     expect(gradeOptionLabel({ label: 'ERI (Erinomainen)', count: 80 })).toBe('ERI (Erinomainen) — 80')
     expect(gradeOptionLabel({ label: 'Kaikki arvostelut', count: null })).toBe('Kaikki arvostelut')
+  })
+})
+
+describe('gender normalization', () => {
+  it('normalizes the raw Showlink headings and the singular forms alike', () => {
+    // Captured rows store the section heading ("Urokset"/"Nartut"), not the
+    // singular values older fixtures use — both must resolve identically.
+    expect(normalizeGender('Urokset')).toBe('uros')
+    expect(normalizeGender('uros')).toBe('uros')
+    expect(normalizeGender('Nartut')).toBe('narttu')
+    expect(normalizeGender('narttu')).toBe('narttu')
+    expect(normalizeGender('')).toBe('')
+    expect(normalizeGender('Muu')).toBe('')
+  })
+
+  it('maps genders to symbols', () => {
+    expect(genderSymbol('Urokset')).toBe('♂')
+    expect(genderSymbol('Nartut')).toBe('♀')
+    expect(genderSymbol('')).toBe('')
+  })
+
+  it('matches the gender filter through normalization', () => {
+    expect(genderMatchesFilter('Urokset', 'uros')).toBe(true)
+    expect(genderMatchesFilter('narttu', 'narttu')).toBe(true)
+    expect(genderMatchesFilter('Urokset', 'narttu')).toBe(false)
+    expect(genderMatchesFilter('Urokset', '')).toBe(true)
+  })
+})
+
+describe('availableGendersFromResults', () => {
+  it('annotates every option with counts from normalized genders', () => {
+    const options = availableGendersFromResults([
+      { gender: 'Urokset' },
+      { gender: 'uros' },
+      { gender: 'Nartut' },
+      { gender: '' },
+    ])
+    expect(options.map(option => [option.value, option.count])).toEqual([
+      ['', null],
+      ['uros', 2],
+      ['narttu', 1],
+    ])
+  })
+})
+
+describe('placement (PU/PN) filter', () => {
+  it('matches any rank of the chosen sex prefix', () => {
+    expect(placementMatchesFilter('PU1', 'PU')).toBe(true)
+    expect(placementMatchesFilter('PU4', 'PU')).toBe(true)
+    expect(placementMatchesFilter('PN2', 'PU')).toBe(false)
+    expect(placementMatchesFilter('', 'PU')).toBe(false)
+    expect(placementMatchesFilter('', '')).toBe(true)
+  })
+
+  it('annotates placement options with counts', () => {
+    const options = availablePlacementsFromResults([
+      { competitive_placement: 'PU1' },
+      { competitive_placement: 'PU3' },
+      { competitive_placement: 'PN1' },
+      { competitive_placement: '' },
+    ])
+    expect(options.map(option => [option.value, option.count])).toEqual([
+      ['', null],
+      ['PU', 2],
+      ['PN', 1],
+    ])
   })
 })
 
@@ -196,6 +268,29 @@ describe('award filters', () => {
     expect(filterDogResults(dogs, { award: 'SERT' }).map(dog => dog.name)).toEqual(['Plain certificate dog'])
     expect(dogMatchesShowFilters(dogs[1], { award: 'MVA' })).toBe(false)
     expect(dogMatchesShowFilters(dogs[2], { award: 'SERT' })).toBe(false)
+  })
+
+  it('uses the same gender and placement matching for breed and whole-show filters', () => {
+    const dogs = [
+      { name: 'Male winner', gender: 'Urokset', competitive_placement: 'PU1' },
+      { name: 'Female winner', gender: 'Nartut', competitive_placement: 'PN2' },
+      { name: 'Unplaced male', gender: 'uros', competitive_placement: '' },
+    ]
+
+    expect(filterDogResults(dogs, { gender: 'uros' }).map(dog => dog.name))
+      .toEqual(['Male winner', 'Unplaced male'])
+    expect(filterDogResults(dogs, { gender: 'narttu' }).map(dog => dog.name))
+      .toEqual(['Female winner'])
+    expect(filterDogResults(dogs, { placement: 'PU' }).map(dog => dog.name))
+      .toEqual(['Male winner'])
+    expect(filterDogResults(dogs, { placement: 'PN' }).map(dog => dog.name))
+      .toEqual(['Female winner'])
+
+    expect(dogMatchesShowFilters(dogs[0], { gender: 'uros' })).toBe(true)
+    expect(dogMatchesShowFilters(dogs[0], { gender: 'narttu' })).toBe(false)
+    expect(dogMatchesShowFilters(dogs[1], { placement: 'PN' })).toBe(true)
+    expect(dogMatchesShowFilters(dogs[2], { placement: 'PU' })).toBe(false)
+    expect(dogMatchesShowFilters(dogs[0], { gender: 'uros', placement: 'PU' })).toBe(true)
   })
 
   it('groups award-filtered results by category and orders ranked awards by placement', () => {

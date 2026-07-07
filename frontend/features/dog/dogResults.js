@@ -10,6 +10,19 @@ export const DOG_GRADE_OPTIONS = [
   { value: 'poissa', label: 'POISSA' },
 ]
 
+export const DOG_GENDER_OPTIONS = [
+  { value: '', label: 'Kaikki sukupuolet' },
+  { value: 'uros', label: '♂ Urokset' },
+  { value: 'narttu', label: '♀ Nartut' },
+]
+
+// Best-of-sex competition rank (competitive_placement: PU1–PU4 / PN1–PN4).
+export const DOG_PLACEMENT_OPTIONS = [
+  { value: '', label: 'Kaikki sijoitukset' },
+  { value: 'PU', label: 'PU (paras uros)' },
+  { value: 'PN', label: 'PN (paras narttu)' },
+]
+
 export function firstQueryValue(value) {
   return Array.isArray(value) ? value[0] : value
 }
@@ -50,11 +63,12 @@ export function isNumericString(value) {
 
 // Captured rows carry the raw Showlink section heading ("Urokset"/"Nartut");
 // E2E fixtures and older docs use the singular forms. Normalize both so gender
-// display and filtering work on real data.
+// display and filtering work on real data. The prefixes are three/four letters
+// because the plurals gradate: uros → urokset, narttu → nartut.
 export function normalizeGender(value) {
   const gender = String(value || '').toLowerCase().trim()
-  if (gender.startsWith('uros')) return 'uros'
-  if (gender.startsWith('nartt')) return 'narttu'
+  if (gender.startsWith('uro')) return 'uros'
+  if (gender.startsWith('nart')) return 'narttu'
   return ''
 }
 
@@ -74,6 +88,16 @@ export function gradeMatchesFilter(dogGrade, filter) {
   if (filter === 'eva') return grade === 'eva' || grade === 'ei voida arvostella'
   if (filter === 'poissa') return grade === 'poissa'
   return grade === filter
+}
+
+export function genderMatchesFilter(dogGender, filter) {
+  if (!filter) return true
+  return normalizeGender(dogGender) === filter
+}
+
+export function placementMatchesFilter(competitivePlacement, filter) {
+  if (!filter) return true
+  return String(competitivePlacement || '').toUpperCase().trim().startsWith(filter)
 }
 
 export function searchTextMatches(value, query) {
@@ -106,6 +130,12 @@ export function dogMatchesShowFilters(dog, filters = {}) {
 
   const award = String(filters.award || '').trim()
   if (award && !awardMatchesFilter(dog.awards, award)) return false
+
+  const gender = String(filters.gender || '').toLowerCase().trim()
+  if (gender && !genderMatchesFilter(dog.gender, gender)) return false
+
+  const placement = String(filters.placement || '').toUpperCase().trim()
+  if (placement && !placementMatchesFilter(dog.competitive_placement, placement)) return false
 
   return true
 }
@@ -175,7 +205,9 @@ export function createShowBreedGroups({
 
     const breedMatch = breedMatchesSearch(breed, q)
     const matchingDogs = q ? breedDogs.filter(dog => dogMatchesShowSearch(dog, q)) : breedDogs
-    const hasResultFilters = Boolean(filters.grade || filters.className || filters.award)
+    const hasResultFilters = Boolean(
+      filters.grade || filters.className || filters.award || filters.gender || filters.placement,
+    )
 
     if (q || hasResultFilters) {
       if (allDogsLoaded) {
@@ -831,6 +863,33 @@ export function gradeOptionLabel(option) {
   return `${option.label} — ${option.count}`
 }
 
+export function availableGendersFromResults(results = []) {
+  const counts = new Map()
+  for (const dog of results) {
+    const gender = normalizeGender(dog.gender)
+    if (gender) counts.set(gender, (counts.get(gender) || 0) + 1)
+  }
+  return DOG_GENDER_OPTIONS.map(option => ({
+    ...option,
+    count: option.value ? (counts.get(option.value) || 0) : null,
+  }))
+}
+
+export function availablePlacementsFromResults(results = []) {
+  const counts = new Map()
+  for (const dog of results) {
+    for (const option of DOG_PLACEMENT_OPTIONS) {
+      if (option.value && placementMatchesFilter(dog.competitive_placement, option.value)) {
+        counts.set(option.value, (counts.get(option.value) || 0) + 1)
+      }
+    }
+  }
+  return DOG_PLACEMENT_OPTIONS.map(option => ({
+    ...option,
+    count: option.value ? (counts.get(option.value) || 0) : null,
+  }))
+}
+
 export function availableAwardsFromResults(results = []) {
   const awardsSet = new Set()
   results.forEach(result => {
@@ -856,6 +915,8 @@ export function filterDogResults(results = [], filters = {}) {
   const grade = String(filters.grade || '').toLowerCase().trim()
   const className = String(filters.className || '').trim()
   const award = String(filters.award || '').trim()
+  const gender = String(filters.gender || '').toLowerCase().trim()
+  const placement = String(filters.placement || '').toUpperCase().trim()
 
   const filtered = results.filter(dog => {
     if (search) {
@@ -867,6 +928,8 @@ export function filterDogResults(results = [], filters = {}) {
     if (grade && !gradeMatchesFilter(dog.grade, grade)) return false
     if (className && dog.class_name !== className) return false
     if (award && !awardMatchesFilter(dog.awards, award)) return false
+    if (gender && !genderMatchesFilter(dog.gender, gender)) return false
+    if (placement && !placementMatchesFilter(dog.competitive_placement, placement)) return false
 
     return true
   })

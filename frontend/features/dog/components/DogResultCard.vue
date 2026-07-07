@@ -1,5 +1,5 @@
 <script setup>
-import { gradeBorderClass, gradeClasses, splitAwards } from '../dogResults.js'
+import { genderSymbol as genderSymbolFor, gradeBorderClass, gradeClasses, normalizeGender, splitAwards } from '../dogResults.js'
 
 const props = defineProps({
   dog: {
@@ -33,9 +33,8 @@ defineEmits(['toggle-critique'])
 const safeRegUrl = computed(() => safeHref(props.dog.reg_url))
 const rankValue = computed(() => (props.showAwardRank ? props.dog.awardRank : props.dog.placement) || null)
 const awards = computed(() => splitAwards(props.dog.awards))
-const genderSymbol = computed(() =>
-  props.dog.gender === 'uros' ? '♂' : props.dog.gender === 'narttu' ? '♀' : '',
-)
+const genderSymbol = computed(() => genderSymbolFor(props.dog.gender))
+const genderClass = computed(() => normalizeGender(props.dog.gender))
 const hasLead = computed(() => Boolean(rankValue.value || props.dog.number))
 const hasMeta = computed(() =>
   Boolean(
@@ -105,7 +104,7 @@ const hasMeta = computed(() =>
       <!-- Line 2: class, gender, best-of-sex rank (PU/PN), and awards (wraps freely) -->
       <div v-if="hasMeta" class="dog-result-meta">
         <span v-if="showInlineMeta && dog.class_name" class="dog-result-class">{{ dog.class_name }}</span>
-        <span v-if="showInlineMeta && genderSymbol" :class="['dog-result-gender', dog.gender]">{{ genderSymbol }}</span>
+        <span v-if="showInlineMeta && genderSymbol" :class="['dog-result-gender', genderClass]">{{ genderSymbol }}</span>
         <span
           v-if="dog.competitive_placement"
           class="dog-mini-award dog-comp-placement"
