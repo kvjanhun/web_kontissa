@@ -41,7 +41,8 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 | GET | `/api/dog/shows/<id>` | Public | Dog show breed list |
 | GET | `/api/dog/shows/<id>/results?group=&breed=` | Public | Breed results |
 | GET | `/api/dog/shows/<id>/all-results` | Public | Whole-show dog results from persisted cache; queues cache warming when missing |
-| GET | `/api/dog/search?q=` | Public | Search shows, breeds, judges (index), plus dog names & owners across all captured shows (SQL, `q≥3`) |
+| GET | `/api/dog/search?q=` | Public | Search shows, breeds, judges (index), plus dogs (aggregated by reg_id), owners & breeder-award kennels across all captured shows (SQL, `q≥3`) |
+| GET | `/api/dog/dogs?reg=` | Public | Cross-show dog profile for one Kennelliitto reg number (query param — reg ids contain `/`) |
 | GET | `/sitemap.xml` | Public | SEO sitemap |
 
 ## Models

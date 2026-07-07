@@ -172,6 +172,23 @@ def read_shows(session, show_ids):
     return shows
 
 
+def read_shows_meta(session, show_ids):
+    """Index metadata (no breeds) for a set of shows: {str(show_id): meta}. One
+    query — the light bulk read behind the dog profile's show headers."""
+    ids = []
+    for sid in show_ids or []:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
+    return {
+        str(show_row.id): _show_meta_dict(show_row)
+        for show_row in session.execute(select(DogShow).where(DogShow.id.in_(ids))).scalars()
+    }
+
+
 def count_shows(session):
     return session.execute(select(func.count()).select_from(DogShow)).scalar_one()
 
@@ -446,6 +463,93 @@ def complete_result_cache_show_ids(session):
 
 
 # ---------------------------------------------------------------------------
+# Cross-show reads keyed on dog identity (the /dog profile)
+# ---------------------------------------------------------------------------
+
+# Column select for the profile's result rows: like _BREED_COLUMNS, these bulk
+# reads skip ORM hydration (a busy dog spans ~80 shows of rows).
+_PROFILE_RESULT_COLUMNS = (
+    DogResult.show_id, DogResult.fci_group, DogResult.breed_id, DogResult.breed_name,
+    DogResult.breed_judge, DogResult.number, DogResult.name, DogResult.reg_url,
+    DogResult.grade, DogResult.placement, DogResult.competitive_placement,
+    DogResult.awards, DogResult.critique, DogResult.gender, DogResult.class_name,
+)
+
+
+def read_results_by_reg_id(session, reg_id):
+    """Every captured result row for one registered dog, newest show first.
+
+    `reg_id` is the Kennelliitto registration number parsed from each result's
+    reg_url at write time — the exact cross-show identity anchor. Rows whose
+    source page carried no reg_url have reg_id NULL and are never returned here."""
+    rid = str(reg_id or "").strip()
+    if not rid:
+        return []
+    rows = session.execute(
+        select(*_PROFILE_RESULT_COLUMNS)
+        .where(DogResult.reg_id == rid)
+        .order_by(DogResult.show_id.desc(), DogResult.seq)
+    )
+    return [
+        {
+            "show_id": row.show_id,
+            "fci_group": row.fci_group or "",
+            "breed_id": row.breed_id or "",
+            "breed_name": row.breed_name or "",
+            "judge": _clean_judge_name(row.breed_judge) if row.breed_judge else "",
+            "number": row.number,
+            "name": row.name or "",
+            "reg_url": row.reg_url or "",
+            "grade": row.grade or "",
+            "placement": row.placement,
+            "competitive_placement": row.competitive_placement or "",
+            "awards": row.awards or "",
+            "critique": row.critique or "",
+            "gender": row.gender or "",
+            "class_name": row.class_name or "",
+        }
+        for row in rows
+    ]
+
+
+def read_breed_awards_for_shows(session, show_ids):
+    """Honor-roll award rows for a set of shows, in honor-roll order.
+
+    Used by the profile's owner enrichment: award rows are the only place the
+    captured data ties an owner to a dog, so the profile matches them back to
+    its entries by (show, breed, winner name)."""
+    ids = []
+    for sid in show_ids or []:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return []
+    rows = session.execute(
+        select(
+            DogBreedAward.show_id, DogBreedAward.fci_group, DogBreedAward.breed_id,
+            DogBreedAward.award_type, DogBreedAward.name, DogBreedAward.owner,
+            DogBreedAward.text,
+        )
+        .where(DogBreedAward.show_id.in_(ids))
+        .order_by(DogBreedAward.show_id, DogBreedAward.position)
+    )
+    return [
+        {
+            "show_id": row.show_id,
+            "fci_group": row.fci_group or "",
+            "breed_id": row.breed_id or "",
+            "award_type": row.award_type or "",
+            "name": row.name or "",
+            "owner": row.owner or "",
+            "text": row.text or "",
+        }
+        for row in rows
+    ]
+
+
+# ---------------------------------------------------------------------------
 # Cross-show entity search (dog names, owners) over the captured result rows
 # ---------------------------------------------------------------------------
 # SQLite LIKE is only ASCII case-insensitive, so a name stored as "Tähti" is not
@@ -467,12 +571,74 @@ def _like_patterns(query, min_length=3):
     return [f"%{variant}%" for variant in seen]
 
 
-def search_dog_results_by_name(session, query, limit=20, min_length=3):
-    """Shows that ran a dog whose name matches `query`, grouped by show.
+def search_dogs_by_name(session, query, limit=20, min_length=3):
+    """Distinct registered dogs whose name matches `query`, most recently seen first.
 
-    Returns `[{show_id, name, count}]` — one row per show, with a representative
-    matching dog name and how many result rows in that show matched. Newest shows
-    first, bounded by `limit`. Parameterized LIKE only (see `_like_patterns`)."""
+    Aggregates the whole captured history by `reg_id` (the cross-show identity
+    parsed from each result's Kennelliitto reg_url): one entry per dog, carrying
+    its identity as of its newest captured show plus career counts. Rows without
+    a reg_id are covered separately by `search_dog_results_by_name`.
+
+    Returns `[{reg_id, name, gender, reg_url, show_id, show_count, result_count}]`
+    where `show_id` is the dog's newest captured show."""
+    patterns = _like_patterns(query, min_length)
+    if not patterns:
+        return []
+    grouped = session.execute(
+        select(
+            DogResult.reg_id,
+            func.count().label("result_count"),
+            func.count(func.distinct(DogResult.show_id)).label("show_count"),
+            func.max(DogResult.show_id).label("newest_show_id"),
+        )
+        .where(_like_any(DogResult.name, patterns), DogResult.reg_id.is_not(None))
+        .group_by(DogResult.reg_id)
+        .order_by(func.max(DogResult.show_id).desc())
+        .limit(limit)
+    ).all()
+    if not grouped:
+        return []
+
+    # Representative identity = the dog's own row in its newest captured show
+    # (names/casing drift across shows; the newest spelling is the current one).
+    newest_keys = {(row.reg_id, row.newest_show_id) for row in grouped}
+    details = {}
+    for row in session.execute(
+        select(
+            DogResult.reg_id, DogResult.show_id, DogResult.name,
+            DogResult.gender, DogResult.reg_url,
+        )
+        .where(
+            DogResult.reg_id.in_([row.reg_id for row in grouped]),
+            DogResult.show_id.in_([row.newest_show_id for row in grouped]),
+        )
+    ):
+        key = (row.reg_id, row.show_id)
+        if key in newest_keys and key not in details:
+            details[key] = row
+
+    dogs = []
+    for row in grouped:
+        detail = details.get((row.reg_id, row.newest_show_id))
+        dogs.append({
+            "reg_id": row.reg_id,
+            "name": (detail.name if detail else "") or "",
+            "gender": (detail.gender if detail else "") or "",
+            "reg_url": (detail.reg_url if detail else "") or "",
+            "show_id": row.newest_show_id,
+            "show_count": row.show_count,
+            "result_count": row.result_count,
+        })
+    return dogs
+
+
+def search_dog_results_by_name(session, query, limit=20, min_length=3):
+    """Shows that ran an *unregistered* matching dog (reg_id NULL), per show.
+
+    The fallback behind `search_dogs_by_name` for the ~3% of result rows whose
+    source page carried no reg_url — those can't be aggregated into a dog
+    identity, so they keep the old one-row-per-show shape. Returns
+    `[{show_id, name, count}]`, newest shows first, bounded by `limit`."""
     patterns = _like_patterns(query, min_length)
     if not patterns:
         return []
@@ -483,7 +649,7 @@ def search_dog_results_by_name(session, query, limit=20, min_length=3):
             func.min(DogResult.name).label("name"),
             func.count().label("count"),
         )
-        .where(condition)
+        .where(condition, DogResult.reg_id.is_(None))
         .group_by(DogResult.show_id)
         .order_by(DogResult.show_id.desc())
         .limit(limit)
@@ -492,13 +658,15 @@ def search_dog_results_by_name(session, query, limit=20, min_length=3):
 
 
 def search_breed_award_owners(session, query, limit=20, min_length=3):
-    """Shows where an award-winning dog's owner matches `query`, grouped by show.
+    """Breed honor rolls where a winner's owner matches `query`, per breed.
 
-    Returns `[{show_id, owner, count}]` — a representative matching owner and the
-    number of honor-roll placements owned by a match in that show. Owners come
-    from the `dog_breed_award` honor roll (`Om.` field), so this surfaces the
-    people/kennels behind the ROP/VSP/SERT winners, which no other column carries.
-    Newest shows first, bounded by `limit`."""
+    Returns `[{show_id, fci_group, breed_id, owner, winner, count}]` — one row
+    per breed honor roll so a hit can deep-link straight to that breed's result
+    page, with a representative matching owner, one of their winning dogs, and
+    how many of the breed's honor-roll placements matched. Owners come from the
+    `dog_breed_award` honor roll (`Om.` field), so this surfaces the people
+    behind the ROP/VSP/SERT winners, which no other column carries. Newest
+    shows first, bounded by `limit`."""
     patterns = _like_patterns(query, min_length)
     if not patterns:
         return []
@@ -506,15 +674,70 @@ def search_breed_award_owners(session, query, limit=20, min_length=3):
     rows = session.execute(
         select(
             DogBreedAward.show_id,
+            DogBreedAward.fci_group,
+            DogBreedAward.breed_id,
             func.min(DogBreedAward.owner).label("owner"),
+            func.min(DogBreedAward.name).label("winner"),
             func.count().label("count"),
         )
         .where(condition)
-        .group_by(DogBreedAward.show_id)
+        .group_by(DogBreedAward.show_id, DogBreedAward.fci_group, DogBreedAward.breed_id)
         .order_by(DogBreedAward.show_id.desc())
         .limit(limit)
     ).all()
-    return [{"show_id": row[0], "owner": row[1], "count": row[2]} for row in rows]
+    return [
+        {
+            "show_id": row[0],
+            "fci_group": row[1] or "",
+            "breed_id": row[2] or "",
+            "owner": row[3],
+            "winner": row[4] or "",
+            "count": row[5],
+        }
+        for row in rows
+    ]
+
+
+def search_breeder_awards(session, query, limit=20, min_length=3):
+    """Breeder-award (kasvattaja) honor rolls whose kennel matches `query`.
+
+    For the breeder award the honor roll's `name` column holds the *kennel*
+    (e.g. "Bluemeadow's"), not a dog — the only place kennels appear as their
+    own entity. Matched case-insensitively on award types containing
+    "kasvatt" (production data uses "ROP kasvattaja"). Returns
+    `[{show_id, fci_group, breed_id, kennel, owner, count}]`, one row per breed
+    honor roll for deep-linking, newest shows first, bounded by `limit`."""
+    patterns = _like_patterns(query, min_length)
+    if not patterns:
+        return []
+    rows = session.execute(
+        select(
+            DogBreedAward.show_id,
+            DogBreedAward.fci_group,
+            DogBreedAward.breed_id,
+            func.min(DogBreedAward.name).label("kennel"),
+            func.min(DogBreedAward.owner).label("owner"),
+            func.count().label("count"),
+        )
+        .where(
+            _like_any(DogBreedAward.name, patterns),
+            func.lower(DogBreedAward.award_type).like("%kasvatt%"),
+        )
+        .group_by(DogBreedAward.show_id, DogBreedAward.fci_group, DogBreedAward.breed_id)
+        .order_by(DogBreedAward.show_id.desc())
+        .limit(limit)
+    ).all()
+    return [
+        {
+            "show_id": row[0],
+            "fci_group": row[1] or "",
+            "breed_id": row[2] or "",
+            "kennel": row[3] or "",
+            "owner": row[4] or "",
+            "count": row[5],
+        }
+        for row in rows
+    ]
 
 
 # ---------------------------------------------------------------------------

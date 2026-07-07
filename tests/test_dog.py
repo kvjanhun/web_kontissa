@@ -1355,7 +1355,10 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
         "updated_at": 1001,
         "cached_at": 1001,
         "total_breeds": 1,
-        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1, "awards": [
+            {"type": "ROP", "name": "Ajibu You Are My Thrill", "owner": "Omistaja Testi",
+             "text": "Ajibu You Are My Thrill, Om. Omistaja Testi"},
+        ]}},
         "failed_breeds": {},
         "results": [
             {
@@ -1377,6 +1380,9 @@ def test_show_all_results_serves_persisted_cache_without_fetching(mock_get, clie
     assert data["results"][0]["name"] == "Ajibu You Are My Thrill"
     assert data["cache"]["status"] == "complete"
     assert data["cache"]["total_breeds"] == 1
+    # Per-breed honor rolls ride along for the whole-show view's expanded rows.
+    assert data["breed_awards"]["5:3"][0]["type"] == "ROP"
+    assert data["breed_awards"]["5:3"][0]["owner"] == "Omistaja Testi"
     mock_get.assert_not_called()
 
 
@@ -3037,9 +3043,9 @@ def test_judge_sweep_makes_result_row_judges_searchable(mock_get, client):
 
 # --- Cross-show dog-name / owner search (Phase E workstream 2) ---
 
-def _search_result_row(number, name, group="5", breed="3", comp=""):
+def _search_result_row(number, name, group="5", breed="3", comp="", reg_url=""):
     return {
-        "number": number, "name": name, "reg_url": "", "grade": "ERI",
+        "number": number, "name": name, "reg_url": reg_url, "grade": "ERI",
         "placement": number, "competitive_placement": comp, "awards": "", "critique": "",
         "gender": "uros", "class_name": "AVO", "breedName": f"breed-{breed}",
         "breedGroup": group, "breedId": breed,
@@ -3122,18 +3128,26 @@ def test_search_finds_owner_from_breed_awards(mock_get, client):
 
 @patch("app.dog_show.showlink._SESSION.get")
 def test_search_dog_matches_bounded(mock_get, client):
-    """Dog-name matches are capped at SEARCH_ENTITY_SHOW_LIMIT shows so a common
-    substring can't return the whole database."""
+    """Dog matches are capped per entity type — registered dogs at
+    SEARCH_ENTITY_SHOW_LIMIT distinct dogs, reg-less per-show fallback hits at
+    SEARCH_UNREGISTERED_SHOW_LIMIT — so a common substring can't return the
+    whole database."""
     from app.dog_show import search as dog_search
     mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
     mock_get.return_value = mock_resp
     for i in range(dog_search.SEARCH_ENTITY_SHOW_LIMIT + 5):
-        _seed_search_doc(15000 + i, [_search_result_row(1, "Tähti Dog")])
+        _seed_search_doc(15000 + i, [
+            _search_result_row(1, "Tähti Dog", reg_url=f"https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI{i:05d}%2F20"),
+            _search_result_row(2, "Tähti Kennelitön"),
+        ])
 
     resp = client.get("/api/dog/search?q=tähti")
     assert resp.status_code == 200
     dog_results = [r for r in resp.get_json()["results"] if r["match"] == "dog"]
-    assert len(dog_results) == dog_search.SEARCH_ENTITY_SHOW_LIMIT
+    registered = [r for r in dog_results if r.get("reg_id")]
+    fallback = [r for r in dog_results if not r.get("reg_id")]
+    assert len(registered) == dog_search.SEARCH_ENTITY_SHOW_LIMIT
+    assert len(fallback) == dog_search.SEARCH_UNREGISTERED_SHOW_LIMIT
 
 
 @patch("app.dog_show.showlink._SESSION.get")
@@ -3200,6 +3214,189 @@ def test_search_results_ordered_by_show_date_newest_first(mock_get, client):
         (13001, "breed"),    # 10.05.2026
         (13002, "breed"),    # 20.03.2026
     ]
+
+
+# --- Dog profile + reg_id aggregation + owner/kennel deep links (Phase E) ---
+
+def _reg_url(reg_no):
+    return f"https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo={reg_no.replace('/', '%2F')}"
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_aggregates_dog_hits_by_reg_id(mock_get, client):
+    """A registered dog appearing in several shows is one search hit: aggregated
+    by reg_id, anchored to its newest show, named by its newest-show spelling."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(16001, [_search_result_row(1, "AAMUN TÄHTI", reg_url=_reg_url("FI11111/20"))])
+    _seed_search_doc(16002, [_search_result_row(1, "Aamun Tähti", reg_url=_reg_url("FI11111/20"))])
+    seed_index_show("16001", {"title": "10.05.2026 Vanha Show", "date": "10.05.2026", "month": "toukokuu 2026",
+                              "breeds": [{"name": "breed-3", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]})
+    seed_index_show("16002", {"title": "14.06.2026 Uusi Show", "date": "14.06.2026", "month": "kesäkuu 2026",
+                              "breeds": [{"name": "breed-3", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]})
+
+    resp = client.get("/api/dog/search?q=aamun")
+    assert resp.status_code == 200
+    dog_results = [r for r in resp.get_json()["results"] if r["match"] == "dog"]
+    assert len(dog_results) == 1
+    hit = dog_results[0]
+    assert hit["reg_id"] == "FI11111/20"
+    assert hit["dog"] == "Aamun Tähti"          # newest-show spelling
+    assert hit["show"]["id"] == 16002            # anchored to the newest show
+    assert hit["show_count"] == 2
+    assert hit["dog_match_count"] == 2
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_owner_hits_carry_breed_coordinates_and_winner(mock_get, client):
+    """Owner hits deep-link: one hit per breed honor roll with group/breed_id,
+    the winning dog, and the breed name so the client can open the breed page."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(
+        16011,
+        [_search_result_row(1, "Voittaja Koira")],
+        completed_breeds={"5:3": {"name": "breed-3", "result_count": 1, "judge": "J", "awards": [
+            {"type": "ROP", "name": "Voittaja Koira", "owner": "Mäkelä Maija", "text": "Voittaja Koira, Om. Mäkelä Maija"},
+        ]}},
+    )
+
+    resp = client.get("/api/dog/search?q=mäkelä")
+    assert resp.status_code == 200
+    owner_results = [r for r in resp.get_json()["results"] if r["match"] == "owner"]
+    assert len(owner_results) == 1
+    hit = owner_results[0]
+    assert hit["show"]["id"] == 16011
+    assert hit["owner"] == "Mäkelä Maija"
+    assert hit["winner"] == "Voittaja Koira"
+    assert hit["group"] == "5"
+    assert hit["breed_id"] == "3"
+    assert hit["breed_name"] == "breed-3"
+    assert hit["owner_match_count"] == 1
+
+
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_finds_kennel_from_breeder_awards(mock_get, client):
+    """Breeder-award kennels are searchable as their own match type, restricted
+    to kasvattaja award rows (a plain ROP winner named like the query is not a
+    kennel hit), and carry the breed coordinates for deep-linking."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+    _seed_search_doc(
+        16021,
+        [_search_result_row(1, "Bluemeadow's Hero")],
+        completed_breeds={"5:3": {"name": "breed-3", "result_count": 1, "judge": "J", "awards": [
+            {"type": "ROP", "name": "Bluemeadow's Hero", "owner": "Kattainen Kirsi", "text": "Bluemeadow's Hero, Om. Kattainen Kirsi"},
+            {"type": "ROP kasvattaja", "name": "Bluemeadow's", "owner": "Kattainen Kirsi", "text": "Bluemeadow's, Om. Kattainen Kirsi"},
+        ]}},
+    )
+
+    resp = client.get("/api/dog/search?q=bluemeadow")
+    assert resp.status_code == 200
+    kennel_results = [r for r in resp.get_json()["results"] if r["match"] == "kennel"]
+    assert len(kennel_results) == 1
+    hit = kennel_results[0]
+    assert hit["show"]["id"] == 16021
+    assert hit["kennel"] == "Bluemeadow's"
+    assert hit["group"] == "5"
+    assert hit["breed_id"] == "3"
+    assert hit["breed_name"] == "breed-3"
+    assert hit["kennel_match_count"] == 1
+
+
+def test_dog_profile_returns_results_across_shows_newest_first(client):
+    """The profile aggregates every captured result row for one reg_id, sorted
+    by show date (newest first) even when show ids contradict date order, with
+    identity taken from the newest entry."""
+    _seed_search_doc(16032, [_search_result_row(1, "VANHA NIMI", comp="PN2", reg_url=_reg_url("FI22222/19"))])
+    _seed_search_doc(16031, [_search_result_row(1, "Uusi Nimi", comp="PN1", reg_url=_reg_url("FI22222/19"))])
+    # Lower id 16031 carries the *newer* date.
+    seed_index_show("16032", {"title": "10.05.2026 Vanha Show", "name": "Vanha Show", "date": "10.05.2026",
+                              "month": "toukokuu 2026",
+                              "breeds": [{"name": "breed-3", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]})
+    seed_index_show("16031", {"title": "14.06.2026 Uusi Show", "name": "Uusi Show", "date": "14.06.2026",
+                              "month": "kesäkuu 2026",
+                              "breeds": [{"name": "breed-3", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]})
+
+    resp = client.get("/api/dog/dogs", query_string={"reg": "FI22222/19"})
+    assert resp.status_code == 200
+    data = resp.get_json()
+    assert data["reg_id"] == "FI22222/19"
+    assert data["name"] == "Uusi Nimi"
+    assert data["show_count"] == 2
+    assert data["result_count"] == 2
+    assert [e["show"]["id"] for e in data["entries"]] == [16031, 16032]
+    assert data["entries"][0]["competitive_placement"] == "PN1"
+    assert data["entries"][0]["grade"] == "ERI"
+    assert data["entries"][0]["show"]["name"] == "Uusi Show"
+
+
+def test_dog_profile_owner_from_breed_awards(client):
+    """Header owner comes from the newest honor-roll row matching the dog by
+    (show, breed, name) — award rows carry no reg_id."""
+    _seed_search_doc(
+        16041,
+        [_search_result_row(1, "Palkittu Koira", reg_url=_reg_url("FI33333/21"))],
+        completed_breeds={"5:3": {"name": "breed-3", "result_count": 1, "judge": "J", "awards": [
+            {"type": "ROP", "name": "PALKITTU KOIRA", "owner": "Nieminen Noora", "text": "Palkittu Koira, Om. Nieminen Noora"},
+        ]}},
+    )
+
+    resp = client.get("/api/dog/dogs", query_string={"reg": "FI33333/21"})
+    assert resp.status_code == 200
+    assert resp.get_json()["owner"] == "Nieminen Noora"
+
+
+def test_dog_profile_unknown_reg_returns_404(client):
+    resp = client.get("/api/dog/dogs", query_string={"reg": "FI00000/00"})
+    assert resp.status_code == 404
+    assert "error" in resp.get_json()
+
+
+def test_dog_profile_missing_or_long_reg_returns_400(client):
+    assert client.get("/api/dog/dogs").status_code == 400
+    assert client.get("/api/dog/dogs", query_string={"reg": "  "}).status_code == 400
+    assert client.get("/api/dog/dogs", query_string={"reg": "X" * 41}).status_code == 400
+
+
+def test_sqlstore_results_by_reg_id(client):
+    """Direct sqlstore read: exact reg_id equality (no LIKE), newest show first,
+    seq order within a show, reg-less rows never returned."""
+    _seed_search_doc(16051, [
+        _search_result_row(1, "Rekisteröity", reg_url=_reg_url("FI44444/22")),
+        _search_result_row(2, "Rekisteritön"),
+    ])
+    _seed_search_doc(16052, [_search_result_row(1, "Rekisteröity", reg_url=_reg_url("FI44444/22"))])
+
+    with dog_db.session_scope() as session:
+        rows = dog_sqlstore.read_results_by_reg_id(session, "FI44444/22")
+        assert [r["show_id"] for r in rows] == [16052, 16051]
+        assert all(r["name"] == "Rekisteröity" for r in rows)
+        assert dog_sqlstore.read_results_by_reg_id(session, "") == []
+        # A partial reg is not a match — equality, not LIKE.
+        assert dog_sqlstore.read_results_by_reg_id(session, "FI44444") == []
+
+
+def test_sqlstore_search_dogs_by_name_groups_and_orders(client):
+    """Direct sqlstore aggregation: unicode-cased matches group under one reg_id,
+    ordered newest-show-first, wildcards escaped, reg-less rows excluded."""
+    _seed_search_doc(16061, [
+        _search_result_row(1, "TÄHTI TAIVAALLA", reg_url=_reg_url("FI55555/23")),
+        _search_result_row(2, "Tähti Kennelitön"),
+    ])
+    _seed_search_doc(16062, [_search_result_row(1, "Tähti Taivaalla", reg_url=_reg_url("FI55555/23"))])
+    _seed_search_doc(16063, [_search_result_row(1, "Toinen Tähti", reg_url=_reg_url("FI66666/24"))])
+
+    with dog_db.session_scope() as session:
+        dogs = dog_sqlstore.search_dogs_by_name(session, "tähti")
+        assert [d["reg_id"] for d in dogs] == ["FI66666/24", "FI55555/23"]
+        aggregated = dogs[1]
+        assert aggregated["name"] == "Tähti Taivaalla"   # newest-show spelling
+        assert aggregated["show_id"] == 16062
+        assert aggregated["show_count"] == 2
+        assert aggregated["result_count"] == 2
+        # Escaped wildcard: no dog named with a literal '%'.
+        assert dog_sqlstore.search_dogs_by_name(session, "täh%ti") == []
 
 
 def test_parse_show_meta_from_title():

@@ -56,6 +56,16 @@ def _indexed_shows(show_ids):
         return {}
 
 
+def _indexed_show_metas(show_ids):
+    """Bulk read of index metadata (no breeds): {str(show_id): meta}."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_shows_meta(session, show_ids)
+    except Exception:
+        logger.exception("dog_indexed_show_metas_read_failed")
+        return {}
+
+
 def _index_states():
     """Crawler candidate selection: per-show breed counts + empty-confirmed flags."""
     try:
@@ -208,9 +218,42 @@ def _complete_result_cache_show_ids():
         return set()
 
 
+def _dog_results_by_reg_id(reg_id):
+    """Every captured result row for one registered dog, newest show first (see
+    sqlstore.read_results_by_reg_id). Read-only; returns [] on any failure."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_results_by_reg_id(session, reg_id)
+    except Exception:
+        logger.exception("dog_results_by_reg_id_failed")
+        return []
+
+
+def _breed_awards_for_shows(show_ids):
+    """Honor-roll award rows for a set of shows (see
+    sqlstore.read_breed_awards_for_shows). Read-only; returns [] on any failure."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_breed_awards_for_shows(session, show_ids)
+    except Exception:
+        logger.exception("dog_breed_awards_read_failed")
+        return []
+
+
+def _search_dogs_by_name(query, limit=20):
+    """Cross-show dog search aggregated by reg_id: one entry per distinct dog,
+    newest-first (see sqlstore.search_dogs_by_name). Read-only; [] on error."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_dogs_by_name(session, query, limit=limit)
+    except Exception:
+        logger.exception("dog_search_dogs_failed")
+        return []
+
+
 def _search_dog_results_by_name(query, limit=20):
-    """Cross-show dog-name search: [{show_id, name, count}] newest-first (see
-    sqlstore.search_dog_results_by_name). Read-only; returns [] on any failure."""
+    """Per-show dog-name search over reg_id-less rows: [{show_id, name, count}]
+    newest-first (see sqlstore.search_dog_results_by_name). Read-only; [] on error."""
     try:
         with dog_db.session_scope() as session:
             return sqlstore.search_dog_results_by_name(session, query, limit=limit)
@@ -220,13 +263,26 @@ def _search_dog_results_by_name(query, limit=20):
 
 
 def _search_breed_award_owners(query, limit=20):
-    """Cross-show owner search over the honor roll: [{show_id, owner, count}]
-    newest-first (see sqlstore.search_breed_award_owners). Read-only; [] on error."""
+    """Cross-show owner search over the honor roll, one hit per breed:
+    [{show_id, fci_group, breed_id, owner, winner, count}] newest-first (see
+    sqlstore.search_breed_award_owners). Read-only; [] on error."""
     try:
         with dog_db.session_scope() as session:
             return sqlstore.search_breed_award_owners(session, query, limit=limit)
     except Exception:
         logger.exception("dog_search_owners_failed")
+        return []
+
+
+def _search_breeder_awards(query, limit=20):
+    """Cross-show kennel search over breeder awards, one hit per breed:
+    [{show_id, fci_group, breed_id, kennel, owner, count}] newest-first (see
+    sqlstore.search_breeder_awards). Read-only; [] on error."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.search_breeder_awards(session, query, limit=limit)
+    except Exception:
+        logger.exception("dog_search_breeders_failed")
         return []
 
 

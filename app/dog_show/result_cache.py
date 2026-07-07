@@ -202,6 +202,19 @@ def _result_cache_progress(show_id, doc=None, job=None):
         "last_error": doc.get("last_error") or job.get("last_error"),
     }
 
+def _breed_awards_from_doc(doc):
+    """Per-breed honor rolls keyed "group:breed_id" — the ROP/VSP/SERT winner
+    lists (with owners and the breeder award) each completed breed carries in
+    the doc, so the whole-show view can render them without the breed pages."""
+    breed_awards = {}
+    for breed_key, breed_data in (doc.get("completed_breeds") or {}).items():
+        if not isinstance(breed_data, dict):
+            continue
+        awards = breed_data.get("awards")
+        if awards:
+            breed_awards[str(breed_key)] = awards
+    return breed_awards
+
 def _result_response_from_doc(show_id, doc, stale=False):
     fetched_at = doc.get("cached_at") or doc.get("updated_at") or time.time()
     progress = _result_cache_progress(show_id, doc=doc)
@@ -210,6 +223,7 @@ def _result_response_from_doc(show_id, doc, stale=False):
         "title": doc.get("title", ""),
         "source_url": doc.get("source_url") or _source_url(show_id),
         "results": _clean_all_results(doc.get("results") or []),
+        "breed_awards": _breed_awards_from_doc(doc),
         "fetched_at": fetched_at,
         "fetched_at_iso": _utc_iso(fetched_at),
         "cache": {

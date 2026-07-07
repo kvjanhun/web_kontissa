@@ -7,19 +7,22 @@ from .indexing import _show_from_index_for_search, _show_stats_from_index
 from .shows import _get_show_list
 from .store import (
     _index_summary, _indexed_ids_among, _indexed_show, _indexed_shows,
-    _search_breed_award_owners, _search_dog_results_by_name,
-    _search_index_breeds, _search_index_judges, _search_index_show_ids,
-    _show_list_cache,
+    _search_breed_award_owners, _search_breeder_awards, _search_dog_results_by_name,
+    _search_dogs_by_name, _search_index_breeds, _search_index_judges,
+    _search_index_show_ids, _show_list_cache,
 )
 from .utils import _clean_judge_name, _month_year_from_label, _parse_show_date_range
 
 logger = structlog.get_logger(__name__)
 
-# Dog-name / owner search scans the whole result history in SQL, so it only kicks
-# in for queries of at least this length (the show/breed/judge index search keeps
-# its 2-char minimum) and is bounded to this many shows per entity type.
+# Dog / owner / kennel search scans the whole result history in SQL, so it only
+# kicks in for queries of at least this length (the show/breed/judge index search
+# keeps its 2-char minimum) and is bounded to this many hits per entity type.
 SEARCH_ENTITY_MIN_LENGTH = 3
 SEARCH_ENTITY_SHOW_LIMIT = 20
+# Result rows without a reg_id (~3% — source page carried no reg link) can't be
+# aggregated into a dog identity; they fall back to per-show hits, kept few.
+SEARCH_UNREGISTERED_SHOW_LIMIT = 10
 
 def _search_query_variants(query):
     variants = []
@@ -190,16 +193,51 @@ def search_shows_data(query):
     }
 
 
+def _breed_name_lookup(hits):
+    """(show_id, group, breed_id) -> breed name for honor-roll hits, resolved
+    from the persisted index in one bulk read."""
+    show_ids = sorted({str(hit["show_id"]) for hit in hits})
+    if not show_ids:
+        return {}
+    lookup = {}
+    for sid, entry in _indexed_shows(show_ids).items():
+        for breed in entry.get("breeds") or []:
+            key = (sid, str(breed.get("group", "")), str(breed.get("breed_id", "")))
+            lookup[key] = breed.get("name", "")
+    return lookup
+
+
 def _append_entity_matches(results, show_payload, query):
-    """Append cross-show dog-name and owner matches; the caller's final date sort
-    interleaves them with the show/breed/judge results. Each hit is one result per
-    show carrying a `match` type ("dog"/"owner") and a representative name + count.
-    Skips shows without a resolvable payload (defensive — every captured show is
+    """Append cross-show dog, owner, and kennel matches; the caller's final date
+    sort interleaves them with the show/breed/judge results.
+
+    Dog hits are aggregated by reg_id — one hit per distinct registered dog,
+    anchored to its newest captured show (`show`) and carrying career counts;
+    result rows without a reg_id fall back to the old one-hit-per-show shape
+    (no `reg_id` field). Owner and kennel hits come from the breed honor rolls
+    and carry the breed coordinates (`group`/`breed_id`) so the client can open
+    the exact breed result page where the honor roll shows the match. Skips
+    shows without a resolvable payload (defensive — every captured show is
     indexed)."""
     if len(str(query or "").strip()) < SEARCH_ENTITY_MIN_LENGTH:
         return
 
-    for hit in _search_dog_results_by_name(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
+    for hit in _search_dogs_by_name(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
+        show = show_payload(str(hit["show_id"]))
+        if not show:
+            continue
+        results.append({
+            "show": show,
+            "breed": None,
+            "match": "dog",
+            "dog": hit["name"],
+            "reg_id": hit["reg_id"],
+            "gender": hit["gender"],
+            "dog_match_count": hit["result_count"],
+            "show_count": hit["show_count"],
+        })
+
+    for hit in _search_dog_results_by_name(query, limit=SEARCH_UNREGISTERED_SHOW_LIMIT):
         show = show_payload(str(hit["show_id"]))
         if not show:
             continue
@@ -211,14 +249,40 @@ def _append_entity_matches(results, show_payload, query):
             "dog_match_count": hit["count"],
         })
 
-    for hit in _search_breed_award_owners(query, limit=SEARCH_ENTITY_SHOW_LIMIT):
+    owner_hits = _search_breed_award_owners(query, limit=SEARCH_ENTITY_SHOW_LIMIT)
+    kennel_hits = _search_breeder_awards(query, limit=SEARCH_ENTITY_SHOW_LIMIT)
+    breed_names = _breed_name_lookup(owner_hits + kennel_hits)
+
+    for hit in owner_hits:
         show = show_payload(str(hit["show_id"]))
         if not show:
             continue
+        key = (str(hit["show_id"]), hit["fci_group"], hit["breed_id"])
         results.append({
             "show": show,
             "breed": None,
             "match": "owner",
             "owner": hit["owner"],
+            "winner": hit["winner"],
+            "group": hit["fci_group"],
+            "breed_id": hit["breed_id"],
+            "breed_name": breed_names.get(key, ""),
             "owner_match_count": hit["count"],
+        })
+
+    for hit in kennel_hits:
+        show = show_payload(str(hit["show_id"]))
+        if not show:
+            continue
+        key = (str(hit["show_id"]), hit["fci_group"], hit["breed_id"])
+        results.append({
+            "show": show,
+            "breed": None,
+            "match": "kennel",
+            "kennel": hit["kennel"],
+            "owner": hit["owner"],
+            "group": hit["fci_group"],
+            "breed_id": hit["breed_id"],
+            "breed_name": breed_names.get(key, ""),
+            "kennel_match_count": hit["count"],
         })

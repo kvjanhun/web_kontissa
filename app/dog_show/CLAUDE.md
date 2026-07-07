@@ -19,6 +19,7 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 | Persistence facade (sessions, retries, error handling), result jobs | `store.py` |
 | Award-structure terminal detection (is a live show finished?) | `finals.py` |
 | Indexed show stats, show-detail assembly, breed-list helpers | `indexing.py` |
+| Cross-show dog profile assembly (`/api/dog/dogs`, keyed on `dog_result.reg_id`) | `profile.py` |
 | Show-list cache refresh | `shows.py` |
 | Breed-index crawler passes | `crawler.py` |
 | Whole-show result cache, progress, crawl passes | `result_cache.py` |

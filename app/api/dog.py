@@ -13,6 +13,7 @@ from app.dog_show.result_cache import (
     _enrich_breeds_with_result_progress, _queue_live_result_cache_refresh,
     _queue_live_result_cache_refreshes, _result_cache_progress,
 )
+from app.dog_show.profile import dog_profile_data
 from app.dog_show.search import search_shows_data
 from app.dog_show.shows import _get_show_list
 from app.dog_show.store import (
@@ -163,6 +164,27 @@ def show_all_results(show_id):
     except Exception as e:
         logger.exception("show_all_results_error", show_id=show_id)
         return jsonify({"error": "Failed to load show all results cache", "detail": str(e)}), 500
+
+
+@dog_bp.route("/api/dog/dogs")
+@limiter.limit("30/minute")
+def dog_profile():
+    # reg_id contains a slash (FI44694/25), so it travels as a query parameter —
+    # a path segment would be rewritten by nginx's %2F normalization.
+    reg = flask_request.args.get("reg", "").strip()
+    if not reg:
+        return jsonify({"error": "Missing required query parameter: reg"}), 400
+    if len(reg) > 40:
+        return jsonify({"error": "Parameter reg is too long"}), 400
+
+    try:
+        profile = dog_profile_data(reg)
+        if profile is None:
+            return jsonify({"error": "Koiraa ei löytynyt.", "reg_id": reg}), 404
+        return jsonify(profile)
+    except Exception:
+        logger.exception("dog_profile_error")
+        return jsonify({"error": "Internal server error"}), 500
 
 
 @dog_bp.route("/api/dog/search")
