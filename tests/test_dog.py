@@ -496,6 +496,9 @@ def test_get_shows_queues_stale_live_result_refresh(monkeypatch, client):
     })
     monkeypatch.setattr(dog_module, "_get_show_list", lambda: [show])
     monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    # The fixture's `now` is fixed but recency reads the real clock; pin it so the
+    # test doesn't rot as the fixture date ages out of the recent window.
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     resp = client.get("/api/dog/shows")
 
@@ -697,6 +700,9 @@ def test_show_detail_includes_live_breed_result_progress_and_queues_refresh(mock
         ],
     })
     monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
+    # The fixture's `now` is fixed but recency reads the real clock; pin it so the
+    # test doesn't rot as the fixture date ages out of the recent window.
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     resp = client.get("/api/dog/shows/13771")
 
@@ -1106,46 +1112,6 @@ def test_crawl_index_refreshes_unconfirmed_empty_index_entries(mock_get, monkeyp
     assert summary["updated"] == 1
     assert len(dog_store._indexed_show("14042")["breeds"]) == 2
     assert dog_store._indexed_show("14042")["breeds"][0]["name"] == "basenji"
-    assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
-
-
-@patch("app.dog_show.showlink._SESSION.get")
-def test_crawl_empty_index_once_repairs_only_empty_entries(mock_get, monkeypatch):
-    seed_index_show("14042", {
-        "title": "stale empty index",
-        "name": "Basenji",
-        "date": "14.06.",
-        "month": "tammikuu 2000",
-        "breeds": [],
-    })
-    seed_index_show("14043", {
-        "title": "already indexed",
-        "name": "Villakoira erikoisnäyttely",
-        "date": "15.06.",
-        "month": "tammikuu 2000",
-        "breeds": [
-            {"name": "villakoira", "count": 1, "group": "9", "breed_id": "172", "has_results": True},
-        ],
-    })
-    monkeypatch.setattr(dog_crawler.time, "sleep", lambda seconds: None)
-
-    mock_resp_list = MagicMock()
-    mock_resp_list.text = SAMPLE_SHOW_LIST_HTML
-    mock_resp_list.status_code = 200
-
-    mock_resp_detail = MagicMock()
-    mock_resp_detail.text = SAMPLE_SHOW_DETAIL_HTML
-    mock_resp_detail.status_code = 200
-
-    mock_get.side_effect = [mock_resp_list, mock_resp_detail]
-
-    summary = dog_crawler.crawl_empty_index_once(limit=10, delay=0)
-
-    assert summary["updated"] == 1
-    assert summary["empty_candidates"] == 1
-    assert len(dog_store._indexed_show("14042")["breeds"]) == 2
-    assert len(dog_store._indexed_show("14043")["breeds"]) == 1
-    assert len(mock_get.call_args_list) == 2
     assert mock_get.call_args_list[1].args[0].endswith("Id=14042")
 
 
@@ -2221,6 +2187,71 @@ def test_auto_result_cache_candidates_include_live_multi_day_show(monkeypatch, c
     assert [candidate["show_id"] for candidate in candidates] == [13771]
 
 
+def test_auto_result_cache_candidates_decide_settled_shows_from_dates_alone(monkeypatch, client):
+    """The Tulokset list carries the whole season (hundreds of settled shows), and
+    only shows inside the auto window can ever become candidates. The selection
+    must gate on the list row's date alone — a settled or upcoming show costs no
+    result-doc load (the doc hydration was the crawler's idle CPU baseline)."""
+    now = datetime.datetime(2026, 6, 20, 12, 0).timestamp()
+    shows = [
+        {"id": 13001, "date": "10.01.", "name": "Talvinäyttely", "month": "tammikuu 2026"},
+        {"id": 13002, "date": "15.08.", "name": "Syysnäyttely", "month": "elokuu 2026"},
+        {"id": 13771, "date": "20.-21.06.", "name": "Jyväskylä KV", "month": "kesäkuu 2026"},
+    ]
+    monkeypatch.setattr(dog_result_cache, "_get_show_list", lambda: shows)
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
+    seed_index_show("13771", {
+        "title": "20.-21.06.2026 Jyväskylä KV",
+        "date": "20.-21.06.",
+        "month": "kesäkuu 2026",
+        "breeds": [
+            {"name": "basenji", "count": 3, "group": "5", "breed_id": "3", "has_results": True},
+        ],
+    })
+
+    loaded = []
+    real_load = dog_result_cache._load_result_cache_doc
+    def counting_load(show_id):
+        loaded.append(int(show_id))
+        return real_load(show_id)
+    monkeypatch.setattr(dog_result_cache, "_load_result_cache_doc", counting_load)
+
+    candidates = dog_result_cache._auto_result_cache_candidates(now)
+
+    assert [candidate["show_id"] for candidate in candidates] == [13771]
+    assert set(loaded) == {13771}
+
+
+def test_crawl_index_once_updates_stalest_recent_shows_first(monkeypatch):
+    """A bounded maintenance pass must round-robin the recent window across passes
+    (stalest first), not re-fetch the same first-N list rows forever."""
+    shows = [
+        {"id": 14051, "date": "", "month": "", "name": "A"},
+        {"id": 14052, "date": "", "month": "", "name": "B"},
+        {"id": 14053, "date": "", "month": "", "name": "C"},
+    ]
+    for sid, updated_at in ((14051, 300), (14052, 100), (14053, 200)):
+        seed_index_show(str(sid), {
+            "title": f"show {sid}",
+            "updated_at": updated_at,
+            "breeds": [
+                {"name": "basenji", "count": 1, "group": "5", "breed_id": "3"},
+            ],
+        })
+    monkeypatch.setattr(dog_crawler, "_get_show_list", lambda: shows)
+
+    updated_order = []
+    monkeypatch.setattr(
+        dog_crawler, "_update_index_show",
+        lambda show: updated_order.append(show["id"]),
+    )
+
+    summary = dog_crawler.crawl_index_once(limit=2, delay=0)
+
+    assert updated_order == [14052, 14053]
+    assert summary["updated"] == 2
+
+
 @patch("app.dog_show.showlink._SESSION.get")
 def test_show_all_results_rebuilds_empty_cache_when_recent_index_has_stale_result_flags(mock_get, monkeypatch, client):
     seed_index_show("14042", {
@@ -2635,6 +2666,9 @@ def test_crawl_result_cache_refetches_live_breeds_captured_with_zero_results(moc
     })
     monkeypatch.setattr(dog_result_cache.time, "time", lambda: now)
     monkeypatch.setattr(dog_result_cache.time, "sleep", lambda seconds: None)
+    # The fixture's `now` is fixed but recency reads the real clock; pin it so the
+    # test doesn't rot as the fixture date ages out of the recent window.
+    monkeypatch.setattr(dog_result_cache, "_is_show_recent_by_id", lambda show_id: True)
 
     flagged_result_resp = MagicMock()
     flagged_result_resp.text = SAMPLE_BREED_RESULTS_HTML
@@ -3422,8 +3456,8 @@ def test_sqlstore_read_shows_bulk_and_index_states():
 
         assert dog_sqlstore.count_shows(session) == 2
         states = dog_sqlstore.index_states(session)
-        assert states["9200"] == {"breed_count": 2, "empty_breed_list_confirmed": False}
-        assert states["9201"] == {"breed_count": 0, "empty_breed_list_confirmed": True}
+        assert states["9200"] == {"breed_count": 2, "empty_breed_list_confirmed": False, "updated_at": 100.0}
+        assert states["9201"] == {"breed_count": 0, "empty_breed_list_confirmed": True, "updated_at": 50.0}
 
 
 def test_sqlstore_set_breed_judge_semantics():
@@ -3515,9 +3549,9 @@ def test_show_is_recent_date_window():
         return _show_is_recent(show, today=today)
 
     assert recent({"date": "05.07.", "month": "heinäkuu 2026"}) is True
-    assert recent({"date": "20.06.2026", "month": "kesäkuu 2026"}) is True
-    # 45 days back inclusive, then out of the window.
-    assert recent({"date": "22.05.2026", "month": "toukokuu 2026"}) is True
+    # 7 days back inclusive (the post-show correction window), then settled.
+    assert recent({"date": "29.06.2026", "month": "kesäkuu 2026"}) is True
+    assert recent({"date": "28.06.2026", "month": "kesäkuu 2026"}) is False
     assert recent({"date": "21.05.2026", "month": "toukokuu 2026"}) is False
     # 31 days ahead inclusive, then out.
     assert recent({"date": "06.08.2026", "month": "elokuu 2026"}) is True

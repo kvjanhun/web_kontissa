@@ -178,11 +178,13 @@ def count_shows(session):
 
 def index_states(session):
     """Per-show index state for crawler candidate selection:
-    {str(show_id): {"breed_count": int, "empty_breed_list_confirmed": bool}}."""
+    {str(show_id): {"breed_count": int, "empty_breed_list_confirmed": bool,
+    "updated_at": float}}."""
     rows = session.execute(
         select(
             DogShow.id,
             DogShow.empty_breed_list_confirmed,
+            DogShow.updated_at,
             func.count(DogBreed.id).label("breed_count"),
         )
         .outerjoin(DogBreed, DogBreed.show_id == DogShow.id)
@@ -192,6 +194,7 @@ def index_states(session):
         str(row.id): {
             "breed_count": row.breed_count,
             "empty_breed_list_confirmed": bool(row.empty_breed_list_confirmed),
+            "updated_at": row.updated_at or 0,
         }
         for row in rows
     }

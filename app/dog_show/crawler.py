@@ -74,6 +74,11 @@ def crawl_index_once(limit=None, delay=1.5):
         elif _show_is_recent(show):
             recent.append(show)
 
+    # Stalest-first within the recent bucket, so a bounded pass round-robins the
+    # whole window across passes instead of re-fetching the same first-N shows
+    # (list order) every time. Empty/missing shows keep absolute priority.
+    recent.sort(key=lambda show: index_states[str(show["id"])]["updated_at"])
+
     to_update = empty_indexed + missing + recent
 
     if limit is not None:
@@ -95,40 +100,4 @@ def crawl_index_once(limit=None, delay=1.5):
     logger.info("dog_crawler_index_pass_complete", **summary)
     return summary
 
-def crawl_empty_index_once(limit=20, delay=0.5):
-    """Repair stale empty breed indexes created by older parser versions."""
-    shows_list = _get_show_list()
-    if not shows_list:
-        logger.info(
-            "dog_crawler_empty_index_pass_complete",
-            total=0,
-            updated=0,
-            failed=0,
-            skipped=0,
-            empty_candidates=0,
-        )
-        return {"total": 0, "updated": 0, "failed": 0, "skipped": 0, "empty_candidates": 0}
-
-    index_states = _index_states()
-    candidates = []
-    for show in shows_list:
-        state = index_states.get(str(show["id"]))
-        if state and not state["breed_count"] and not state["empty_breed_list_confirmed"]:
-            candidates.append(show)
-
-    to_update = candidates
-    if limit is not None:
-        to_update = to_update[:limit]
-
-    logger.info(
-        "dog_crawler_repairing_empty_indexes",
-        count=len(to_update),
-        empty_candidates=len(candidates),
-        total=len(shows_list),
-    )
-
-    summary = _crawl_index_candidates(to_update, len(shows_list), delay=delay, reason="empty_index_repair")
-    summary["empty_candidates"] = len(candidates)
-    logger.info("dog_crawler_empty_index_pass_complete", **summary)
-    return summary
 

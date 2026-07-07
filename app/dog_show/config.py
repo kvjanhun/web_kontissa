@@ -10,11 +10,11 @@ SHOW_ALL_RESULTS_TTL = 86400
 
 # The "recent" window: shows whose data still changes and is therefore worth
 # re-checking (breed lists / entry counts firm up before a show; results and
-# judges arrive through the show weekend). The crawler re-indexes recent shows
-# on its maintenance pass; everything outside the window is settled history.
-# Date-range based (see utils._show_is_recent); roughly the old current-or-
-# previous-month label heuristic, made explicit.
-SHOW_RECENT_PAST_DAYS = int(os.environ.get("DOG_SHOW_RECENT_PAST_DAYS", "45"))
+# judges arrive through the show weekend, with source corrections trailing for
+# about a week). The crawler re-indexes recent shows on its maintenance pass;
+# everything outside the window is settled, immutable history.
+# Date-range based (see utils._show_is_recent).
+SHOW_RECENT_PAST_DAYS = int(os.environ.get("DOG_SHOW_RECENT_PAST_DAYS", "7"))
 SHOW_RECENT_FUTURE_DAYS = int(os.environ.get("DOG_SHOW_RECENT_FUTURE_DAYS", "31"))
 
 RESULT_CACHE_LIVE_TTL = int(os.environ.get("DOG_RESULT_LIVE_TTL", "120"))

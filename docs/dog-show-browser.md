@@ -94,7 +94,7 @@ Tables (see `app/dog_show/models.py`):
 ## Freshness Policy
 
 - Show list in-memory cache: 30 minutes. (The only fetch-gating in-memory cache left; show detail and breed results are read from `dog.db` per request.)
-- A show is **recent** (`utils._show_is_recent`) when its date range falls within `DOG_SHOW_RECENT_PAST_DAYS` (45) back / `DOG_SHOW_RECENT_FUTURE_DAYS` (31) ahead — one date-based recency system for the crawler's re-index candidates, stale-flag re-probes, and result-cache freshness. Month labels are the fallback when a day range is unparseable; truly unknown dates fail open as recent. Showlink relative sections such as `Tänään` and `Huomenna` work because the backend infers the year from the listed date.
+- A show is **recent** (`utils._show_is_recent`) when its date range falls within `DOG_SHOW_RECENT_PAST_DAYS` (7) back / `DOG_SHOW_RECENT_FUTURE_DAYS` (31) ahead — one date-based recency system for the crawler's re-index candidates, stale-flag re-probes, and result-cache freshness. The past window is the source-correction window: Showlink results are effectively immutable about a week after the show, so everything older is settled history and is never re-fetched. Month labels are the fallback when a day range is unparseable; truly unknown dates fail open as recent. Showlink relative sections such as `Tänään` and `Huomenna` work because the backend infers the year from the listed date.
 - Whole-show result live TTL: 2 minutes by default while a show is still actively filling in.
 - **Incremental live refresh.** A captured breed ring's results are immutable, so a live refresh of a *complete* cache re-fetches **only** breeds that newly gained results (per the show-detail checkmark) plus the bounded unchecked-breed probe — it does not re-crawl already-captured breeds. The working doc is seeded from the existing cache (`crawl_result_cache_for_show`, `seed_from_existing`) and stays `status="complete"` throughout, so an interrupted refresh never demotes a good cache. When the refresh fetches nothing new, only the header/meta is rewritten (`_save_result_cache_header`), never the thousands of result rows. `force=True` still does a deliberate full re-crawl. This replaced an earlier behavior that rebuilt the doc from empty and re-fetched every breed on every live pass — a 200+ page burst that starved the web workers on deploy/cold-start.
 
@@ -114,6 +114,7 @@ The whole redesign (2026-07) centers on one decision: stop fast-polling a show s
 - Front-page display state (`stats.is_live` / `stats.is_paused`, `_show_live_phase` in `utils.py`): a live show reads as **`Käynnissä`** while judging is active, and as **`Jatkuu`** (paused) during its multi-day nightly/evening lull — the overnight quiet window, or a result stall of `DOG_RESULT_PAUSE_STALL_SECONDS` (2h) once past `DOG_RESULT_PAUSE_EVENING_HOUR` (17:00) — but only when another in-range show day still follows. The first day's pre-dawn and the final day's wind-down stay `Käynnissä`; the show flips to past only when `_result_live_plan` reports `settled`/`settled_incomplete` (terminal captured + confirmed, or the deadline hit), so an all-breed show keeps reading `Käynnissä`/`Jatkuu` through its finals instead of flipping to `done` the moment every breed ring is judged. `Jatkuu` rows keep showing today's `n/N tulosta`. This is a display distinction only; the Showlink fetch gate is unchanged.
 - **Live-show serving cost.** While any list row reads `is_live`, the `/dog` page polls `/api/dog/shows` every 15s (per open client), and computing a live show's stats reconstructs its whole-show result doc from SQLite. `_show_stats_from_index` loads that doc at most once per compute and caches the result per process for `DOG_SHOW_STATS_CACHE_TTL` (20s), so poll volume and viewer count don't translate into per-request whole-show reads. This is the web-side counterpart to the crawler's incremental refresh — both keep a live show from doing work proportional to anything other than actual new data.
 - **Scheduler.** `scripts/dog_crawl.py` no longer skips the auto-recent result pass when queued jobs ran in the same cycle — that starvation (web browsing keeps queueing `live-list-refresh` jobs) is what stopped a live show's finals from being fetched. The auto pass shares the budget; a show a queued job just refreshed is deduped out by the candidates' own freshness check.
+- **Date-first candidate selection (2026-07 lean-up).** `_auto_result_cache_candidates` decides from the list row's parsed date alone before touching `dog.db`: upcoming shows and past shows older than `max(DOG_RESULT_AUTO_WINDOW_DAYS, DOG_RESULT_SETTLE_DEADLINE_DAYS)` (7 days at defaults) are skipped outright, since no candidate class (live refresh, overtime, rescue, recent-past warming) can reach them. Only the survivors pay for the whole-show doc load and finals analysis. Before this gate the pass hydrated every listed show's full result doc every 2 minutes — the Tulokset page lists the whole season (~600+ settled shows, ~380k result rows), which was the crawler's ~15% idle CPU baseline on the NUC.
 - **One-off index sweep.** `scripts/dog_sweep_breed_judges.py` folds judges and result flags captured in the result cache into `dog_breed` wherever the retired lazy read-path healing had left gaps (914 judges + 2 flags on the 2026-07 run). Idempotent, fill-only (never overwrites); re-runnable safely but not needed in the loop — the crawler now folds these in at capture time.
 - **Rescuing shows that already lost their finals.** `scripts/dog_rescue_finals.py` is a one-off operational tool (not in the crawler loop) that finds complete caches which structurally owe finals (via `finals.analyze`) and force re-crawls them oldest-first, guarded so it only forces shows Showlink still serves result-bearing breeds for. Use `--dry-run` to list, `--show <id>` to target specific shows. Shows whose source never published the tokens come back unchanged.
 - Whole-show result fallback TTL when the show date is unknown: 24 hours.
@@ -121,7 +122,8 @@ The whole redesign (2026-07) centers on one decision: stop fast-polling a show s
 - A show is considered settled for result-cache TTL after 2 days by default.
 - Automatic recent-show result warming scans shows from the last 7 days by default.
 - Old shows are treated as stable once cached.
-- Empty indexed breed lists without an `empty_breed_list_confirmed` marker are prioritized by the crawler. This self-heals older cache entries created before parser fixes.
+- Empty indexed breed lists without an `empty_breed_list_confirmed` marker are put first in the maintenance pass's candidate list. (The dedicated empty-index repair pass — a self-healing remnant for entries created before parser fixes — was retired in the 2026-07 lean-up once zero candidates remained; the maintenance pass retains the behavior.)
+- Maintenance re-index candidates in the recent bucket are processed stalest-first (`dog_show.updated_at` ascending), so the bounded `--limit` budget round-robins the whole recent window across passes instead of re-fetching the same first-N list rows every 15 minutes.
 
 ## Showlink Page Shapes
 
@@ -142,7 +144,7 @@ Environment knobs:
 - `DOG_RESULT_LIVE_TTL`: TTL for currently ongoing whole-show result caches, seconds.
 - `DOG_RESULT_LIVE_PROBE_BREED_LIMIT`: max unchecked breeds to probe during one live whole-show refresh; defaults to `64`.
 - `DOG_RESULT_FINALS_SWEEP_BREED_LIMIT`: max already-captured breeds re-checked per pass for finals (`RYP`/`BIS`) once all breeds are judged but `BIS-1` is still missing; defaults to `30`. Bounds the end-of-show finals sweep so it never re-crawls the whole show at once.
-- `DOG_SHOW_RECENT_PAST_DAYS` / `DOG_SHOW_RECENT_FUTURE_DAYS`: the date window that makes a show "recent" (re-indexed by the crawler's maintenance pass, eligible for stale-flag re-probes); default `45` / `31` days.
+- `DOG_SHOW_RECENT_PAST_DAYS` / `DOG_SHOW_RECENT_FUTURE_DAYS`: the date window that makes a show "recent" (re-indexed by the crawler's maintenance pass, eligible for stale-flag re-probes); default `7` / `31` days. The past default matches the source-correction window — results older than a week are immutable.
 - `DOG_SHOW_STATS_CACHE_TTL`: seconds to cache a show's computed list stats per web process; defaults to `20`. The `/dog` page polls `/api/dog/shows` every 15s while any show reads `is_live`, and a live show's stats reconstruct its whole-show result doc (thousands of rows) from SQLite. Caching the stats this long decouples that cost from the poll rate and the number of viewers. Bypassed when an explicit `today` is passed (tests).
 - `DOG_RESULT_LIVE_JOB_STALE_SECONDS`: seconds before a non-heartbeating live result job can be claimed again; defaults to `DOG_RESULT_LIVE_TTL`.
 - `DOG_RESULT_SETTLED_TTL`: TTL for settled recent whole-show caches, seconds.
@@ -177,15 +179,14 @@ The public info page at `/dog/about-crawler` explains in Finnish and English wha
 Current `docker-compose.yml` command:
 
 ```bash
-python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --empty-index-interval 30 --limit 6 --delay 2.0 --empty-index-limit 20 --empty-index-delay 0.5 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
+python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --limit 6 --delay 2.0 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
 ```
 
 This means:
 
-- Every 30 seconds: repair up to 20 stale empty breed-index entries with 0.5 seconds between requests.
 - Every 30 seconds: process queued whole-show result jobs.
-- Every 15 minutes: update up to 6 show breed indexes with 2.0 seconds between show-detail requests.
-- Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
+- Every 15 minutes: update up to 6 show breed indexes (missing, unconfirmed-empty, and recent shows stalest-first) with 2.0 seconds between show-detail requests.
+- Every 2 minutes: automatically warm up to 2 recent whole-show result caches when no queued job is active. Candidate selection is date-gated to the last 7 days plus live/upcoming-window shows, so with no recent shows the pass costs ~nothing. Ongoing show caches become stale after 2 minutes by default, so live shows are eligible on each automatic result pass.
 - For one whole-show cache: fetch breed result pages with up to 3 workers and 0.4 seconds between request starts.
 - During a live whole-show refresh, fetch all known result breeds plus up to 64 unchecked probe breeds by default. The probe cursor is persisted in the result cache, so repeated passes sweep through unchecked breeds instead of retrying the same first rows.
 
@@ -238,8 +239,8 @@ Grafana also provisions a **Dog Show Logs** dashboard from
 
 Crawler logs are structured JSON on stdout. Useful event names include
 `dog_crawler_pass_complete`, `dog_crawler_index_pass_complete`,
-`dog_crawler_empty_index_pass_complete`, `dog_result_cache_pass_complete`,
-`dog_result_cache_job_complete`, and `dog_result_cache_complete`.
+`dog_result_cache_pass_complete`, `dog_result_cache_job_complete`,
+and `dog_result_cache_complete`.
 
 Run one crawler pass locally:
 
@@ -253,10 +254,10 @@ Process queued result jobs without automatic recent warming:
 SECRET_KEY=dev python3 scripts/dog_crawl.py --no-auto-results --result-limit 1 --result-workers 3 --result-delay 0.4
 ```
 
-Repair stale empty breed-index entries without warming result caches:
+Refresh breed indexes (missing / unconfirmed-empty / recent) without warming result caches:
 
 ```bash
-SECRET_KEY=dev DOG_INDEX_DIR="$(pwd)/app/data" python3 scripts/dog_crawl.py --no-results --no-index-maintenance --empty-index-limit 20 --empty-index-delay 0.5
+SECRET_KEY=dev DOG_INDEX_DIR="$(pwd)/app/data" python3 scripts/dog_crawl.py --no-results --limit 6 --delay 2.0
 ```
 
 ## Testing

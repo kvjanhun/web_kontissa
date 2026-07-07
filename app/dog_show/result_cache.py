@@ -24,7 +24,7 @@ from .store import (
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _local_dt, _result_live_plan, _show_age_days,
+    _local_dt, _result_live_plan, _show_age_days, _show_date_state,
     _show_result_availability, _terminal_status, _utc_iso,
 )
 
@@ -35,6 +35,7 @@ RESULT_CACHE_LIVE_TTL = config.RESULT_CACHE_LIVE_TTL
 RESULT_CACHE_SETTLED_TTL = config.RESULT_CACHE_SETTLED_TTL
 RESULT_CACHE_SETTLED_AFTER_DAYS = config.RESULT_CACHE_SETTLED_AFTER_DAYS
 RESULT_AUTO_WINDOW_DAYS = config.RESULT_AUTO_WINDOW_DAYS
+RESULT_SETTLE_DEADLINE_DAYS = config.RESULT_SETTLE_DEADLINE_DAYS
 RESULT_CACHE_VERSION = config.RESULT_CACHE_VERSION
 RESULT_RETRY_AFTER_SECONDS = config.RESULT_RETRY_AFTER_SECONDS
 RESULT_CRAWL_DEFAULT_DELAY = config.RESULT_CRAWL_DEFAULT_DELAY
@@ -990,15 +991,27 @@ def _auto_result_cache_candidates(now):
 
     now_local = _local_dt(now)
     today = now_local.date()
+    # Only shows inside the auto window can ever become candidates: overtime and
+    # rescue end at the settle deadline, recent-past warming at the auto window.
+    # The Tulokset list carries the whole season (hundreds of settled shows), so
+    # decide from the list row's date alone before paying for the doc load and
+    # finals analysis. Unparseable dates fall through open, as before.
+    window_days = max(RESULT_AUTO_WINDOW_DAYS, RESULT_SETTLE_DEADLINE_DAYS)
     for show in shows_list:
         show_id = int(show["id"])
+        state = _show_date_state(show, today=today)
+        if state == "upcoming":
+            continue
+
+        age_days = _show_age_days(show, today=today)
+        if state == "past" and age_days is not None and age_days > window_days:
+            continue
+
         doc = _load_result_cache_doc(show_id)
         plan = _result_live_plan_for_id(show_id, doc=doc, now=now)
         phase = plan["phase"]
         if phase == "upcoming":
             continue
-
-        age_days = _show_age_days(show, today=today)
 
         fetchable = plan.get("can_fetch", False)
         # Recent-past initial warming: a show whose crawl never completed (missing
