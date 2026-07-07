@@ -54,6 +54,7 @@ const {
   availableShowAwards,
   showAwardResultGroups,
   showWinnersGroups,
+  showRypByGroup,
   indexedSearchActive,
   groupedShows,
   thisWeekShows,
@@ -162,6 +163,7 @@ watch(pageTitle, (title) => {
         :is-breed-section-collapsed="isBreedSectionCollapsed"
         :show-award-result-groups="showAwardResultGroups"
         :show-winners-groups="showWinnersGroups"
+        :ryp-by-group="showRypByGroup"
         :breed-empty-text="breedEmptyText"
         :expanded-critiques="expandedCritiques"
         :is-breed-group-expanded="isBreedGroupExpanded"

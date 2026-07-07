@@ -705,20 +705,35 @@ test.describe('Dog Show Browser', () => {
     await page.goto('/dog')
     await page.getByRole('button', { name: /Voittaja Show/ }).click()
 
-    // Winners summary renders on the default (unfiltered) view once the cache loads.
+    // Winners summary renders on the default (unfiltered) view once the cache
+    // loads. The BIS group starts collapsed as a single row: the award title
+    // with the winner inline (rank, breed, name, number) — full-card chips
+    // stay hidden.
     await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'BIS', exact: true })).toBeVisible()
-    await expect(page.getByText('Ryhmävoittajat (RYP-1)')).toBeVisible()
-    await expect(page.getByText('Best In Show Dog')).toBeVisible()
-    await expect(page.getByText('Group Five Winner')).toBeVisible()
+    const bisToggle = page.getByRole('button', { name: /^BIS/ })
+    await expect(bisToggle).toHaveAttribute('aria-expanded', 'false')
+    await expect(bisToggle).toContainText('Best In Show Dog')
+    await expect(bisToggle).toContainText('#1')
+    await expect(page.getByText('PU1')).toHaveCount(0)
 
-    // Best-of-sex rank chips (PU1/PN1) render on the winner cards.
+    // Expanding swaps the compact rows for full result cards with PU/PN chips.
+    await bisToggle.click()
     await expect(page.getByText('PU1')).toBeVisible()
-    await expect(page.getByText('PN1')).toBeVisible()
 
-    // Applying a filter hides the summary and shows the filtered breed list instead.
+    // The RYP placements render as full result cards (no title of their own) at
+    // the top of their FCI group section, above the breeds (the section itself
+    // is the collapsible unit).
+    const groupFiveSection = page.locator('.dog-breed-section', { hasText: 'Ryhmä 5' })
+    await expect(groupFiveSection.locator('.dog-ryp-winners')).toContainText('Group Five Winner')
+    await expect(page.getByText('PN1')).toBeVisible()
+    await groupFiveSection.getByRole('button', { name: /Ryhmä 5/ }).click()
+    await expect(groupFiveSection.locator('.dog-ryp-winners')).toBeHidden()
+
+    // Applying a filter hides the summary and the RYP entries, showing the
+    // filtered breed list instead.
     await page.getByPlaceholder('Hae rotua, tuomaria tai koiraa...').fill('Group')
     await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toHaveCount(0)
+    await expect(page.locator('.dog-ryp-winners')).toHaveCount(0)
   })
 
   test('future shows explain that whole-show results are not checked yet', async ({ page }) => {

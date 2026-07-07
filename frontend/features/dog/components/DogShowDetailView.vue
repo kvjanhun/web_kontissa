@@ -125,8 +125,14 @@ const props = defineProps({
     default: () => [],
   },
   showWinnersGroups: {
-    type: Object,
+    type: Array,
     default: null,
+  },
+  // FCI group number → { key, label, dogs } RYP placements, rendered as the top
+  // entry of each group's section in the FCI grouping mode.
+  rypByGroup: {
+    type: Object,
+    default: () => ({}),
   },
   breedEmptyText: {
     type: String,
@@ -167,6 +173,12 @@ const groupModeOptions = [
 
 function awardCritiqueKey(group, dog) {
   return showAwardCritiqueKey(group, dog)
+}
+
+// The in-section RYP cards keep their own critique namespace so their toggle
+// state never collides with the breed-list / award-view cards below.
+function rypCritiqueKey(section, dog) {
+  return `show-winners-ryp-${section.rawKey}-${dog.breedGroup || dog.breedName || ''}-${dog.number || dog.name}`
 }
 
 const shownDogCount = computed(() => {
@@ -366,6 +378,22 @@ function toggleAllVisibleCritiques() {
               v-show="!section.label || !isBreedSectionCollapsed(section.key)"
               class="dog-breed-list dog-breed-group-list"
             >
+              <div
+                v-if="showGroupMode === 'fci' && section.rawKey && rypByGroup[section.rawKey]"
+                class="dog-results-grid dog-ryp-winners"
+              >
+                <DogResultCard
+                  v-for="dog in rypByGroup[section.rawKey].dogs"
+                  :key="rypCritiqueKey(section, dog)"
+                  :dog="dog"
+                  :critique-key="rypCritiqueKey(section, dog)"
+                  :critique-expanded="expandedCritiques.has(rypCritiqueKey(section, dog))"
+                  show-inline-meta
+                  show-breed-meta
+                  show-award-rank
+                  @toggle-critique="$emit('toggle-critique', $event)"
+                />
+              </div>
               <DogBreedGroup
                 v-for="group in section.breeds"
                 :key="group.key"

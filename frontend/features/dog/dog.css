@@ -1224,7 +1224,7 @@
 .dog-show-award-results {
   margin-top: 1.25rem;
 }
-/* ═══ Show winners summary (BIS / RYP-1) ═══ */
+/* ═══ Show winners summary (BIS) + collapsible finals groups ═══ */
 .dog-show-winners {
   margin: 0 0 1.75rem;
   padding: 1rem 1rem 1.15rem;
@@ -1240,33 +1240,74 @@
   font-weight: 800;
   letter-spacing: 0.01em;
 }
-.dog-show-winners-subtitle {
-  margin: 1.1rem 0 0.5rem;
-  color: var(--dog-text-muted);
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.dog-show-winners-group {
+/* One collapsible finals group: a BIS section in the winners summary, or the
+   RYP entry at the top of an FCI breed-list section. Collapsed it is a single
+   row — award title with the winner inline ("BIS  1. rotu Winner Dog #123");
+   expanded it shows the full result cards for every placement. */
+.dog-finals-group {
   display: flex;
   flex-direction: column;
-  gap: 0.55rem;
+  gap: 0.45rem;
 }
-.dog-show-winners-group + .dog-show-winners-group {
-  margin-top: 0.85rem;
+.dog-finals-group + .dog-finals-group {
+  margin-top: 0.3rem;
 }
-.dog-show-winners-heading {
+.dog-finals-head {
   margin: 0;
-  padding: 0.35rem 0;
+}
+.dog-finals-toggle {
+  display: flex;
+  align-items: baseline;
+  gap: 0.55rem;
+  width: 100%;
+  padding: 0.3rem 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-align: left;
   color: var(--dog-text);
   font-size: 0.95rem;
   font-weight: 700;
 }
-.dog-show-winners-heading-sm {
+.dog-finals-toggle:hover .dog-finals-label {
+  color: var(--dog-accent);
+}
+.dog-finals-toggle .dog-chevron-sm {
+  flex-shrink: 0;
+  margin-left: auto;
+  align-self: center;
+}
+.dog-finals-label {
+  flex-shrink: 0;
+}
+.dog-finals-inline-winner {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  min-width: 0;
   font-size: 0.85rem;
-  font-weight: 600;
+  font-weight: 500;
+}
+.dog-finals-inline-rank {
+  flex-shrink: 0;
+  color: var(--dog-accent);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.dog-finals-inline-breed {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   color: var(--dog-text-muted);
+}
+.dog-finals-inline-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--dog-text);
+  font-weight: 600;
 }
 .dog-award-result-group {
   display: flex;

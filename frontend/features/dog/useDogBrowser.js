@@ -25,6 +25,7 @@ import {
   isThisWeekLeft,
   liveDetailAvailability,
   parseShowDate,
+  rypWinnersByFciGroup,
   sameId,
   shouldCollapseMonth,
   showStatItems,
@@ -339,15 +340,22 @@ export function useDogBrowser() {
     dogAwardFilter.value,
   ))
 
-  // Show-winners summary: shown at the top of the default (unfiltered) detail view
-  // once the whole-show cache is loaded, hidden while any show-wide filter/search is
-  // active (the filtered breed list / award view takes over). Null when the show
-  // crowns no finals (e.g. a single-breed specialty).
+  // Show-winners summary (BIS sections): shown at the top of the default
+  // (unfiltered) detail view once the whole-show cache is loaded, hidden while any
+  // show-wide filter/search is active (the filtered breed list / award view takes
+  // over). Null when the show crowns no finals (e.g. a single-breed specialty).
   const showWinnersGroups = computed(() => {
     if (!allDogsLoaded.value || showWideFiltersActive.value) return null
     const winners = buildShowWinnersGroups(allDogsResults.value)
-    if (!winners.bisGroups.length && !winners.rypGroups.length) return null
-    return winners
+    return winners.length ? winners : null
+  })
+
+  // Group placements (RYP) per FCI group, embedded as the top entry of each group
+  // section in the breed list's FCI mode. Hidden alongside the winners summary
+  // while show-wide filters are active.
+  const showRypByGroup = computed(() => {
+    if (!allDogsLoaded.value || showWideFiltersActive.value) return {}
+    return rypWinnersByFciGroup(allDogsResults.value)
   })
 
   async function loadAllShowResults(options = {}) {
@@ -982,6 +990,7 @@ export function useDogBrowser() {
     availableShowAwards,
     showAwardResultGroups,
     showWinnersGroups,
+    showRypByGroup,
     showWideFiltersActive,
     indexedSearchActive,
     groupedShows,

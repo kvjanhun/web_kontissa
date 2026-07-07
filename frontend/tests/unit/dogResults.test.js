@@ -18,6 +18,7 @@ import {
   isOvernightResultWindow,
   liveDetailAvailability,
   parseShowDateRange,
+  rypWinnersByFciGroup,
   showAwardCritiqueKey,
   showBreedGroupCritiqueKey,
   showDateBadgeParts,
@@ -333,53 +334,65 @@ describe('award filters', () => {
 })
 
 describe('buildShowWinnersGroups', () => {
-  it('collects BIS finals and RYP-1 group winners, reusing per-day BIS splitting', () => {
+  it('collects BIS finals sections, reusing per-day BIS splitting', () => {
     const results = [
       { name: 'BIS winner', breedName: 'Basenji', breedGroup: '6', awards: 'BIS-1', number: 5 },
       { name: 'BIS second', breedName: 'Akita', breedGroup: '5', awards: 'BIS-2', number: 9 },
       { name: 'Jun d1', breedName: 'Whippet', breedGroup: '10', awards: 'BIS JUN-1', number: 10 },
       { name: 'Jun d2', breedName: 'Saluki', breedGroup: '10', awards: 'BIS JUN-1', number: 2000 },
+      // RYP placements belong to the per-group entries, never the BIS summary.
       { name: 'Group 5 winner', breedName: 'Akita', breedGroup: '5', awards: 'RYP-1', number: 9 },
-      { name: 'Group 5 runner-up', breedName: 'Samoyed', breedGroup: '5', awards: 'RYP-2', number: 40 },
-      { name: 'Group 6 winner', breedName: 'Basenji', breedGroup: '6', awards: 'RYP-1', number: 5 },
       // A plain result with no finals award must not appear anywhere.
       { name: 'Nobody', breedName: 'Beagle', breedGroup: '6', awards: 'SA', number: 3 },
     ]
 
     const winners = buildShowWinnersGroups(results)
 
-    // BIS section reuses groupResultsByAwardFilter: main BIS grouped, BIS JUN split per day.
-    expect(winners.bisGroups.map(group => group.label)).toEqual([
+    // Reuses groupResultsByAwardFilter: main BIS grouped, BIS JUN split per day.
+    expect(winners.map(group => group.label)).toEqual([
       'BIS',
       'BIS JUN (1. päivä)',
       'BIS JUN (2. päivä)',
     ])
-    expect(winners.bisGroups[0].dogs.map(dog => `${dog.awardRank}:${dog.name}`)).toEqual([
+    expect(winners[0].dogs.map(dog => `${dog.awardRank}:${dog.name}`)).toEqual([
       '1:BIS winner',
       '2:BIS second',
     ])
-
-    // Only RYP-1 winners, one single-dog group per FCI group, labelled by group.
-    expect(winners.rypGroups.map(group => group.label)).toEqual([
-      fciGroupLabel('5'),
-      fciGroupLabel('6'),
-    ])
-    expect(winners.rypGroups.map(group => group.dogs.map(dog => dog.name))).toEqual([
-      ['Group 5 winner'],
-      ['Group 6 winner'],
-    ])
   })
 
-  it('returns empty groups for a show with no show-wide finals (specialty)', () => {
+  it('returns no groups for a show with no show-wide finals (specialty)', () => {
     const results = [
       { name: 'ROP dog', breedName: 'Basenji', breedGroup: '6', awards: 'ROP, SERT', number: 1 },
       { name: 'VSP dog', breedName: 'Basenji', breedGroup: '6', awards: 'VSP', number: 2 },
     ]
 
-    const winners = buildShowWinnersGroups(results)
+    expect(buildShowWinnersGroups(results)).toEqual([])
+  })
+})
 
-    expect(winners.bisGroups).toEqual([])
-    expect(winners.rypGroups).toEqual([])
+describe('rypWinnersByFciGroup', () => {
+  it('keys RYP placements by FCI group, ordered RYP-1 first within a group', () => {
+    const results = [
+      { name: 'Group 5 runner-up', breedName: 'Samoyed', breedGroup: '5', awards: 'RYP-2', number: 40 },
+      { name: 'Group 5 winner', breedName: 'Akita', breedGroup: '5', awards: 'ROP, RYP-1', number: 9 },
+      { name: 'Group 6 winner', breedName: 'Basenji', breedGroup: '6', awards: 'RYP-1', number: 5 },
+      { name: 'Nobody', breedName: 'Beagle', breedGroup: '6', awards: 'SA', number: 3 },
+    ]
+
+    const byGroup = rypWinnersByFciGroup(results)
+
+    expect(Object.keys(byGroup).sort()).toEqual(['5', '6'])
+    expect(byGroup['5'].dogs.map(dog => `${dog.awardRank}:${dog.name}`)).toEqual([
+      '1:Group 5 winner',
+      '2:Group 5 runner-up',
+    ])
+    expect(byGroup['6'].dogs.map(dog => dog.name)).toEqual(['Group 6 winner'])
+  })
+
+  it('returns an empty map when no RYP placements exist', () => {
+    expect(rypWinnersByFciGroup([
+      { name: 'ROP dog', breedName: 'Basenji', breedGroup: '6', awards: 'ROP', number: 1 },
+    ])).toEqual({})
   })
 })
 

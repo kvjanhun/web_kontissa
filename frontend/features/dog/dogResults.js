@@ -293,7 +293,7 @@ function partitionBreedGroups(breedGroups, { keyOf, labelOf, missingLabel, compa
       if (a.missing !== b.missing) return a.missing ? 1 : -1
       return compare(a, b)
     })
-    .map(({ key, label, breeds }) => ({ key, label, breeds }))
+    .map(({ key, rawKey, label, breeds }) => ({ key, rawKey, label, breeds }))
 }
 
 function compareFciSections(a, b) {
@@ -314,7 +314,7 @@ export function groupShowBreedGroups(breedGroups = [], mode = 'fci') {
   if (!breedGroups.length) return []
 
   if (mode === 'alpha') {
-    return [{ key: 'all', label: '', breeds: breedGroups }]
+    return [{ key: 'all', rawKey: '', label: '', breeds: breedGroups }]
   }
 
   if (mode === 'judge') {
@@ -744,21 +744,26 @@ export function groupResultsByAwardFilter(results = [], filter = '') {
 
 // Show-level winners summary derived purely from the already-loaded whole-show
 // results: the show finals (BIS / BIS JUN / BIS VET / BIS PEN, per-day split on
-// multi-day shows) and the FCI group winners (RYP-1 only — the full RYP-1..4 stays
-// in the award-filter view). Reuses groupResultsByAwardFilter so ordering, per-day
-// splitting, and awardRank all match the award view. Both arrays are `{ key, label,
-// dogs }` sections; rypGroups are single-winner sections labelled by FCI group.
-// Returns empty arrays for specialty shows that crown no show-wide finals.
+// multi-day shows) as `{ key, label, dogs }` sections. Reuses
+// groupResultsByAwardFilter so ordering, per-day splitting, and awardRank all
+// match the award view. Group placements (RYP) live inside each FCI section of
+// the breed list instead — see rypWinnersByFciGroup. Returns an empty array for
+// specialty shows that crown no show-wide finals.
 export function buildShowWinnersGroups(results = []) {
-  const bisGroups = groupResultsByAwardFilter(results, 'BIS').filter(group => group.dogs.length)
-  const rypGroups = []
+  return groupResultsByAwardFilter(results, 'BIS').filter(group => group.dogs.length)
+}
+
+// Group placements (RYP-1..4) keyed by FCI group number, for embedding each
+// group's RYP list as the top entry of its breed-list section in the show
+// detail's FCI grouping mode: { '5': { key, label, dogs } }. Dogs carry
+// awardRank from groupResultsByAwardFilter, ordered RYP-1 first.
+export function rypWinnersByFciGroup(results = []) {
+  const byGroup = {}
   groupResultsByAwardFilter(results, 'RYP').forEach((group) => {
-    const winner = group.dogs.find(dog => dog.awardRank === 1)
-    if (winner) {
-      rypGroups.push({ key: group.key, label: fciGroupLabel(winner.breedGroup), dogs: [winner] })
-    }
+    const rawKey = String(group.key).replace(/^RYP:/, '')
+    if (rawKey && rawKey !== 'UNKNOWN' && group.dogs.length) byGroup[rawKey] = group
   })
-  return { bisGroups, rypGroups }
+  return byGroup
 }
 
 const CLASS_ORDER = [

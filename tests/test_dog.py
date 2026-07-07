@@ -3168,6 +3168,40 @@ def test_search_dog_name_escapes_like_wildcards(mock_get, client):
     assert "100%" in dog_results[0]["dog"]
 
 
+@patch("app.dog_show.showlink._SESSION.get")
+def test_search_results_ordered_by_show_date_newest_first(mock_get, client):
+    """Show date is the primary ordering across every match type: newest show
+    first, with dog/owner matches interleaved by date instead of appended last
+    and id order only breaking date ties."""
+    mock_resp = MagicMock(); mock_resp.text = SAMPLE_SHOW_LIST_HTML; mock_resp.status_code = 200
+    mock_get.return_value = mock_resp
+
+    # Two indexed-only breed matches whose id order contradicts their date order,
+    # plus a dog-name match in the newest show (dated via its title, like real
+    # index entries — 14.06.2026 from _seed_search_doc's title).
+    seed_index_show("13001", {
+        "title": "10.05.2026 Keväthaku", "name": "Keväthaku", "date": "10.05.2026",
+        "month": "toukokuu 2026",
+        "breeds": [{"name": "hakubasenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    seed_index_show("13002", {
+        "title": "20.03.2026 Talvihaku", "name": "Talvihaku", "date": "20.03.2026",
+        "month": "maaliskuu 2026",
+        "breeds": [{"name": "hakubasenji", "count": 5, "group": "5", "breed_id": "3", "has_results": True}],
+    })
+    _seed_search_doc(13003, [_search_result_row(1, "Hakubasenji Superstar")])
+
+    resp = client.get("/api/dog/search?q=hakubasenji")
+
+    assert resp.status_code == 200
+    ordered = [(r["show"]["id"], r["match"]) for r in resp.get_json()["results"]]
+    assert ordered == [
+        (13003, "dog"),      # 14.06.2026
+        (13001, "breed"),    # 10.05.2026
+        (13002, "breed"),    # 20.03.2026
+    ]
+
+
 def test_parse_show_meta_from_title():
     from app.dog_show.indexing import _parse_show_meta_from_title
     # Single date

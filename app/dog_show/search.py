@@ -1,3 +1,5 @@
+import datetime
+
 import requests
 import structlog
 
@@ -9,7 +11,7 @@ from .store import (
     _search_index_breeds, _search_index_judges, _search_index_show_ids,
     _show_list_cache,
 )
-from .utils import _clean_judge_name
+from .utils import _clean_judge_name, _month_year_from_label, _parse_show_date_range
 
 logger = structlog.get_logger(__name__)
 
@@ -39,15 +41,44 @@ def _list_show_text(show):
         show.get("month", ""),
     ])
 
+def _show_start_date(show):
+    """Best-effort show start date for recency ordering: the parsed `date` range,
+    the date embedded in an indexed title ('14.06.2026 Basenji'), or the first of
+    the month-label month. None when nothing parses."""
+    start_date, _end = _parse_show_date_range(show)
+    if start_date:
+        return start_date
+    title = (show or {}).get("title", "")
+    if title:
+        start_date, _end = _parse_show_date_range({**show, "date": title})
+        if start_date:
+            return start_date
+    month, year = _month_year_from_label((show or {}).get("month", ""))
+    if month and year:
+        return datetime.date(year, month, 1)
+    return None
+
+def _result_recency_key(result):
+    """Sort key for the final newest-first ordering: dated shows before undated,
+    then start date, then show id (a rough recency proxy for ties and unknowns)."""
+    show = result.get("show") or {}
+    try:
+        show_id = int(show.get("id"))
+    except (TypeError, ValueError):
+        show_id = 0
+    start_date = _show_start_date(show)
+    return (start_date is not None, start_date or datetime.date.min, show_id)
+
 
 def search_shows_data(query):
     """Assemble /api/dog/search results from SQL index scans.
 
     The index queries (breed name, judge, show text) run against dog.db; this
-    function only groups the matches by show and ranks them: per show a breed
-    match outranks a judge match outranks a show-text match, and shows from the
-    current Showlink list come first (in list order), then indexed-only shows
-    newest-first. Cross-show dog/owner matches are appended last.
+    function only groups the matches by show and orders them. Per show a breed
+    match outranks a judge match outranks a show-text match; the final list is
+    ordered by show date, newest first, across every match type (index matches
+    and the appended cross-show dog/owner matches alike). The stable sort keeps
+    each show's rows together in their per-show precedence order.
     """
     query_variants = _search_query_variants(query)
 
@@ -75,6 +106,7 @@ def search_shows_data(query):
     )
 
     matched_ids = set(breed_matches) | set(judge_matches) | show_matches
+    # Assembly order only — the final ordering is the newest-first date sort below.
     ordered_ids = [sid for sid in list_shows_by_id if sid in matched_ids]
     ordered_ids += sorted(
         (sid for sid in matched_ids if sid not in list_shows_by_id),
@@ -143,6 +175,8 @@ def search_shows_data(query):
 
     _append_entity_matches(results, _show_payload, query)
 
+    results.sort(key=_result_recency_key, reverse=True)
+
     list_only_count = len(set(list_shows_by_id) - {
         str(sid) for sid in _indexed_ids_among(list(list_shows_by_id))
     })
@@ -157,10 +191,11 @@ def search_shows_data(query):
 
 
 def _append_entity_matches(results, show_payload, query):
-    """Append cross-show dog-name and owner matches after the show/breed/judge
-    results, so those keep ranking first. Each hit is one result per show carrying
-    a `match` type ("dog"/"owner") and a representative name + count. Skips shows
-    without a resolvable payload (defensive — every captured show is indexed)."""
+    """Append cross-show dog-name and owner matches; the caller's final date sort
+    interleaves them with the show/breed/judge results. Each hit is one result per
+    show carrying a `match` type ("dog"/"owner") and a representative name + count.
+    Skips shows without a resolvable payload (defensive — every captured show is
+    indexed)."""
     if len(str(query or "").strip()) < SEARCH_ENTITY_MIN_LENGTH:
         return
 
