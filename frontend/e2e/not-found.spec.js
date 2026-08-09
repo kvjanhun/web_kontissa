@@ -12,4 +12,12 @@ test.describe('404 Page', () => {
     const homeLink = page.locator('a[href="/"].bg-accent')
     await expect(homeLink).toBeVisible()
   })
+
+  test('is marked noindex', async ({ page }) => {
+    // The HTTP 404 status is served by Flask, which these specs bypass (they run
+    // against `nuxt preview`), so it's asserted in tests/test_core_routes.py instead.
+    // What this can check is that the page itself asks not to be indexed.
+    await page.goto('/nonexistent-page-xyz')
+    await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', 'noindex')
+  })
 })

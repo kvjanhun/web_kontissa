@@ -1,6 +1,6 @@
 import os
 from flask import Blueprint, jsonify, redirect, url_for, Response, send_from_directory
-from .utils import get_latest_commit_date
+from .utils import get_latest_commit_date, is_known_route
 from datetime import datetime
 from . import limiter
 
@@ -33,6 +33,11 @@ def generate_sitemap():
     lastmod = commit_date[:10] if commit_date else "2026-03-01"
     pages = [
         {"loc": "https://erez.ac/", "lastmod": lastmod, "changefreq": "monthly", "priority": "1.0"},
+        # Both are pre-rendered and linked from the home footer. /dog/about-crawler
+        # exists so crawler operators can identify the bot without guessing the URL,
+        # which only works if it's discoverable.
+        {"loc": "https://erez.ac/dog", "lastmod": lastmod, "changefreq": "daily", "priority": "0.8"},
+        {"loc": "https://erez.ac/dog/about-crawler", "lastmod": lastmod, "changefreq": "yearly", "priority": "0.3"},
     ]
 
     xml_parts = ['<?xml version="1.0" encoding="UTF-8"?>',
@@ -76,4 +81,10 @@ def catch_all(path):
         if os.path.isfile(index_path):
             return send_from_directory(requested, "index.html")
     # SPA fallback: 200.html is a generic Nuxt shell (not pre-rendered for any specific route)
-    return send_from_directory(dist_root, "200.html")
+    response = send_from_directory(dist_root, "200.html")
+    if not is_known_route(path):
+        # Serve the same shell — the client router renders the styled 404 page — but
+        # with the honest status. Previously every unknown URL was a soft 404 returning
+        # 200, so search engines indexed junk paths as real pages.
+        response.status_code = 404
+    return response

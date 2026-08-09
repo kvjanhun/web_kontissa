@@ -2,6 +2,10 @@
 definePageMeta({ titleKey: 'title.notFound' })
 
 const { t } = useI18nStore()
+
+// Belt-and-braces with the 404 status the Flask catch-all now returns: this shell is
+// also what a crawler receives for any unknown path, so keep it out of the index.
+useHead({ meta: [{ name: 'robots', content: 'noindex' }] })
 </script>
 
 <template>
