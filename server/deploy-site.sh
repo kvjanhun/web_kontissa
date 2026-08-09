@@ -59,7 +59,11 @@ if docker ps --format '{{.Names}}' | grep -q "^${WEB_CONTAINER}$" \
   echo "Snapshot refreshed from the database."
 else
   rm -f app/data/home-content.snapshot.json
-  echo "Snapshot export skipped; using the committed snapshot."
+  # Deliberately non-fatal (see above), but NOT routine: if this fires on every deploy,
+  # admin content edits never reach the prerendered HTML — visitors only get them after
+  # the client-side /api/home-content fetch, and crawlers never see them at all. Check
+  # the traceback above before assuming it's the expected first-deploy case.
+  echo "WARNING: snapshot export failed; falling back to the committed snapshot."
 fi
 
 echo "Rebuilding Docker container..."

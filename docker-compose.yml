@@ -7,6 +7,12 @@ services:
     command: gunicorn -w 2 --timeout 120 --graceful-timeout 30 -b 0.0.0.0:80 run:app
     env_file: .env
     environment:
+      # Same value as app/__init__.py's built-in default, but set explicitly so the
+      # environment — not a path guess — is authoritative for anything exec'd into
+      # this container. scripts/*.py fall back to a repo-relative <root>/app/data/site.db,
+      # which resolves to /app/app/data/site.db here (the volume is mounted at /app/data,
+      # and the repo root is /app), surfacing as "unable to open database file" at import.
+      - DATABASE_URI=sqlite:////app/data/site.db
       - DOG_INDEX_DIR=/app/data
     ports:
       - "127.0.0.1:8080:80"
@@ -32,6 +38,8 @@ services:
     command: python scripts/dog_crawl.py --loop --interval 30 --maintenance-interval 900 --auto-results-interval 120 --limit 6 --delay 2.0 --queued-result-limit 1 --auto-result-limit 2 --result-delay 0.4 --result-workers 3
     env_file: .env
     environment:
+      # See the web service above — importing `app` opens site.db here too.
+      - DATABASE_URI=sqlite:////app/data/site.db
       - DOG_INDEX_DIR=/app/data
     volumes:
       - ./app/data:/app/data

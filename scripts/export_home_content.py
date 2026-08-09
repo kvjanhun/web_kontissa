@@ -21,7 +21,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SNAPSHOT_PATH = os.path.join(ROOT, "frontend", "locales", "home-content.snapshot.json")
 
-os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
+# Dev-host fallback only — see scripts/prune_pageview_events.py for the full rationale.
+# deploy-site.sh runs this script inside the web container, where the repo-relative
+# guess (/app/app/data/site.db) does not exist; the container's own default is correct.
+if not (ROOT == "/app" and os.path.isdir("/app/data")):
+    os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
 
 from app import app  # noqa: E402
 from app.models import db  # noqa: E402

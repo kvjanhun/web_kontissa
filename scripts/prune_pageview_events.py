@@ -12,7 +12,12 @@ Usage:
     python3 scripts/prune_pageview_events.py [--days 90] [--dry-run]
 
 On the NUC, run it inside the web container so it picks up the mounted data volume:
-    docker exec <web-container> python scripts/prune_pageview_events.py
+    docker exec web_kontissa-web-1 python scripts/prune_pageview_events.py --dry-run
+
+That needs a container built from this commit or later (docker-compose.yml now sets
+DATABASE_URI). Against an older image, pass the path explicitly:
+    docker exec -e DATABASE_URI=sqlite:////app/data/site.db web_kontissa-web-1 \
+        python scripts/prune_pageview_events.py --dry-run
 """
 import argparse
 import os
@@ -22,7 +27,15 @@ from datetime import datetime, timedelta, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
+
+# Dev-host fallback only. In the container the repo root IS /app and the data volume
+# is mounted at /app/data, so the repo-relative guess resolves to /app/app/data/site.db
+# — a directory that doesn't exist, which surfaces as an opaque
+# "sqlite3.OperationalError: unable to open database file" during `from app import app`.
+# There, app/__init__.py's own default (sqlite:////app/data/site.db) is already correct,
+# and docker-compose.yml sets DATABASE_URI explicitly on top of that; leave both alone.
+if not (ROOT == "/app" and os.path.isdir("/app/data")):
+    os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
 
 from app import app  # noqa: E402
 from app.models import db, PageViewEvent  # noqa: E402

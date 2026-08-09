@@ -37,6 +37,43 @@ Not done, needs the operator: **`scripts/prune_pageview_events.py` is not schedu
 It ships with tests but nothing invokes it — it needs a cron entry on the NUC (or a
 line in an existing maintenance script) or `PageViewEvent` keeps growing.
 
+**2026-08-09 (follow-up)** — the prune script failed on first run on the NUC with
+`sqlite3.OperationalError: unable to open database file`, raised from `db.create_all()`
+during `from app import app`, before any of the script's own code ran.
+
+Cause: `os.environ.setdefault("DATABASE_URI", …)` defaulted to a **repo-relative**
+`<root>/app/data/site.db`. In the container the repo root *is* `/app` and the data volume
+is mounted at `/app/data`, so that resolves to `/app/app/data/site.db` — a directory that
+does not exist. `docker-compose.yml` set no `DATABASE_URI`, so the guess won over
+`app/__init__.py`'s own default (`sqlite:////app/data/site.db`), which was correct all along.
+
+Fixed in three places:
+
+- `docker-compose.yml` — `DATABASE_URI` set explicitly on `web` and `dog-crawler`, so the
+  environment is authoritative for anything exec'd into either container.
+- `scripts/{prune_pageview_events,export_home_content,seed_home_content}.py` — the
+  repo-relative fallback is now guarded to dev hosts (`ROOT == "/app" and isdir("/app/data")`
+  means container; leave the env alone). All three carried the identical bug.
+- `server/deploy-site.sh` — the snapshot-export failure branch now logs `WARNING:` instead
+  of the benign-sounding "Snapshot export skipped".
+
+**Knock-on finding: the deploy-time snapshot refresh has never worked.**
+`deploy-site.sh` runs `export_home_content.py` *inside the web container* on every deploy,
+where it hit the exact same path bug — and its failure is swallowed by a best-effort `else`
+branch whose message reads like an expected first-deploy case. So `nuxt generate` has always
+baked whatever snapshot was committed to git. Consequence for the companion admin-content
+plan: admin edits reach visitors via the runtime `/api/home-content` fetch, but **not** the
+prerendered HTML, so crawlers and link-preview scrapers have been seeing stale content. The
+path fix above should repair this on the next deploy — confirm by grepping the deploy log
+for `Snapshot refreshed from the database.` and checking that
+`frontend/locales/home-content.snapshot.json` actually changes when admin content does.
+
+Verified on the host: prune dry-run reports 224 stale events, export writes 17 keys /
+4 projects per locale, an explicitly-passed `DATABASE_URI` is still honoured (so the
+`-e` workaround below works against the current image), `docker compose config` parses,
+`bash -n` clean, `pytest tests/test_pageviews.py tests/test_home_content.py` 52 passed.
+The container branch of the guard could not be executed locally — no `/app` on macOS.
+
 ## Objective
 
 Fix the repo-owned findings from the 2026-08-09 site review: stale/incorrect public copy, missing SEO surface, a set of frontend and backend bugs, and two session-handling bugs in sanakenno.

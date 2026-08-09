@@ -24,8 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SNAPSHOT_PATH = os.path.join(ROOT, "frontend", "locales", "home-content.snapshot.json")
 
-# Default to the dev site.db unless the caller overrides DATABASE_URI.
-os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
+# Default to the dev site.db unless the caller overrides DATABASE_URI. Dev-host only —
+# see scripts/prune_pageview_events.py for why the repo-relative path is wrong in the
+# container, where app/__init__.py's own default already points at the mounted volume.
+if not (ROOT == "/app" and os.path.isdir("/app/data")):
+    os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
 
 from app import app  # noqa: E402
 from app.models import db, HomeContent, Project, ProjectTranslation  # noqa: E402
