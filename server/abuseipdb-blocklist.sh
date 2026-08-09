@@ -15,6 +15,12 @@
 # Deployed to: /home/kvjanhun/scripts/abuseipdb-blocklist.sh
 set -euo pipefail
 
+# cron runs with a minimal PATH (/usr/bin:/bin) that omits /usr/sbin, where ipset and
+# iptables live. Without this the first `ipset create` below fails as "command not
+# found" and set -e aborts the script — after the curl has already spent an API call —
+# so no set and no INPUT rule are ever created, silently.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 ENV_FILE="${ABUSEIPDB_ENV_FILE:-/home/kvjanhun/.config/site-alerts.env}"
 # shellcheck disable=SC1090
 [ -f "$ENV_FILE" ] && . "$ENV_FILE"
