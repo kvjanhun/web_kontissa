@@ -108,6 +108,21 @@ class TestUpdateHomeContent:
         })
         assert res.status_code == 400
 
+    def test_rejects_protocol_relative_href(self, logged_in_admin):
+        """'//evil.com' resolves to an external host but reads as an internal path."""
+        res = logged_in_admin.put("/api/admin/home-content", json={
+            "key": "home.footer.connectLinks", "locale": "en",
+            "value": [{"label": "Totally internal", "href": "//evil.com/phish"}],
+        })
+        assert res.status_code == 400
+
+    def test_still_accepts_site_relative_href(self, logged_in_admin):
+        res = logged_in_admin.put("/api/admin/home-content", json={
+            "key": "home.footer.siteLinks", "locale": "en",
+            "value": [{"label": "/dog", "href": "/dog"}],
+        })
+        assert res.status_code == 200
+
 
 class TestAdminHomeContentList:
     def test_returns_both_locales(self, logged_in_admin):

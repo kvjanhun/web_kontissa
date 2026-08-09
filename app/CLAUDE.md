@@ -6,8 +6,9 @@
 - **Blueprints**: All routes use blueprints (`core_bp`, `auth_bp`, `recipes_bp`, etc.) registered in `__init__.py`. No URL prefixes — paths stay identical.
 - **Auth**: `@admin_required` decorator in `app/decorators.py` (wraps `@login_required` + role check). Recipe endpoints use `@login_required` (shared cookbook — any user can CRUD).
 - All API endpoints return JSON
-- `catch_all` route serves static files from `dist/`, pre-rendered `index.html` per route, or `200.html` SPA fallback for client-side routing
-- GitHub API responses cached 6 hours (`utils.py`). FMI weather cached 10 minutes with stale fallback (`api/weather.py`).
+- `catch_all` route serves static files from `dist/`, pre-rendered `index.html` per route, or `200.html` SPA fallback for client-side routing. Paths outside `utils.is_known_route()` get the same `200.html` body with a **404 status** (so the client router still renders the styled 404 page while crawlers stop indexing junk URLs as real pages). `SPA_ROUTE_PREFIXES` in `app/utils.py` is that allow-list — keep it in sync with `frontend/pages/` and the redirect `routeRules`.
+- GitHub API responses cached 6 hours (`utils.py`), with a 5-minute failure backoff (`FAILURE_RETRY_TTL`) so an outage or rate-limit can't make every `/api/meta` and `/sitemap.xml` request retry a 5s blocking call. FMI weather cached 10 minutes with stale fallback (`api/weather.py`).
+- `PageViewEvent` retention is **not** automatic — `scripts/prune_pageview_events.py` drops rows past the 90-day window `/api/pageviews/events` can serve. Run it on a schedule; nothing in the request path prunes.
 - Showlink dog show data is scraped server-side (`api/dog.py` route facade, `dog_show/` implementation). Breed indexing runs from `scripts/dog_crawl.py` as a separate process, not from Flask/Gunicorn workers.
 
 ## Schema Changes
@@ -30,7 +31,7 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 | GET | `/api/recipes` | Login | List (optional `?q=&category=`) |
 | GET/POST/PUT/DELETE | `/api/recipes[/<slug\|id>]` | Login | CRUD recipes |
 | GET | `/api/recipes/categories` | Login | Category list |
-| POST | `/api/pageview` | Public | Track page view (session-deduped) |
+| POST | `/api/pageview` | Public | Track page view (session-deduped). Rejects paths outside `is_known_route()` with 400 — the endpoint is public, so an allow-list is what stops arbitrary rows being inserted into the Litestream-replicated `site.db`. The per-session dedup list is capped at `MAX_TRACKED_PATHS` because it rides in the signed cookie. |
 | GET | `/api/pageviews` | Admin | All page views (aggregated counts) |
 | GET | `/api/pageviews/events` | Admin | Time-series events (days param 1–90) |
 | GET | `/api/server-info` | Public | Intentional coarse terminal status; keep fields limited to the tested whitelist |
@@ -43,7 +44,7 @@ Never run migrations from Flask startup, imports, or request handlers. `app/__in
 | GET | `/api/dog/shows/<id>/all-results` | Public | Whole-show dog results from persisted cache; queues cache warming when missing |
 | GET | `/api/dog/search?q=` | Public | Search shows, breeds, judges (index), plus dogs (aggregated by reg_id), owners & breeder-award kennels across all captured shows (SQL, `q≥3`) |
 | GET | `/api/dog/dogs?reg=` | Public | Cross-show dog profile for one Kennelliitto reg number (query param — reg ids contain `/`) |
-| GET | `/sitemap.xml` | Public | SEO sitemap |
+| GET | `/sitemap.xml` | Public | SEO sitemap (`/`, `/dog`, `/dog/about-crawler`) |
 
 ## Models
 

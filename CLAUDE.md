@@ -56,7 +56,7 @@ web_kontissa/
 │   ├── api/                # cowsay, weather, health, pageviews, dog
 │   └── models.py           # All SQLAlchemy models
 ├── tests/                  # Backend pytest
-├── scripts/                # seed_e2e.py, seed_home_content.py, export_home_content.py, dog_crawl.py, etc.
+├── scripts/                # seed_e2e.py, seed_home_content.py, export_home_content.py, dog_crawl.py, prune_pageview_events.py, etc.
 └── server/                 # deploy-site.sh, health-alert.sh, backup-configs.sh, erez.ac.conf
     └── observability/      # Loki, Alloy, Prometheus, Grafana configs (see server/observability/CLAUDE.md)
 ```
