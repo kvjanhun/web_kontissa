@@ -8,10 +8,16 @@ const i18n = useI18nStore()
 const { t, loadHomeContent } = i18n
 const { locale } = storeToRefs(i18n)
 
+// Social cards follow the visitor's locale: without the og:* overrides here the
+// share preview would keep the English defaults from nuxt.config.ts regardless of
+// what the page actually says.
 useHead({
   title: computed(() => t('home.metaTitle')),
   meta: [
     { name: 'description', content: computed(() => t('home.metaDescription')) },
+    { property: 'og:title', content: computed(() => t('home.metaTitle')) },
+    { property: 'og:description', content: computed(() => t('home.metaDescription')) },
+    { property: 'og:locale', content: computed(() => (locale.value === 'fi' ? 'fi_FI' : 'en_US')) },
   ],
 })
 

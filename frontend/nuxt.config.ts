@@ -52,6 +52,7 @@ export default defineNuxtConfig({
         // Link-type icons resolved dynamically by useLinkIcon() (scan can't see them)
         'solar:letter-bold',
         'solar:arrow-right-up-bold',
+        'solar:arrow-right-bold',
         'simple-icons:github',
         'simple-icons:linkedin',
         // Admin panel (Flat Color Icons). The nav/stat icons are bound dynamically
@@ -97,11 +98,14 @@ export default defineNuxtConfig({
       viewport: 'width=device-width, initial-scale=1.0, viewport-fit=cover',
       title: 'erez.ac - Konsta Janhunen',
       meta: [
-        { name: 'description', content: 'Konsta Janhunen — Developer, tinkerer, technology enthusiast.' },
+        // Site-wide defaults. The home page overrides description/og:title/og:description
+        // per locale in pages/index.vue so social cards match the visitor's language.
+        { name: 'description', content: 'Konsta Janhunen — full-stack & integration developer who likes to know how things work. From the bottom to the top of the stack.' },
         { property: 'og:title', content: 'erez.ac — Konsta Janhunen' },
-        { property: 'og:description', content: 'Developer & tinkerer. Full-stack developer, and technology enthusiast.' },
+        { property: 'og:description', content: 'Full-stack & integration developer who likes to know how things work. From the bottom to the top of the stack.' },
         { property: 'og:url', content: 'https://erez.ac' },
         { property: 'og:type', content: 'website' },
+        { property: 'og:locale', content: 'en_US' },
         { property: 'og:image', content: 'https://erez.ac/og-image.png' },
         { property: 'og:image:width', content: '1200' },
         { property: 'og:image:height', content: '630' },
@@ -123,6 +127,12 @@ export default defineNuxtConfig({
             '@type': 'Person',
             name: 'Konsta Janhunen',
             url: 'https://erez.ac',
+            jobTitle: 'Full-stack & integration developer',
+            email: 'mailto:hello@erez.ac',
+            sameAs: [
+              'https://github.com/kvjanhun',
+              'https://www.linkedin.com/in/konsta-janhunen-263832165',
+            ],
           }),
         },
       ],

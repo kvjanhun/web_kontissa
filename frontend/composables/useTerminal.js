@@ -239,13 +239,13 @@ function handleAbout() {
     '<div><span class="text-term-sand font-bold">Languages</span>  <span class="text-gray-300">Python · TypeScript · SQL · Bash · HTML/CSS</span></div>' +
     '<div><span class="text-term-amber font-bold">Frontend</span>   <span class="text-gray-300">Vue · Nuxt · React · Tailwind CSS · Vite</span></div>' +
     '<div><span class="text-term-sage font-bold">Backend</span>    <span class="text-gray-300">Flask · Node.js · REST APIs · SQLite</span></div>' +
-    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions · Backblaze S3</span></div>' +
+    '<div><span class="text-term-rose font-bold">Infra</span>      <span class="text-gray-300">Docker · Nginx · Linux · GitHub Actions · Backblaze B2</span></div>' +
     '<div><span class="text-term-dir font-bold">Tools</span>      <span class="text-gray-300">Git · Claude Code · Agentic coding · VSCode</span></div>' +
     '</div>' +
     '<div class="mt-2">' +
     '<a href="https://github.com/kvjanhun" class="text-term-amber hover:underline" target="_blank" rel="noopener">My GitHub</a>' +
     '<span class="text-gray-500 mx-2">|</span>' +
-    '<a href="https://linkedin.com/in/kvjanhun" class="text-term-dir hover:underline" target="_blank" rel="noopener">My LinkedIn</a>' +
+    '<a href="https://www.linkedin.com/in/konsta-janhunen-263832165" class="text-term-dir hover:underline" target="_blank" rel="noopener">My LinkedIn</a>' +
     '</div>' +
     '</div>'
   )
