@@ -46,6 +46,26 @@ describe('useI18nStore — t()', () => {
     expect(result).toContain('2026-01-01')
     expect(result).not.toContain('{date}')
   })
+
+  it('replaces every occurrence of a repeated placeholder', async () => {
+    // A single String.replace() only substitutes the first hit, which silently
+    // leaves a raw {token} in any message that uses one twice.
+    const i18n = useI18nStore()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ 'home.footer.copyright': '© {year} — built {year}' }),
+    }))
+    await i18n.loadHomeContent('en')
+
+    const result = i18n.t('home.footer.copyright', { year: 2026 })
+    expect(result).toBe('© 2026 — built 2026')
+    expect(result).not.toContain('{year}')
+  })
+
+  it('leaves the string alone when no params are passed', () => {
+    const i18n = useI18nStore()
+    expect(i18n.t('footer.lastUpdated')).toContain('{date}')
+  })
 })
 
 describe('useI18nStore — tm()', () => {
@@ -110,6 +130,34 @@ describe('useI18nStore — loadHomeContent', () => {
     const i18n = useI18nStore()
     await i18n.loadHomeContent('en')
     expect(i18n.tm('home.hero.body')).toBe(baked)
+  })
+
+  it('merges over the snapshot instead of replacing it', async () => {
+    // home.* content keys have no fallback in locales/{en,fi}.json, so a key that
+    // exists in the snapshot but isn't seeded in the DB yet must survive the fetch —
+    // otherwise adding a home key becomes a deploy that visibly breaks the live page.
+    const baked = useI18nStore().tm('home.stack.intro')
+    expect(baked).toBeTruthy()
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ 'home.hero.body': 'Only this key came back.' }),
+    }))
+    const i18n = useI18nStore()
+    await i18n.loadHomeContent('en')
+
+    expect(i18n.tm('home.hero.body')).toBe('Only this key came back.')
+    expect(i18n.tm('home.stack.intro')).toBe(baked)
+  })
+
+  it('replaces the projects collection wholesale', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ 'home.projects': [{ name: 'Only One' }] }),
+    }))
+    const i18n = useI18nStore()
+    await i18n.loadHomeContent('en')
+    expect(i18n.tm('home.projects')).toEqual([{ name: 'Only One' }])
   })
 })
 

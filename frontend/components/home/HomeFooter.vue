@@ -2,14 +2,15 @@
 const i18n = useI18nStore()
 const { t, tm } = i18n
 
-const { linkIcon } = useLinkIcon()
+const { linkIcon, isExternal } = useLinkIcon()
+
+// Baked into the prerendered HTML at build time, then corrected on hydration if the
+// year has since rolled over — so a January visitor sees the right year even if the
+// site hasn't been redeployed yet.
+const currentYear = new Date().getFullYear()
 
 const connectLinks = computed(() => tm('home.footer.connectLinks') || [])
 const siteLinks = computed(() => tm('home.footer.siteLinks') || [])
-
-function isExternal(href) {
-  return /^(https?:|mailto:)/.test(href)
-}
 </script>
 
 <template>
@@ -45,7 +46,10 @@ function isExternal(href) {
         <span class="ftr__nuc">{{ t('home.footer.nuc') }}</span>
       </div>
     </div>
-    <div class="ftr__copyright">{{ t('home.footer.copyright') }}</div>
+    <!-- {year} is interpolated so the DB value never has to be edited in January.
+         No-op against a value that hardcodes the year, so this ships independently
+         of the admin edit that introduces the placeholder. -->
+    <div class="ftr__copyright">{{ t('home.footer.copyright', { year: currentYear }) }}</div>
   </footer>
 </template>
 

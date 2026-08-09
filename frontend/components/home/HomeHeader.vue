@@ -64,7 +64,11 @@ function toggleLang() {
       </nav>
     </div>
 
-    <div class="nav-drawer" :class="{ 'nav-drawer--open': menuOpen }" :aria-hidden="!menuOpen">
+    <!-- `inert` (not aria-hidden) while collapsed: the drawer stays in the DOM with
+         max-height:0, so its links would otherwise remain tabbable while hidden from
+         assistive tech — a focusable element inside aria-hidden. inert removes them
+         from both the tab order and the a11y tree. -->
+    <div class="nav-drawer" :class="{ 'nav-drawer--open': menuOpen }" :inert="!menuOpen">
       <a
         v-for="link in navLinks"
         :key="link.href"

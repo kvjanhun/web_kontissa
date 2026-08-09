@@ -7,6 +7,10 @@ import homeSnapshot from '~/locales/home-content.snapshot.json'
 const messages = { en, fi }
 const supportedLocales = ['en', 'fi']
 
+function escapeRegExp(str) {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 export const useI18nStore = defineStore('i18n', () => {
   // Always initialize with 'en' for SSR compatibility.
   // The locale.client.js plugin restores the user's preference after hydration.
@@ -35,7 +39,8 @@ export const useI18nStore = defineStore('i18n', () => {
     if (str === undefined || str === null) str = key
     if (params && typeof str === 'string') {
       for (const [k, v] of Object.entries(params)) {
-        str = str.replace(`{${k}}`, v)
+        // Global replace: a message may use the same placeholder more than once.
+        str = str.replace(new RegExp(`\\{${escapeRegExp(k)}\\}`, 'g'), v)
       }
     }
     return str
@@ -54,7 +59,17 @@ export const useI18nStore = defineStore('i18n', () => {
       const res = await fetch(`/api/home-content?locale=${loc}`)
       if (!res.ok) return
       const data = await res.json()
-      homeContent.value = { ...homeContent.value, [loc]: data }
+      // Merge over the baked snapshot rather than replacing it. home.* content keys
+      // have no fallback in locales/{en,fi}.json, so a key that exists in the snapshot
+      // but isn't seeded in the DB yet would otherwise be dropped here and render as
+      // its raw key. Merging is safe because HOME_CONTENT_FIELDS keys can only be
+      // upserted through the admin API, never deleted, so a stale snapshot value can
+      // never mask an intentional removal. home.projects is an array and is still
+      // replaced wholesale, which is what the collection wants.
+      homeContent.value = {
+        ...homeContent.value,
+        [loc]: { ...homeContent.value[loc], ...data },
+      }
     } catch {
       // Keep the baked snapshot on any network/parse failure.
     }

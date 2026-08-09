@@ -3,7 +3,7 @@ const i18n = useI18nStore()
 const { t, tm } = i18n
 const vReveal = useScrollReveal()
 
-const { linkIcon } = useLinkIcon()
+const { linkIcon, isExternal } = useLinkIcon()
 
 const projects = computed(() => tm('home.projects') || [])
 const openIndex = ref(0)
@@ -52,7 +52,14 @@ function projNum(i) {
                 <span v-for="tech in p.tech" :key="tech" class="tech-tag">{{ tech }}</span>
               </div>
               <div class="proj__links">
-                <a v-for="l in p.links" :key="l.label" :href="l.href" class="proj__link">
+                <a
+                  v-for="l in p.links"
+                  :key="l.label"
+                  :href="l.href"
+                  class="proj__link"
+                  :target="isExternal(l.href) ? '_blank' : undefined"
+                  :rel="isExternal(l.href) ? 'noopener noreferrer' : undefined"
+                >
                   <Icon class="proj__link-icon" :name="linkIcon(l.href)" aria-hidden="true" />{{ l.label }}
                 </a>
               </div>
