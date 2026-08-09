@@ -103,6 +103,11 @@ _HREF_ALLOWED_SCHEMES = ("http", "https", "mailto", "tel")
 
 def _is_safe_href(href):
     stripped = re.sub(r"[\x00-\x20 ]+", "", href).lower()
+    # "//evil.com" is protocol-relative, not site-relative — the browser resolves it
+    # to an external host while it reads as an internal path in the admin. Reject it
+    # before the leading-"/" check can wave it through.
+    if stripped.startswith("//"):
+        return False
     if stripped.startswith(("/", "#", "./", "../")):
         return True
     match = _HREF_SCHEME_RE.match(stripped)

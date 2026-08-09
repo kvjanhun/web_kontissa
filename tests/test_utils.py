@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 import app.utils as utils_module
-from app.utils import CACHE_TTL, get_latest_commit_date
+from app.utils import CACHE_TTL, FAILURE_RETRY_TTL, get_latest_commit_date
 
 
 @pytest.fixture(autouse=True)
@@ -14,9 +14,11 @@ def reset_cache():
     """Clear module-level caches before and after every test."""
     utils_module._cached_commit_time = None
     utils_module._cached_commit_timestamp = 0
+    utils_module._failed_attempt_timestamp = 0
     yield
     utils_module._cached_commit_time = None
     utils_module._cached_commit_timestamp = 0
+    utils_module._failed_attempt_timestamp = 0
 
 
 # ---------------------------------------------------------------------------
@@ -77,6 +79,43 @@ class TestGetLatestCommitDate:
             get_latest_commit_date()
         assert utils_module._cached_commit_time == "2026-03-01T00:00:00Z"
         assert utils_module._cached_commit_timestamp > 0
+
+    def test_failure_is_negative_cached(self):
+        """A failure must not make every later request retry a 5s blocking call —
+        that turns a GitHub outage into a stalled Gunicorn worker per /sitemap.xml hit."""
+        with patch("app.utils.requests.get", side_effect=Exception("network error")) as mock_get:
+            assert get_latest_commit_date() is None
+            assert get_latest_commit_date() is None
+            assert get_latest_commit_date() is None
+            assert mock_get.call_count == 1
+
+    def test_retries_after_backoff_elapses(self):
+        with patch("app.utils.requests.get", side_effect=Exception("network error")):
+            get_latest_commit_date()
+
+        utils_module._failed_attempt_timestamp = time.time() - FAILURE_RETRY_TTL - 1
+
+        with patch("app.utils.requests.get", return_value=self._mock_commit_response("2026-04-01T00:00:00Z")):
+            assert get_latest_commit_date() == "2026-04-01T00:00:00Z"
+
+    def test_success_clears_the_backoff(self):
+        with patch("app.utils.requests.get", side_effect=Exception("network error")):
+            get_latest_commit_date()
+        utils_module._failed_attempt_timestamp = time.time() - FAILURE_RETRY_TTL - 1
+
+        with patch("app.utils.requests.get", return_value=self._mock_commit_response("2026-04-01T00:00:00Z")):
+            get_latest_commit_date()
+        assert utils_module._failed_attempt_timestamp == 0
+
+    def test_negative_cache_still_serves_a_stale_value(self):
+        with patch("app.utils.requests.get", return_value=self._mock_commit_response("2026-01-15T00:00:00Z")):
+            get_latest_commit_date()
+        utils_module._cached_commit_timestamp = 0  # expire the success cache
+
+        with patch("app.utils.requests.get", side_effect=Exception("network error")) as mock_get:
+            assert get_latest_commit_date() == "2026-01-15T00:00:00Z"  # attempts, fails
+            assert get_latest_commit_date() == "2026-01-15T00:00:00Z"  # backed off
+            assert mock_get.call_count == 1
 
     def test_failed_fetch_does_not_advance_cache_timestamp(self):
         with patch("app.utils.requests.get", return_value=self._mock_commit_response()):

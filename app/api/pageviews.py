@@ -5,8 +5,14 @@ from sqlalchemy import func
 from app import limiter
 from app.models import db, PageView, PageViewEvent
 from app.decorators import admin_required
+from app.utils import is_known_route
 
 pageviews_bp = Blueprint('pageviews', __name__)
+
+# Cap on the per-session dedup list. It lives in the signed client-side cookie, so an
+# uncapped list is re-sent on every request and eventually trips Werkzeug's 4 KB
+# warning. The site has far fewer routes than this, so the cap only bites on abuse.
+MAX_TRACKED_PATHS = 50
 
 
 @pageviews_bp.route("/api/pageview", methods=["POST"])
@@ -19,6 +25,13 @@ def track_pageview():
     path = data["path"]
     if not path.startswith("/") or len(path.encode("utf-8")) > 200:
         return jsonify({"error": "path must start with / and be at most 200 chars"}), 400
+
+    # Only real routes get a row. The endpoint is public, so without this any client
+    # can insert an unbounded number of PageView/PageViewEvent rows into site.db —
+    # which Litestream then replicates off-site. 400 rather than a silent drop so a
+    # genuine bug in usePageView surfaces instead of quietly losing analytics.
+    if not is_known_route(path):
+        return jsonify({"error": "unknown path"}), 400
 
     # Session-based dedup: only count once per browser session per path
     viewed = session.get("viewed_pages", [])
@@ -35,7 +48,8 @@ def track_pageview():
         db.session.add(PageViewEvent(path=path))
         db.session.commit()
         viewed.append(path)
-        session["viewed_pages"] = viewed
+        # FIFO eviction keeps the session cookie from growing without bound.
+        session["viewed_pages"] = viewed[-MAX_TRACKED_PATHS:]
 
     return jsonify({"path": pv.path if pv else path, "count": pv.count if pv else 0})
 

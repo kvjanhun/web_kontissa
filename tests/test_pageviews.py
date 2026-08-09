@@ -1,5 +1,14 @@
 """Tests for the page view counter API."""
 
+import os
+import sys
+from datetime import datetime, timedelta, timezone
+
+from app.models import db, PageViewEvent
+
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scripts"))
+from prune_pageview_events import prune  # noqa: E402
+
 
 class TestTrackPageview:
     """POST /api/pageview"""
@@ -51,7 +60,8 @@ class TestTrackPageview:
         assert res.status_code == 400
 
     def test_accepts_path_at_200_chars(self, client):
-        path = "/" + "a" * 199
+        # Must sit under a known route prefix as well as fit the length budget.
+        path = "/recipes/" + "a" * 191
         assert len(path) == 200
         res = client.post("/api/pageview", json={"path": path})
         assert res.status_code == 200
@@ -60,6 +70,44 @@ class TestTrackPageview:
         """Page view tracking is public — no login needed."""
         res = client.post("/api/pageview", json={"path": "/dog"})
         assert res.status_code == 200
+
+    def test_rejects_unknown_route(self, client):
+        """The endpoint is public, so only real routes may create rows — otherwise
+        anyone can grow site.db (and its Litestream replica) without bound."""
+        res = client.post("/api/pageview", json={"path": "/not-a-real-page"})
+        assert res.status_code == 400
+
+    def test_unknown_route_creates_no_rows(self, app):
+        from app.models import PageView, PageViewEvent
+
+        c = app.test_client()
+        c.post("/api/pageview", json={"path": "/spam-" + "x" * 50})
+
+        with app.app_context():
+            assert db.session.query(PageView).count() == 0
+            assert db.session.query(PageViewEvent).count() == 0
+
+    def test_accepts_nested_known_route(self, client):
+        """Non-pre-rendered routes under a known prefix still count."""
+        res = client.post("/api/pageview", json={"path": "/recipes/pancakes"})
+        assert res.status_code == 200
+
+    def test_accepts_root(self, client):
+        res = client.post("/api/pageview", json={"path": "/"})
+        assert res.status_code == 200
+
+    def test_session_dedup_list_is_capped(self, app):
+        """viewed_pages rides in the signed cookie, so it must not grow unbounded."""
+        from app.api.pageviews import MAX_TRACKED_PATHS
+
+        c = app.test_client()
+        for i in range(MAX_TRACKED_PATHS + 15):
+            c.post("/api/pageview", json={"path": f"/recipes/r{i}"})
+
+        with c.session_transaction() as sess:
+            assert len(sess["viewed_pages"]) == MAX_TRACKED_PATHS
+            # FIFO: the most recent paths survive
+            assert sess["viewed_pages"][-1] == f"/recipes/r{MAX_TRACKED_PATHS + 14}"
 
 
 class TestListPageviews:
@@ -100,7 +148,7 @@ class TestListPageviews:
     def test_timestamps_present(self, app, logged_in_admin):
         """created_at and updated_at should be in the response."""
         c = app.test_client()
-        c.post("/api/pageview", json={"path": "/test"})
+        c.post("/api/pageview", json={"path": "/login"})
 
         res = logged_in_admin.get("/api/pageviews")
         data = res.get_json()
@@ -112,14 +160,14 @@ class TestListPageviews:
     def test_updated_at_changes_on_increment(self, app, logged_in_admin):
         """updated_at should change when the counter increments."""
         c1 = app.test_client()
-        c1.post("/api/pageview", json={"path": "/ts"})
+        c1.post("/api/pageview", json={"path": "/login"})
 
         res1 = logged_in_admin.get("/api/pageviews")
         ts1 = res1.get_json()[0]["updated_at"]
 
         # Different session increments the counter
         c2 = app.test_client()
-        c2.post("/api/pageview", json={"path": "/ts"})
+        c2.post("/api/pageview", json={"path": "/login"})
 
         res2 = logged_in_admin.get("/api/pageviews")
         ts2 = res2.get_json()[0]["updated_at"]
@@ -187,10 +235,45 @@ class TestPageviewEvents:
 
     def test_deduped_sessions_dont_create_events(self, client, logged_in_admin):
         """Same session, same path — only one event created."""
-        client.post("/api/pageview", json={"path": "/test"})
-        client.post("/api/pageview", json={"path": "/test"})
+        client.post("/api/pageview", json={"path": "/login"})
+        client.post("/api/pageview", json={"path": "/login"})
 
         res = logged_in_admin.get("/api/pageviews/events?days=1")
         data = res.get_json()
         today_entry = data["series"][-1]
-        assert today_entry["counts"].get("/test") == 1
+        assert today_entry["counts"].get("/login") == 1
+
+
+class TestPruneEvents:
+    """scripts/prune_pageview_events.py — nothing else prunes this table."""
+
+    def _seed(self, app, ages_in_days):
+        with app.app_context():
+            now = datetime.now(timezone.utc)
+            for age in ages_in_days:
+                db.session.add(PageViewEvent(path="/dog", timestamp=now - timedelta(days=age)))
+            db.session.commit()
+
+    def _count(self, app):
+        with app.app_context():
+            return db.session.query(PageViewEvent).count()
+
+    def test_deletes_only_rows_outside_the_window(self, app):
+        self._seed(app, [1, 45, 89, 91, 200])
+        assert prune(days=90) == 2
+        assert self._count(app) == 3
+
+    def test_dry_run_reports_without_deleting(self, app):
+        self._seed(app, [1, 200, 300])
+        assert prune(days=90, dry_run=True) == 2
+        assert self._count(app) == 3
+
+    def test_noop_when_everything_is_recent(self, app):
+        self._seed(app, [0, 5, 30])
+        assert prune(days=90) == 0
+        assert self._count(app) == 3
+
+    def test_custom_window(self, app):
+        self._seed(app, [1, 10, 40])
+        assert prune(days=7) == 2
+        assert self._count(app) == 1

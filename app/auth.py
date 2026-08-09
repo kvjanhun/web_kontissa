@@ -3,12 +3,19 @@ import hmac
 
 from flask import Blueprint, request, jsonify, current_app
 from flask_login import login_user, logout_user, current_user, login_required
+from sqlalchemy import func
+from werkzeug.security import check_password_hash, generate_password_hash
 from .models import db, User
 from . import limiter
 import structlog
 
 auth_bp = Blueprint('auth', __name__)
 logger = structlog.get_logger(__name__)
+
+# Verified against on the miss path so a nonexistent email costs the same scrypt work
+# as a real one. Without it, response latency cleanly separates valid from invalid
+# emails — the 3/minute limiter slows enumeration but doesn't close the oracle.
+_DUMMY_PASSWORD_HASH = generate_password_hash("dummy-password-for-constant-time-login")
 
 
 def _email_log_hash(email):
@@ -31,8 +38,15 @@ def api_login():
         logger.warning("login_failed", reason="missing credentials")
         return jsonify({"error": "Email and password are required"}), 400
 
-    user = User.query.filter_by(email=email).first()
-    if user is None or not user.check_password(password):
+    # Case-insensitive on both sides rather than lowercasing the input: rows may
+    # already store mixed-case addresses, and normalising only the query would lock
+    # those accounts out.
+    user = User.query.filter(func.lower(User.email) == email.lower()).first()
+    if user is None:
+        check_password_hash(_DUMMY_PASSWORD_HASH, password)
+        logger.warning("login_failed", reason="invalid credentials", email_hash=_email_log_hash(email))
+        return jsonify({"error": "Invalid email or password"}), 401
+    if not user.check_password(password):
         logger.warning("login_failed", reason="invalid credentials", email_hash=_email_log_hash(email))
         return jsonify({"error": "Invalid email or password"}), 401
 

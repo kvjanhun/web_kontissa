@@ -1,3 +1,6 @@
+import app.auth as auth_module
+
+
 class TestLogin:
     def test_login_success(self, client, admin_user):
         res = client.post("/api/login", json={
@@ -24,6 +27,41 @@ class TestLogin:
             "password": "whatever",
         })
         assert res.status_code == 401
+
+    def test_login_is_case_insensitive(self, client, admin_user):
+        """Rows may hold mixed-case addresses, so both sides are normalized."""
+        res = client.post("/api/login", json={
+            "email": admin_user["email"].upper(),
+            "password": admin_user["password"],
+        })
+        assert res.status_code == 200
+        assert res.get_json()["email"] == admin_user["email"]
+
+    def test_login_tolerates_surrounding_whitespace(self, client, admin_user):
+        res = client.post("/api/login", json={
+            "email": f"  {admin_user['email']}  ",
+            "password": admin_user["password"],
+        })
+        assert res.status_code == 200
+
+    def test_missing_user_still_verifies_a_hash(self, client, app, monkeypatch):
+        """A nonexistent email must do the same scrypt work as a real one, or
+        response latency leaks which addresses are registered."""
+        calls = []
+        real_check = auth_module.check_password_hash
+
+        def spy(pw_hash, password):
+            calls.append(pw_hash)
+            return real_check(pw_hash, password)
+
+        monkeypatch.setattr(auth_module, "check_password_hash", spy)
+
+        res = client.post("/api/login", json={
+            "email": "nobody@test.com",
+            "password": "whatever",
+        })
+        assert res.status_code == 401
+        assert calls == [auth_module._DUMMY_PASSWORD_HASH]
 
     def test_login_missing_body(self, client, app):
         res = client.post("/api/login", content_type="application/json")
