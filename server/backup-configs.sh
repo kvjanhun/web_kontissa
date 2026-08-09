@@ -4,6 +4,12 @@
 # Schedule via cron: 0 4 * * * /home/kvjanhun/scripts/backup-configs.sh
 set -e
 
+# cron runs with a minimal PATH (/usr/bin:/bin), but iptables-save and ipset live in
+# /usr/sbin. Without this they fail as "command not found" — and since the shell creates
+# a redirect target before exec'ing, `cmd > file 2>/dev/null || true` left 0-byte
+# iptables.rules / ipset.rules that rclone synced over the good copies in B2.
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
 BACKUP_DIR="/tmp/server-config-backup"
 rm -rf "$BACKUP_DIR"
 mkdir -p "$BACKUP_DIR/nginx" "$BACKUP_DIR/systemd"

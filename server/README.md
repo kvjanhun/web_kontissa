@@ -96,11 +96,45 @@ Backblaze B2 bucket used for database backups. Uses `rclone` with a remote named
 0 4 * * * /home/kvjanhun/scripts/backup-configs.sh
 ```
 
+The script sets `PATH` explicitly because cron's default (`/usr/bin:/bin`) omits
+`/usr/sbin`, where `iptables-save` and `ipset` live. Without it those two dumps failed as
+"command not found" while everything else — all of it resolving from `/usr/bin` — kept
+working, and `2>/dev/null || true` plus the redirect left 0-byte `iptables.rules` /
+`ipset.rules` for `rclone sync` to push over the good copies in B2. A hand-run backup
+looks fine either way, since an interactive shell has `/usr/sbin` on `PATH`.
+
+A zero-byte `iptables.rules` always means the dump failed — even an empty ruleset emits
+`*filter` / `:INPUT` / `COMMIT` lines.
+
 **Setup (one-time on NUC):**
 ```bash
 sudo dnf install rclone
 rclone config
 # Create a remote named "b2", type "b2", enter B2 key ID and app key
+```
+
+### `scripts/prune_pageview_events.py` (in-container)
+
+Drops `PageViewEvent` rows past the 90-day window `/api/pageviews/events` can serve.
+Nothing in the request path prunes, so without this the table grows forever and gets
+replicated to B2 by Litestream along with everything else.
+
+Unlike the scripts above this one is **not** deployed to `/home/kvjanhun/scripts/` — it
+ships inside the web image and runs via `docker exec`, so it picks up the mounted data
+volume and the container's `DATABASE_URI`.
+
+**Scheduled via:** `crontab -l` (runs as kvjanhun — needs docker group access)
+```
+0 5 * * 0 /usr/bin/docker exec web_kontissa-web-1 python scripts/prune_pageview_events.py
+```
+
+Absolute `/usr/bin/docker` matters: cron's `PATH` is minimal and a bare `docker` will not
+resolve. Weekly is ample for a 90-day window; 04:00 and 04:30 are already taken by
+`backup-configs.sh` and `abuseipdb-blocklist.sh`.
+
+Always dry-run first — it reports the count without deleting:
+```bash
+docker exec web_kontissa-web-1 python scripts/prune_pageview_events.py --dry-run
 ```
 
 ## Configuration
