@@ -14,7 +14,7 @@
 
 ## Schema Changes
 
-Never run migrations from Flask startup, imports, or request handlers. `app/__init__.py` may create empty tables for fresh local/test databases, but it must not contain `ALTER TABLE`, table rebuilds, schema probes, or hidden migration helpers. Any schema change needs an explicit plan, tests, E2E seed updates, and a reviewed one-off production SQLite migration/restore procedure.
+Never run a schema change from Flask startup, imports, or request handlers. `app/__init__.py` may create empty tables for fresh local/test databases, but it must not contain `ALTER TABLE`, table rebuilds, schema probes, or a hidden helper that performs any of them. A schema change needs an explicit plan, tests, E2E seed updates, and a reviewed one-off procedure applied to the production SQLite file by hand. See the `schema-change` skill.
 
 ## API Endpoints
 

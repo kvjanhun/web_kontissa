@@ -77,7 +77,7 @@ Refresh interval: 60s. Default time range: 24h.
 
 ## Nginx Structured Logs
 
-- `server/nginx-observability.conf` must be deployed to `/etc/nginx/conf.d/00-observability.conf`.
+- The `kontissa_json` log format is defined in `~/Projects/nuc/nginx/00-observability.conf`, which the `nuc` repo owns and installs. Changing it is a host change, made there.
 - Both nginx vhost files use `access_log ... kontissa_json` and return 404 for common scanner probe paths so `.env`, `.git`, WordPress/PHP, and similar requests do not fall through to app/SPA 200 responses.
 - Grafana/Loki log panels can still render the JSON as log lines; queries use `| json` when filtering or grouping by `server_name`, `remote_addr`, `request_uri`, `status`, or upstream fields. Alert queries extract JSON `server_name` as `vhost` to avoid direct-IP Host labels and colliding with Alloy's `host=nuc` stream label.
 

@@ -52,7 +52,7 @@ There is **no in-memory index mirror** (retired 2026-07): every read-path lookup
 
 - Preserve all `/api/dog/*` response shapes unless the frontend and E2E tests are changed deliberately.
 - Preserve the dict shapes `store.py` exposes (index show entries, whole-show result docs, the result-jobs doc) — `sqlstore.py` round-trips them and `tests/test_dog.py` locks them in.
-- No live migrations at import/startup. `db.init_db()` only creates missing tables; any column/table change needs an explicit plan, tests, and a reviewed one-off prod migration.
+- No schema changes at import/startup. `db.init_db()` only creates missing tables; any column/table change needs an explicit plan, tests, and a reviewed one-off procedure applied by hand. `dog.db` is not Litestream-replicated, so a destructive change here has no automatic restore path.
 - Keep `group` and `breed` validation in the route layer.
 - Keep crawler request volume bounded: respect worker limits, request delay, retry backoff, and `retry_after`.
 - Run `python3 -m pytest tests/test_dog.py` after backend behavior changes when the app test harness is healthy.

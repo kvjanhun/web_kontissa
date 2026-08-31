@@ -15,7 +15,7 @@ What is still here, and why:
 - `observability/` — Loki, Alloy, Prometheus, Grafana, and Litestream configs.
   These are host-level in spirit, but their containers are still defined in
   this repo's `docker-compose.yml` and mount these paths. See the known seam in
-  `~/Projects/nuc/MIGRATION.md`.
+  `~/Projects/nuc/README.md`.
 
 ## Files
 
@@ -133,4 +133,4 @@ cd ~/Projects/web_kontissa && git pull && docker compose up -d
 ```
 
 For host configuration — nginx, fail2ban, cron scripts, systemd units — see
-the runbook in `~/Projects/nuc/MIGRATION.md`.
+the runbook in `~/Projects/nuc/OPERATIONS.md`.

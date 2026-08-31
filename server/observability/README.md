@@ -140,12 +140,13 @@ this shared Loki instance.
 
 ## Nginx JSON Logs
 
-`server/nginx-observability.conf` defines the shared `kontissa_json` access-log
-format. The live file must be installed as
-`/etc/nginx/conf.d/00-observability.conf`, before the vhost files that reference
-the format. Both `erez.ac.conf` and `sanakenno.fi.conf` write JSON access logs
-with fields such as `host`, `remote_addr`, `request_uri`, `status`,
-`upstream_status`, and `user_agent`.
+The shared `kontissa_json` access-log format is defined in
+`~/Projects/nuc/nginx/00-observability.conf`. The `nuc` repo owns that file and
+installs it; changing the format is a host change, made there. Both
+`erez.ac.conf` and `sanakenno.fi.conf` write JSON access logs with fields such as
+`host`, `remote_addr`, `request_uri`, `status`, `upstream_status`, and
+`user_agent` — the field names the dashboards and alert queries in this directory
+depend on.
 
 The vhost files also return a direct 404 for common scanner probes such as
 `.env`, `.git`, WordPress/PHP, `config.js`, and similar paths so those requests
