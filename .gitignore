@@ -33,10 +33,14 @@ frontend/dist
 # Environment variables
 .env
 
-# Agent skills and memory — laptop-local. Shared skill bodies are tracked in the
-# nuc repo and symlinked in from there; .agents/skills points at .claude/skills.
-.claude/
-.agents/skills
+# Agent config. Skills, subagent definitions, and shared settings are tracked;
+# accumulated memory, session state, and machine-local settings are not. Shared
+# skill bodies live in the nuc repo — the symlinks in .claude/skills resolve to
+# ../../../nuc/skills, so the three repos must stay siblings under ~/Projects.
+.claude/*
+!.claude/skills/
+!.claude/agents/
+!.claude/settings.json
 
 # Test results
 test-results/
