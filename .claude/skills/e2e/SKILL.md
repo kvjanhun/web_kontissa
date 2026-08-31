@@ -45,4 +45,7 @@ On failure: name the failing spec, the assertion that failed, and a short excerp
 ## Notes
 
 - If the failure mentions hydration timing or stale DOM, check that `e2e/fixtures/base.js` is being used (it wraps `page.goto()` with `waitForLoadState('networkidle')`).
-- 30 tests across 7 spec files is the current baseline. If the count drops, ask why before proceeding.
+- Report the number of tests that ran. If it is lower than the last run in this
+  conversation, or lower than `grep -c '^\s*test(' frontend/e2e/*.spec.js` totals,
+  a spec is being skipped — find out why before proceeding. Do not hardcode a
+  baseline count here; it rots and the guard stops working.

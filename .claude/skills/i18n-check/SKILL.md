@@ -37,7 +37,7 @@ The i18n store (`frontend/stores/i18n.js`) reads flat key-value JSON from `front
 
    Note: dynamic keys (e.g. `t(`section.${type}`)`) won't be caught by static analysis — flag them as "skipped" in the report rather than as missing.
 
-3. **Report.** On full success: `i18n-check: 140/140 keys in sync, no orphans`. On drift: list the offending keys grouped by category (missing_fi / missing_en / orphans).
+3. **Report.** On full success: `i18n-check: <N>/<N> keys in sync, no orphans`, with the real count from step 1. On drift: list the offending keys grouped by category (missing_fi / missing_en / orphans).
 
 ## Notes
 
