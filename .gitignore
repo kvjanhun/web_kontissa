@@ -33,8 +33,10 @@ frontend/dist
 # Environment variables
 .env
 
-# Claude Code agent memory
+# Agent skills and memory — laptop-local. Shared skill bodies are tracked in the
+# nuc repo and symlinked in from there; .agents/skills points at .claude/skills.
 .claude/
+.agents/skills
 
 # Test results
 test-results/
