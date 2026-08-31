@@ -1,7 +1,21 @@
-# Server Scripts
+# Server
 
-Shell scripts that run on the production server (RHEL, Intel NUC at erez.ac).
-These are not part of the application stack — they handle deployment and alerting.
+How erez.ac is deployed and how its database is backed up and restored.
+
+**Host configuration lives in the `nuc` repo** (`~/Projects/nuc`): nginx
+vhosts, fail2ban, the deploy webhook, systemd units, cron jobs, and the health
+and blocklist scripts. Its README is the map of what runs on the machine and
+which repo owns what.
+
+What is still here, and why:
+
+- `deploy-site.sh` — deploys *this* application. It stays in this repo because
+  the `git pull` it performs also updates the script itself, so it always
+  matches the code it is deploying.
+- `observability/` — Loki, Alloy, Prometheus, Grafana, and Litestream configs.
+  These are host-level in spirit, but their containers are still defined in
+  this repo's `docker-compose.yml` and mount these paths. See the known seam in
+  `~/Projects/nuc/MIGRATION.md`.
 
 ## Files
 
@@ -17,101 +31,6 @@ rebuilding. The script waits for the web container to report healthy and verifie
 
 **Deployed to:** `/home/kvjanhun/Projects/web_kontissa/deploy-site.sh`
 **Triggered by:** `webhook.service` (listens on port 9000, token-authenticated)
-
-### `health-alert.sh`
-Combined health check for **both** erez.ac (`web_kontissa-web-1`) and
-sanakenno.fi (`sanakenno-a` / `sanakenno-b`) — this repo owns the shared host
-plumbing for both sites, so this single monitor replaces any per-site check.
-Runs every 5 minutes via cron. Sends a Telegram alert when a container becomes
-unhealthy and a recovery message with approximate downtime when it recovers.
-Per-container flag files (`/tmp/<container>-unhealthy.flag`) avoid alert spam,
-and Docker inspect is retried with a "missing" streak threshold so one transient
-read does not page.
-
-During a fresh deploy each site honors its own deploy flag (erez.ac:
-`/tmp/erezac-deploying.flag`, written by `deploy-site.sh`); while that flag is
-present and fresh, transient unhealthiness is suppressed. If the flag is older
-than 30 minutes (`HEALTH_ALERT_DEPLOY_SUPPRESS_SECONDS`), alerts resume so a hung
-deploy still pages you. This is what prevents the brief container-rebuild window
-from firing a false "erez.ac is down" alert.
-
-Mocked tests (no Docker/network/Telegram) live in `health-alert-test.sh`:
-```bash
-bash server/health-alert-test.sh all
-```
-
-**Deployed to:** `/home/kvjanhun/scripts/health-alert.sh`
-**Scheduled via:** `crontab -l` (runs as kvjanhun)
-```
-*/5 * * * * /home/kvjanhun/scripts/health-alert.sh
-```
-
-### `erez.ac.conf`
-Nginx virtual host configuration for erez.ac. Defines the HTTP→HTTPS redirect,
-TLS settings, reverse proxy rules, and security headers (HSTS, X-Content-Type-Options,
-X-Frame-Options, Referrer-Policy, Permissions-Policy). CSP is enforced. Common
-scanner probe paths such as hidden dotfiles, PHP/ASP, and WordPress endpoints
-return 404 before reaching the app fallback.
-
-**Deployed to:** `/etc/nginx/conf.d/erez.ac.conf`
-
-### `nginx-observability.conf`
-Shared nginx observability config. Defines the `kontissa_json` access-log format
-used by both `erez.ac` and `sanakenno.fi`, so Loki/Grafana can query nginx
-events by `host`, `remote_addr`, `request_uri`, `status`, and upstream fields
-instead of regexing combined-access-log text.
-
-**Deployed to:** `/etc/nginx/conf.d/00-observability.conf`
-
-### `sanakenno.fi.conf`
-Nginx virtual host configuration for the separate Sanakenno deployment. The app
-code lives in `~/Projects/sanakenno`, but the live host config is maintained
-here with the other NUC nginx config. Common scanner probe paths return 404
-before reaching the SPA fallback.
-
-**Deployed to:** `/etc/nginx/conf.d/sanakenno.fi.conf`
-
-### `fail2ban/` + `abuseipdb-blocklist.sh`
-Automated intrusion response for **both** sites (host fail2ban service + AbuseIPDB
-reporting and blocklist consumption). fail2ban watches the nginx JSON logs and the
-journal, bans abusive IPs in the host iptables `INPUT` chain, and reports them to
-AbuseIPDB; `abuseipdb-blocklist.sh` pulls AbuseIPDB's blocklist into an ipset and drops
-those IPs pre-emptively. Bans flow to Grafana via the existing journal scrape (no
-Telegram). Full operations notes, jail table, firewall-backend check, and verification:
-**`server/fail2ban/README.md`**.
-
-**Deployed to:** `/etc/fail2ban/{fail2ban.d,jail.d,filter.d}/…` and
-`/home/kvjanhun/scripts/abuseipdb-blocklist.sh`
-**Secret:** `ABUSEIPDB_API_KEY` in `site-alerts.env` + host-only
-`/etc/fail2ban/action.d/abuseipdb.local` (never committed)
-
-### `backup-configs.sh`
-Backs up server configuration files (nginx, **fail2ban** minus the AbuseIPDB key,
-kvjanhun + **root** crontabs, systemd services, **iptables and ipset** rules) to the same
-Backblaze B2 bucket used for database backups. Uses `rclone` with a remote named `b2`.
-
-**Deployed to:** `/home/kvjanhun/scripts/backup-configs.sh`
-**Scheduled via:** `crontab -l` (runs as root)
-```
-0 4 * * * /home/kvjanhun/scripts/backup-configs.sh
-```
-
-The script sets `PATH` explicitly because cron's default (`/usr/bin:/bin`) omits
-`/usr/sbin`, where `iptables-save` and `ipset` live. Without it those two dumps failed as
-"command not found" while everything else — all of it resolving from `/usr/bin` — kept
-working, and `2>/dev/null || true` plus the redirect left 0-byte `iptables.rules` /
-`ipset.rules` for `rclone sync` to push over the good copies in B2. A hand-run backup
-looks fine either way, since an interactive shell has `/usr/sbin` on `PATH`.
-
-A zero-byte `iptables.rules` always means the dump failed — even an empty ruleset emits
-`*filter` / `:INPUT` / `COMMIT` lines.
-
-**Setup (one-time on NUC):**
-```bash
-sudo dnf install rclone
-rclone config
-# Create a remote named "b2", type "b2", enter B2 key ID and app key
-```
 
 ### `scripts/prune_pageview_events.py` (in-container)
 
@@ -130,7 +49,7 @@ volume and the container's `DATABASE_URI`.
 
 Absolute `/usr/bin/docker` matters: cron's `PATH` is minimal and a bare `docker` will not
 resolve. Weekly is ample for a 90-day window; 04:00 and 04:30 are already taken by
-`backup-configs.sh` and `abuseipdb-blocklist.sh`.
+the `nuc` repo's backup and blocklist jobs.
 
 Always dry-run first — it reports the count without deleting:
 ```bash
@@ -139,14 +58,15 @@ docker exec web_kontissa-web-1 python scripts/prune_pageview_events.py --dry-run
 
 ## Configuration
 
-`deploy-site.sh` and `health-alert.sh` source `/home/kvjanhun/.config/site-alerts.env` for Telegram
-credentials. This file lives only on the server and is never committed to the repo.
+`deploy-site.sh` sources `/home/kvjanhun/.config/site-alerts.env` for Telegram
+credentials, as do the host scripts in the `nuc` repo. This file lives only on
+the server and is never committed to any repo.
 
 ```bash
 # /home/kvjanhun/.config/site-alerts.env
 TELEGRAM_BOT_TOKEN="..."
 TELEGRAM_CHAT_ID="..."
-ABUSEIPDB_API_KEY="..."   # used by abuseipdb-blocklist.sh and the fail2ban abuseipdb action
+ABUSEIPDB_API_KEY="..."   # used by the nuc repo's blocklist script and fail2ban action
 ```
 
 ## Database Backup & Restore
@@ -200,17 +120,17 @@ b2 ls erezac-db-backup site.db/
 
 ## Deploying changes
 
-```bash
-scp server/deploy-site.sh kvjanhun@erez.ac:/home/kvjanhun/Projects/web_kontissa/deploy-site.sh
-scp server/health-alert.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/health-alert.sh
-scp server/backup-configs.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/backup-configs.sh
-sudo scp server/nginx-observability.conf kvjanhun@erez.ac:/etc/nginx/conf.d/00-observability.conf
-sudo scp server/erez.ac.conf kvjanhun@erez.ac:/etc/nginx/conf.d/erez.ac.conf && sudo nginx -t && sudo systemctl reload nginx
-sudo scp server/sanakenno.fi.conf kvjanhun@erez.ac:/etc/nginx/conf.d/sanakenno.fi.conf && sudo nginx -t && sudo systemctl reload nginx
+Application changes deploy themselves: push to `main`, CI runs, the webhook
+fires `deploy-site.sh`, and the CI job polls until the live site serves the
+pushed commit.
 
-# fail2ban (see server/fail2ban/README.md for the one-time setup + firewall-backend check)
-sudo scp server/fail2ban/fail2ban.d/logging.conf kvjanhun@erez.ac:/etc/fail2ban/fail2ban.d/logging.conf
-sudo scp server/fail2ban/jail.d/kontissa.conf kvjanhun@erez.ac:/etc/fail2ban/jail.d/kontissa.conf
-sudo scp server/fail2ban/filter.d/*.conf kvjanhun@erez.ac:/etc/fail2ban/filter.d/ && sudo fail2ban-client reload
-scp server/abuseipdb-blocklist.sh kvjanhun@erez.ac:/home/kvjanhun/scripts/abuseipdb-blocklist.sh
+`deploy-site.sh` itself is pulled by the deploy it performs, so it needs no
+manual copy. The only file here that is installed by hand is the observability
+config, and only when its containers are restarted:
+
+```bash
+cd ~/Projects/web_kontissa && git pull && docker compose up -d
 ```
+
+For host configuration — nginx, fail2ban, cron scripts, systemd units — see
+the runbook in `~/Projects/nuc/MIGRATION.md`.
