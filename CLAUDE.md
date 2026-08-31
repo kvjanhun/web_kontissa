@@ -119,7 +119,7 @@ Internet → [443 HTTPS] → nginx (TLS, ECDSA cert)
 - **CSRF**: Mutation endpoints accept JSON only (`request.get_json()`).
 - **Network**: Container port 8080 on localhost only. Nginx handles TLS.
 - **Proxy trust / rate limiting**: Flask sits behind exactly one trusted proxy (nginx), so `app.wsgi_app` is wrapped in `ProxyFix(x_for=1, x_proto=1)` in `app/__init__.py`. Without it `request.remote_addr` is the Docker bridge gateway and Flask-Limiter buckets every visitor together. nginx overwrites `X-Forwarded-For` with `$proxy_add_x_forwarded_for`, so the single rightmost hop is the real client and is not client-spoofable.
-- **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx (`~/Projects/nuc/nginx/erez.ac.conf`). The Content-Security-Policy is now **enforcing** (`Content-Security-Policy`, no longer Report-Only). Its value is chosen per-path by the `$content_security_policy` map: the public app/admin/`/dog` get a strict policy whose `script-src` is `'self' 'unsafe-inline'` (no eval; `'unsafe-inline'` covers Nuxt's inline `window.__NUXT__` payload + Tailwind), while `/logs` (Grafana) gets its own value adding `'unsafe-eval'` (+ `blob:` for workers/styles) because bundled Grafana drilldown plugins call `eval` at init. The map keeps all `add_header` directives at the server level so the other security headers keep inheriting into every location (nginx drops the whole inherited set from any location with its own `add_header`).
+- **HTTP headers**: HSTS, X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy enforced in nginx (`~/Projects/nuc/nginx/erez.ac.conf`). The Content-Security-Policy is **enforcing** (`Content-Security-Policy`, not Report-Only). Its value is chosen per-path by the `$content_security_policy` map: the public app/admin/`/dog` get a strict policy whose `script-src` is `'self' 'unsafe-inline'` (no eval; `'unsafe-inline'` covers Nuxt's inline `window.__NUXT__` payload + Tailwind), while `/logs` (Grafana) gets its own value adding `'unsafe-eval'` (+ `blob:` for workers/styles) because bundled Grafana drilldown plugins call `eval` at init. The map keeps all `add_header` directives at the server level so the other security headers keep inheriting into every location (nginx drops the whole inherited set from any location with its own `add_header`).
 - **Webhook**: Token-validated, runs as unprivileged user.
 - **Intrusion response**: host fail2ban service bans scanners / auth-brute-force / 429 abusers (across both vhosts) in the iptables `INPUT` chain and reports them to AbuseIPDB; a daily cron consumes AbuseIPDB's blocklist into an ipset for pre-emptive drops. Bans surface in Grafana (no Telegram). Config + runbook: `~/Projects/nuc/fail2ban/` and `~/Projects/nuc/scripts/abuseipdb-blocklist.sh`.
 
@@ -152,3 +152,27 @@ facts drift apart — each file has one job:
 Before finishing a change, update the **one** file that owns each changed fact.
 If a fact is host-level rather than app-level, it belongs in the `nuc` repo,
 not here.
+
+### Documentation is not a journal
+
+**Docs state what is true now.** They are not a changelog, a migration diary,
+or a record of what a previous version did. Git history is where change lives.
+
+Never write:
+
+- "used to", "no longer", "previously", "we moved", "this was renamed"
+- rationale that only parses if you watched the change happen
+- reassurances answering a question someone asked once ("note: this does not
+  need X") — just state the requirement
+- status narration ("now owns", "has since grown", "was left there on purpose")
+
+Always keep:
+
+- **rules with reasons**, when the reason constrains a future decision —
+  "secrets go in an EnvironmentFile because unit files are copied into the
+  backup" tells the next person what not to do
+- warnings about traps that are still there
+
+The test: **would this sentence make sense to someone who has never seen the
+previous version of this file?** If not, delete it. If the history genuinely
+matters, it belongs in the commit message that made the change.
