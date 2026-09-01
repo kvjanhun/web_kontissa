@@ -19,14 +19,22 @@ test.describe('Homepage', () => {
     await expect(page.getByText(/Originally this site/i)).toHaveCount(0)
   })
 
-  test('an expanded project shows the stack layers it touches', async ({ page }) => {
+  test('an expanded project shows how far down the stack it reached', async ({ page }) => {
     await page.goto('/')
     await page.getByRole('button', { name: /Sanakenno Admin tools/ }).click()
     const panel = page.locator('#proj-panel-1')
-    await expect(panel.getByRole('link', { name: 'L6', exact: true })).toBeVisible()
-    await expect(panel.getByRole('link', { name: 'L7', exact: true })).toBeVisible()
-    // The chips are the legend link into the stack table.
-    await expect(panel.getByRole('link', { name: 'L6', exact: true })).toHaveAttribute('href', '#stack')
+    // App-only work collapses to a single range, and links into the stack table.
+    const reach = panel.getByRole('link', { name: 'L6–L7', exact: true })
+    await expect(reach).toBeVisible()
+    await expect(reach).toHaveAttribute('href', '#stack')
+  })
+
+  test('a project that built the platform reaches the whole stack', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: /erez\.ac/ }).first().click()
+    await expect(
+      page.locator('#proj-panel-2').getByRole('link', { name: 'L1–L7', exact: true }),
+    ).toBeVisible()
   })
 
   test('the footer reports live host uptime beside the status line', async ({ page }) => {

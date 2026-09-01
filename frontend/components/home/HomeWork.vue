@@ -4,6 +4,7 @@ const { t, tm } = i18n
 const vReveal = useScrollReveal()
 
 const { linkIcon, isExternal } = useLinkIcon()
+const { reachRanges } = useLayerReach()
 
 const projects = computed(() => tm('home.projects') || [])
 const openIndex = ref(0)
@@ -51,16 +52,16 @@ function projNum(i) {
               <div class="proj__tech">
                 <span v-for="tech in p.tech" :key="tech" class="tech-tag">{{ tech }}</span>
               </div>
-              <!-- Which stack layers this project touches. The chips jump to the
-                   stack table, which is what reads them as a legend. -->
-              <div v-if="p.layers && p.layers.length" class="proj__layers">
-                <span class="proj__layers-label">{{ t('home.work.layers') }}</span>
+              <!-- How far down the stack this project went, as a range. The chip
+                   jumps to the stack table, which is what reads it as a legend. -->
+              <div v-if="reachRanges(p.layers).length" class="proj__layers">
+                <span class="proj__layers-label">{{ t('home.work.reach') }}</span>
                 <a
-                  v-for="layer in p.layers"
-                  :key="layer"
+                  v-for="range in reachRanges(p.layers)"
+                  :key="range"
                   class="layer-tag"
                   href="#stack"
-                >{{ layer }}</a>
+                >{{ range }}</a>
               </div>
               <div class="proj__links">
                 <a

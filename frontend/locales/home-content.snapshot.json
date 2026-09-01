@@ -113,6 +113,8 @@
         "shot": "Sanakenno.fi · app screenshot",
         "image": "/projects/sanakenno/cover.webp",
         "layers": [
+          "L2",
+          "L3",
           "L4",
           "L5",
           "L6",
@@ -314,6 +316,8 @@
         "shot": "Sanakenno.fi · kuvakaappaus",
         "image": "/projects/sanakenno/cover.webp",
         "layers": [
+          "L2",
+          "L3",
           "L4",
           "L5",
           "L6",

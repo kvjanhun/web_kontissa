@@ -193,7 +193,7 @@ async function move(p, dir) {
           </div>
           <div class="field">
             <label class="field__label">
-              Stack layers <span class="field__hint">(chips on the public card, linking to the stack table)</span>
+              Project reach <span class="field__hint">(how far down the stack this project went — shown as a range)</span>
             </label>
             <div class="layers">
               <button
