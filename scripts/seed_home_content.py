@@ -59,7 +59,12 @@ def _seed_projects(snapshot):
     n = max((len(v) for v in per_locale.values()), default=0)
     for i in range(n):
         first = next((per_locale[loc][i] for loc in LOCALES if i < len(per_locale[loc])), {})
-        project = Project(position=i, hidden=False, image=first.get("image") or None)
+        project = Project(
+            position=i,
+            hidden=False,
+            image=first.get("image") or None,
+            layers=json.dumps(first.get("layers") or []),
+        )
         for loc in LOCALES:
             items = per_locale[loc]
             if i >= len(items):

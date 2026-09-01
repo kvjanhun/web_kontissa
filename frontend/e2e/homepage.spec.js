@@ -19,6 +19,16 @@ test.describe('Homepage', () => {
     await expect(page.getByText(/Originally this site/i)).toHaveCount(0)
   })
 
+  test('an expanded project shows the stack layers it touches', async ({ page }) => {
+    await page.goto('/')
+    await page.getByRole('button', { name: /Sanakenno Admin tools/ }).click()
+    const panel = page.locator('#proj-panel-1')
+    await expect(panel.getByRole('link', { name: 'L6', exact: true })).toBeVisible()
+    await expect(panel.getByRole('link', { name: 'L7', exact: true })).toBeVisible()
+    // The chips are the legend link into the stack table.
+    await expect(panel.getByRole('link', { name: 'L6', exact: true })).toHaveAttribute('href', '#stack')
+  })
+
   test('expands a collapsed project on click', async ({ page }) => {
     await page.goto('/')
     const tool = page.getByRole('button', { name: /Sanakenno Admin tools/ })

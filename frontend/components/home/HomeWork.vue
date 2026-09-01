@@ -51,6 +51,17 @@ function projNum(i) {
               <div class="proj__tech">
                 <span v-for="tech in p.tech" :key="tech" class="tech-tag">{{ tech }}</span>
               </div>
+              <!-- Which stack layers this project touches. The chips jump to the
+                   stack table, which is what reads them as a legend. -->
+              <div v-if="p.layers && p.layers.length" class="proj__layers">
+                <span class="proj__layers-label">{{ t('home.work.layers') }}</span>
+                <a
+                  v-for="layer in p.layers"
+                  :key="layer"
+                  class="layer-tag"
+                  href="#stack"
+                >{{ layer }}</a>
+              </div>
               <div class="proj__links">
                 <a
                   v-for="l in p.links"
@@ -209,6 +220,33 @@ function projNum(i) {
   padding: 4px 10px;
   border-radius: 5px;
 }
+.proj__layers {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.proj__layers-label {
+  font-family: var(--font-plex-mono);
+  font-size: 11px;
+  color: var(--tx-3);
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin-right: 2px;
+}
+.layer-tag {
+  font-family: var(--font-plex-mono);
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  background: var(--accent-dim);
+  padding: 4px 10px;
+  border-radius: 5px;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+.layer-tag:hover { border-color: var(--accent); }
+
 .proj__links {
   display: flex;
   gap: 18px;

@@ -65,12 +65,27 @@ class Project(db.Model):
     position = db.Column(db.Integer, nullable=False, default=0)
     hidden = db.Column(db.Boolean, nullable=False, default=False)
     image = db.Column(db.String, nullable=True)
+    # JSON array of stack-layer tokens ("L1".."L7") the project touches, rendered as
+    # chips linking to the stack table. Language-independent, so it lives here rather
+    # than on the translation — the EN and FI views can never disagree about which
+    # layers a project spans.
+    layers = db.Column(db.Text, nullable=False, default="[]")
     created_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     translations = db.relationship(
         "ProjectTranslation", backref="project",
         cascade="all, delete-orphan", lazy="selectin",
     )
+
+    @property
+    def layers_list(self):
+        """The layer tokens as a list. Tolerates NULL and malformed JSON, which a
+        database predating the column (or hand-edited) can still hold."""
+        try:
+            value = json.loads(self.layers or "[]")
+        except (ValueError, TypeError):
+            return []
+        return value if isinstance(value, list) else []
 
     def _translation(self, locale):
         by_locale = {t.locale: t for t in self.translations}
@@ -83,6 +98,7 @@ class Project(db.Model):
             "name": "", "kind": "", "tagline": "", "description": "", "shot": "", "tech": [], "links": [],
         }
         data["image"] = self.image
+        data["layers"] = self.layers_list
         return data
 
     def to_admin_dict(self):
@@ -92,6 +108,7 @@ class Project(db.Model):
             "position": self.position,
             "hidden": self.hidden,
             "image": self.image,
+            "layers": self.layers_list,
             "translations": {t.locale: t.to_dict() for t in self.translations},
         }
 

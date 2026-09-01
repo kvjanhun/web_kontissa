@@ -117,3 +117,84 @@ class TestProjectsOnPublicHomeContent:
         # The public shape carries the home.projects fields
         assert "tagline" in projects[0] and "image" in projects[0]
         assert a is not None  # a remains visible
+
+
+class TestProjectLayers:
+    """The L1–L7 stack-layer tags that link a project to the stack table."""
+
+    def test_defaults_to_empty(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload())
+        assert res.status_code == 201
+        assert res.get_json()["layers"] == []
+
+    def test_create_with_layers(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L6", "L7"]))
+        assert res.status_code == 201
+        assert res.get_json()["layers"] == ["L6", "L7"]
+
+    def test_sorted_low_to_high(self, logged_in_admin):
+        # The chips read bottom-of-stack first regardless of pick order.
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L7", "L1", "L5"]))
+        assert res.get_json()["layers"] == ["L1", "L5", "L7"]
+
+    def test_deduplicated_and_upcased(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["l6", "L6", " l7 "]))
+        assert res.get_json()["layers"] == ["L6", "L7"]
+
+    def test_rejects_unknown_token(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L8"]))
+        assert res.status_code == 400
+        assert "unknown layer" in res.get_json()["error"]
+
+    def test_rejects_non_list(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers="L6"))
+        assert res.status_code == 400
+
+    def test_rejects_non_string_entries(self, logged_in_admin):
+        res = logged_in_admin.post("/api/admin/projects", json=_payload(layers=[6]))
+        assert res.status_code == 400
+
+    def test_update_replaces_layers(self, logged_in_admin):
+        pid = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L1"])).get_json()["id"]
+        res = logged_in_admin.put(f"/api/admin/projects/{pid}", json={"layers": ["L6", "L7"]})
+        assert res.status_code == 200
+        assert res.get_json()["layers"] == ["L6", "L7"]
+
+    def test_update_can_clear_layers(self, logged_in_admin):
+        pid = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L1"])).get_json()["id"]
+        res = logged_in_admin.put(f"/api/admin/projects/{pid}", json={"layers": []})
+        assert res.get_json()["layers"] == []
+
+    def test_update_leaves_layers_alone_when_omitted(self, logged_in_admin):
+        pid = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L3"])).get_json()["id"]
+        res = logged_in_admin.put(f"/api/admin/projects/{pid}", json={"hidden": True})
+        assert res.get_json()["layers"] == ["L3"]
+
+    def test_bad_update_rejected_without_touching_the_row(self, logged_in_admin):
+        pid = logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L3"])).get_json()["id"]
+        assert logged_in_admin.put(f"/api/admin/projects/{pid}", json={"layers": ["nope"]}).status_code == 400
+        res = logged_in_admin.get("/api/admin/projects")
+        assert [p for p in res.get_json() if p["id"] == pid][0]["layers"] == ["L3"]
+
+    def test_surfaced_on_public_home_content(self, client, logged_in_admin):
+        logged_in_admin.post("/api/admin/projects", json=_payload(layers=["L6", "L7"]))
+        for locale in ("en", "fi"):
+            projects = client.get(f"/api/home-content?locale={locale}").get_json()["home.projects"]
+            # Language-independent: both locales must report the same layers.
+            assert projects[0]["layers"] == ["L6", "L7"]
+
+    def test_tolerates_unset_layers(self, app):
+        """The column default is applied at flush, so an in-memory Project still
+        holds None. Reading it must give [], not raise."""
+        from app.models import Project
+        with app.app_context():
+            assert Project().layers_list == []
+
+    def test_tolerates_malformed_json(self, app, logged_in_admin):
+        from app.models import db, Project
+        pid = logged_in_admin.post("/api/admin/projects", json=_payload()).get_json()["id"]
+        with app.app_context():
+            project = db.session.get(Project, pid)
+            project.layers = "not json"
+            db.session.commit()
+            assert project.layers_list == []

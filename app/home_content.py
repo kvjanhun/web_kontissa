@@ -50,6 +50,12 @@ MAX_PROJECTS = 50
 MAX_TECH = 30
 MAX_LINKS = 10
 
+# Stack-layer tokens a project may claim. Deliberately a fixed set rather than a
+# lookup against home.stack.layers: those live inside a per-locale JSON blob, and a
+# cross-field dependency would let an edit in the stack editor invalidate projects
+# that were already saved.
+LAYER_TOKENS = tuple(f"L{n}" for n in range(1, 8))
+
 
 # --------------------------------------------------------------------------- #
 # Validation helpers
@@ -141,6 +147,22 @@ def _validate_tech(value):
     if len(value) > MAX_TECH:
         return None, f"too many tech tags (max {MAX_TECH})"
     return [v.strip() for v in value if v.strip()], None
+
+
+def _validate_layers(value):
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        return None, "layers must be a list of strings"
+    cleaned = []
+    for item in value:
+        token = item.strip().upper()
+        if token not in LAYER_TOKENS:
+            return None, f"unknown layer {item!r} (expected one of {', '.join(LAYER_TOKENS)})"
+        if token not in cleaned:
+            cleaned.append(token)
+    # Sorted low-to-high so the chips render bottom-of-stack first, matching the
+    # table's own reading order, regardless of the order they were picked in.
+    cleaned.sort(key=lambda tok: int(tok[1:]))
+    return cleaned, None
 
 
 def _apply_translation(trans, data):
@@ -262,11 +284,16 @@ def api_create_project():
     if not isinstance(translations, dict) or "en" not in translations:
         return jsonify({"error": "translations.en is required"}), 400
 
+    layers, err = _validate_layers(data.get("layers") or [])
+    if err:
+        return jsonify({"error": err}), 400
+
     max_pos = db.session.query(db.func.max(Project.position)).scalar()
     project = Project(
         position=(max_pos + 1) if max_pos is not None else 0,
         hidden=bool(data.get("hidden", False)),
         image=(data.get("image") or "").strip() or None,
+        layers=json.dumps(layers),
     )
     for locale in LOCALES:
         if locale in translations:
@@ -294,6 +321,11 @@ def api_update_project(project_id):
 
     if "image" in data:
         project.image = (data["image"] or "").strip() or None
+    if "layers" in data:
+        layers, err = _validate_layers(data["layers"] or [])
+        if err:
+            return jsonify({"error": err}), 400
+        project.layers = json.dumps(layers)
     if "hidden" in data:
         project.hidden = bool(data["hidden"])
     if "position" in data:

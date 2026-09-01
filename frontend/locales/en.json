@@ -19,6 +19,7 @@
   "home.nav.terminal": "terminal",
   "home.work.label": "Selected projects",
   "home.work.count": "{count} projects",
+  "home.work.layers": "Touches",
   "home.terminal.label": "Terminal",
   "home.terminal.tag": "try it · type help",
   "home.footer.connect": "Connect",

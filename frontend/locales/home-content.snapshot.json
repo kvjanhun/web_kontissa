@@ -111,7 +111,13 @@
           }
         ],
         "shot": "Sanakenno.fi · app screenshot",
-        "image": "/projects/sanakenno/cover.webp"
+        "image": "/projects/sanakenno/cover.webp",
+        "layers": [
+          "L4",
+          "L5",
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "Sanakenno Admin tools",
@@ -131,7 +137,11 @@
           }
         ],
         "shot": "Sanakenno Admin tools · dashboard",
-        "image": "/projects/sanakenno-tool/cover.webp"
+        "image": "/projects/sanakenno-tool/cover.webp",
+        "layers": [
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "erez.ac",
@@ -153,7 +163,16 @@
           }
         ],
         "shot": "erez.ac · admin + observability",
-        "image": "/projects/erez-ac/cover.webp"
+        "image": "/projects/erez-ac/cover.webp",
+        "layers": [
+          "L1",
+          "L2",
+          "L3",
+          "L4",
+          "L5",
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "/dog",
@@ -173,7 +192,11 @@
           }
         ],
         "shot": "/dog · results search",
-        "image": "/projects/dog/cover.webp"
+        "image": "/projects/dog/cover.webp",
+        "layers": [
+          "L6",
+          "L7"
+        ]
       }
     ]
   },
@@ -289,7 +312,13 @@
           }
         ],
         "shot": "Sanakenno.fi · kuvakaappaus",
-        "image": "/projects/sanakenno/cover.webp"
+        "image": "/projects/sanakenno/cover.webp",
+        "layers": [
+          "L4",
+          "L5",
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "Sanakenno Admin tools",
@@ -309,7 +338,11 @@
           }
         ],
         "shot": "Sanakenno Admin tools · hallintapaneeli",
-        "image": "/projects/sanakenno-tool/cover.webp"
+        "image": "/projects/sanakenno-tool/cover.webp",
+        "layers": [
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "erez.ac",
@@ -331,7 +364,16 @@
           }
         ],
         "shot": "erez.ac · hallinta + valvonta",
-        "image": "/projects/erez-ac/cover.webp"
+        "image": "/projects/erez-ac/cover.webp",
+        "layers": [
+          "L1",
+          "L2",
+          "L3",
+          "L4",
+          "L5",
+          "L6",
+          "L7"
+        ]
       },
       {
         "name": "/dog",
@@ -351,7 +393,11 @@
           }
         ],
         "shot": "/dog · tuloshaku",
-        "image": "/projects/dog/cover.webp"
+        "image": "/projects/dog/cover.webp",
+        "layers": [
+          "L6",
+          "L7"
+        ]
       }
     ]
   }

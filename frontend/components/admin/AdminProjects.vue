@@ -7,6 +7,9 @@ const projects = ref([])
 const error = ref('')
 const success = ref('')
 
+// Mirrors LAYER_TOKENS in app/home_content.py — the API rejects anything else.
+const LAYER_OPTIONS = ['L1', 'L2', 'L3', 'L4', 'L5', 'L6', 'L7']
+
 const drawerOpen = ref(false)
 const drawerLocale = ref('en')
 const draft = ref(null)
@@ -17,7 +20,7 @@ function emptyTranslation() {
   return { name: '', kind: '', tagline: '', description: '', shot: '', tech: [], links: [] }
 }
 function emptyDraft() {
-  return { id: null, image: '', hidden: false, translations: { en: emptyTranslation(), fi: emptyTranslation() } }
+  return { id: null, image: '', hidden: false, layers: [], translations: { en: emptyTranslation(), fi: emptyTranslation() } }
 }
 
 async function load() {
@@ -43,7 +46,7 @@ function openNew() {
   drawerOpen.value = true
 }
 function openEdit(p) {
-  const d = { id: p.id, image: p.image || '', hidden: !!p.hidden, translations: {} }
+  const d = { id: p.id, image: p.image || '', hidden: !!p.hidden, layers: [...(p.layers || [])], translations: {} }
   for (const loc of LOCALES) {
     d.translations[loc] = { ...emptyTranslation(), ...(p.translations?.[loc] || {}) }
     d.translations[loc].tech = [...(p.translations?.[loc]?.tech || [])]
@@ -54,6 +57,12 @@ function openEdit(p) {
   drawerOpen.value = true
 }
 function closeDrawer() { drawerOpen.value = false; draft.value = null }
+
+function toggleLayer(token) {
+  const at = draft.value.layers.indexOf(token)
+  if (at === -1) draft.value.layers.push(token)
+  else draft.value.layers.splice(at, 1)
+}
 
 function techText(loc) { return draft.value.translations[loc].tech.join(', ') }
 function setTech(loc, text) {
@@ -73,7 +82,7 @@ async function saveDraft() {
   for (const loc of LOCALES) {
     if (d.translations[loc].name.trim()) translations[loc] = d.translations[loc]
   }
-  const payload = { image: d.image, hidden: d.hidden, translations }
+  const payload = { image: d.image, hidden: d.hidden, layers: d.layers, translations }
 
   const url = d.id == null ? '/api/admin/projects' : `/api/admin/projects/${d.id}`
   const method = d.id == null ? 'POST' : 'PUT'
@@ -182,6 +191,22 @@ async function move(p, dir) {
             <label class="field__label">Image path <span class="field__hint">(upload handled separately)</span></label>
             <input class="inp" v-model="draft.image" placeholder="/projects/name/cover.webp" />
           </div>
+          <div class="field">
+            <label class="field__label">
+              Stack layers <span class="field__hint">(chips on the public card, linking to the stack table)</span>
+            </label>
+            <div class="layers">
+              <button
+                v-for="token in LAYER_OPTIONS"
+                :key="token"
+                type="button"
+                class="layers__opt"
+                :class="{ 'layers__opt--on': draft.layers.includes(token) }"
+                :aria-pressed="draft.layers.includes(token)"
+                @click="toggleLayer(token)"
+              >{{ token }}</button>
+            </div>
+          </div>
           <label class="check">
             <input type="checkbox" v-model="draft.hidden" /> Hidden (not shown on the public site)
           </label>
@@ -256,6 +281,19 @@ async function move(p, dir) {
 .pr__msg { padding: 10px 14px; border-radius: 9px; font-size: 13px; margin-bottom: 14px; }
 .pr__msg--err { background: #fdece5; color: #c0392b; }
 .pr__msg--ok { background: #e7f5e8; color: #2e7d32; }
+
+.layers { display: flex; flex-wrap: wrap; gap: 7px; }
+.layers__opt {
+  font-family: var(--font-plex-mono, monospace);
+  font-size: 12px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--as-line);
+  background: transparent;
+  color: var(--as-tx-3);
+  cursor: pointer;
+}
+.layers__opt--on { border-color: var(--as-accent); color: var(--as-accent); font-weight: 600; }
 
 .card { background: var(--as-panel); border: 1px solid var(--as-line); border-radius: 13px; overflow: hidden; }
 .pr__empty { padding: 28px; text-align: center; color: var(--as-tx-2); font-size: 14px; }
