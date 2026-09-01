@@ -21,7 +21,7 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
 
     <div class="stack__table" v-reveal>
       <div v-for="layer in layers" :key="layer.z" class="layer">
-        <div class="layer__z">{{ layer.z }}</div>
+        <div class="layer__z"><span class="layer-tag">{{ layer.z }}</span></div>
         <div class="layer__name">
           <span class="layer__kicker">{{ layer.layer }}</span>
           <span class="layer__title">{{ layer.title }}</span>
@@ -85,12 +85,23 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
   display: flex;
   align-items: center;
   justify-content: center;
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
   border-right: 1px solid var(--line-2);
-  background: var(--panel-2);
 }
+/* Same chip as the reach ranges in HomeWork, so the token a project links here
+   with and the token it lands on read as the same object. */
+.layer-tag {
+  font-family: var(--font-plex-mono);
+  font-size: 11px;
+  color: var(--accent);
+  border: 1px solid var(--accent-dim);
+  background: var(--accent-dim);
+  padding: 4px 10px;
+  border-radius: 5px;
+  transition: border-color 0.15s ease;
+}
+/* The row hover fills to --accent-dim, which is the chip's own background, so
+   without this the chip dissolves into the row exactly when it is pointed at. */
+.layer:hover .layer-tag { border-color: var(--accent); }
 .layer__name {
   padding: 13px 20px;
   border-right: 1px solid var(--line-2);
@@ -139,8 +150,6 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
   .layer__z {
     justify-content: flex-start;
     border-right: none;
-    background: transparent;
-    font-size: 11px;
   }
   .layer__name {
     flex-direction: row;
