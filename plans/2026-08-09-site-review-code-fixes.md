@@ -1,6 +1,6 @@
 # Site review — code & content fixes (agent-implementable)
 
-Status: phases 1–4 implemented (unpushed); phase 5 not started
+Status: phases 1–4 shipped (`2a2f090d`, `99c5ef93`, `00eb2db1`, `bf81fc62`); phase 5 (sanakenno) not started
 Date: 2026-08-09
 
 ## Implementation log

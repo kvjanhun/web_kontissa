@@ -1,7 +1,13 @@
 # Site review — admin panel content edits (manual)
 
-Status: draft
+Status: superseded by `plans/2026-09-01-home-page-cleanup-admin.md`
 Date: 2026-08-09
+
+> Every unfinished item here is folded into that plan, re-verified against the
+> repos, with two corrections: the L1 wording proposed below is itself inaccurate
+> (port 80 is open and redirecting, so "only HTTPS (443) open" trades one error for
+> another), and item 4 is no longer blocked — the `{year}` interpolation shipped.
+> Work from the newer file.
 
 ## Objective
 
