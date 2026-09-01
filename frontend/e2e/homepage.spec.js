@@ -29,6 +29,13 @@ test.describe('Homepage', () => {
     await expect(panel.getByRole('link', { name: 'L6', exact: true })).toHaveAttribute('href', '#stack')
   })
 
+  test('the footer reports live host uptime beside the status line', async ({ page }) => {
+    await page.goto('/')
+    // Rendered only after the client-side /api/server-info call resolves, so the
+    // prerendered HTML never carries a stale figure.
+    await expect(page.getByText(/up \d+ (hour|day)s?/)).toBeVisible({ timeout: 10000 })
+  })
+
   test('expands a collapsed project on click', async ({ page }) => {
     await page.goto('/')
     const tool = page.getByRole('button', { name: /Sanakenno Admin tools/ })

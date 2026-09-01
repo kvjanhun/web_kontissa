@@ -3,6 +3,7 @@ const i18n = useI18nStore()
 const { t, tm } = i18n
 
 const { linkIcon, isExternal } = useLinkIcon()
+const { uptimeLabel: formatUptime } = useUptime()
 
 // Baked into the prerendered HTML at build time, then corrected on hydration if the
 // year has since rolled over — so a January visitor sees the right year even if the
@@ -11,6 +12,31 @@ const currentYear = new Date().getFullYear()
 
 const connectLinks = computed(() => tm('home.footer.connectLinks') || [])
 const siteLinks = computed(() => tm('home.footer.siteLinks') || [])
+
+// Live host uptime, read from the same public snapshot the terminal's `fetch`
+// command uses. Client-only on purpose: a figure baked at build time would be
+// wrong the moment it shipped, so the prerendered HTML carries the status line
+// alone and the number appears after hydration.
+//
+// Only the raw seconds are stored; the label is computed so it re-renders in the
+// other language when the visitor switches locale. Any failure leaves it null and
+// the footer falls back to the bare status line, which reads fine on its own.
+const uptimeSeconds = ref(null)
+
+const uptimeLabel = computed(() => {
+  const label = formatUptime(uptimeSeconds.value)
+  return label ? t(label.key, { n: label.n }) : ''
+})
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/api/server-info')
+    if (!res.ok) return
+    uptimeSeconds.value = (await res.json()).uptime_seconds
+  } catch {
+    // non-fatal — the status line stands on its own
+  }
+})
 </script>
 
 <template>
@@ -43,7 +69,11 @@ const siteLinks = computed(() => tm('home.footer.siteLinks') || [])
           :target="isExternal(l.href) ? '_blank' : undefined"
           :rel="isExternal(l.href) ? 'noopener noreferrer' : undefined"
         ><Icon class="ftr__link-icon" :name="linkIcon(l.href)" aria-hidden="true" />{{ l.label }}</a>
-        <span class="ftr__nuc">{{ t('home.footer.nuc') }}</span>
+        <span class="ftr__nuc"><span
+          v-if="uptimeLabel"
+          class="ftr__pulse"
+          aria-hidden="true"
+        ></span>{{ t('home.footer.nuc') }}<span v-if="uptimeLabel"> · {{ uptimeLabel }}</span></span>
       </div>
     </div>
     <!-- {year} is interpolated so the DB value never has to be edited in January.
@@ -114,6 +144,26 @@ const siteLinks = computed(() => tm('home.footer.siteLinks') || [])
   font-size: 13px;
   color: var(--tx-3);
   font-family: var(--font-plex-mono);
+}
+/* Echoes the hero's signature dot, so the one live figure on the page is marked
+   with the same accent that opens it. */
+.ftr__pulse {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent);
+  margin-right: 8px;
+  vertical-align: middle;
+  animation: ftr-pulse 2.4s ease-in-out infinite;
+}
+@keyframes ftr-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ftr__pulse { animation: none; }
 }
 .ftr__copyright {
   max-width: 1180px;
