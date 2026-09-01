@@ -12,6 +12,13 @@ test.describe('Homepage', () => {
     await expect(page.getByText('konsta@erez.ac', { exact: false }).first()).toBeVisible({ timeout: 10000 })
   })
 
+  test('the terminal section carries no footnote', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { name: /Terminal/i })).toBeVisible()
+    // The "// Originally this site's main attraction" caption is gone for good.
+    await expect(page.getByText(/Originally this site/i)).toHaveCount(0)
+  })
+
   test('expands a collapsed project on click', async ({ page }) => {
     await page.goto('/')
     const tool = page.getByRole('button', { name: /Sanakenno Admin tools/ })

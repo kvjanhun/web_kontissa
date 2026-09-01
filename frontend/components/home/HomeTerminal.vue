@@ -20,8 +20,6 @@ const { t } = useI18nStore()
         <TerminalWindow :fill="true" />
       </div>
     </div>
-
-    <p class="term-footnote">{{ t('home.terminal.footnote') }}</p>
   </section>
 </template>
 
@@ -83,13 +81,6 @@ const { t } = useI18nStore()
   display: flex;
 }
 .term-frame__body > * { flex: 1; min-width: 0; }
-
-.term-footnote {
-  margin: 16px 2px 0;
-  font-size: 13px;
-  color: var(--tx-2);
-  font-family: var(--font-plex-mono);
-}
 
 @media (max-width: 720px) {
   .terminal { padding: 8px 0 40px; }

@@ -4,6 +4,11 @@ const { t, tm } = i18n
 const vReveal = useScrollReveal()
 
 const layers = computed(() => tm('home.stack.layers') || [])
+
+// The intro and footnote are optional: clearing either field in the admin should
+// drop the paragraph rather than leave an empty <p> holding its margin.
+const intro = computed(() => (t('home.stack.intro') || '').trim())
+const footnote = computed(() => (t('home.stack.footnote') || '').trim())
 </script>
 
 <template>
@@ -12,7 +17,7 @@ const layers = computed(() => tm('home.stack.layers') || [])
       <h2 class="sec-head__label home-plate">02 — {{ t('home.stack.label') }}</h2>
       <span class="sec-head__aside home-plate">{{ t('home.stack.tag') }}</span>
     </div>
-    <p class="stack__intro home-plate">{{ t('home.stack.intro') }}</p>
+    <p v-if="intro" class="stack__intro home-plate">{{ intro }}</p>
 
     <div class="stack__table" v-reveal>
       <div v-for="layer in layers" :key="layer.z" class="layer">
@@ -25,12 +30,12 @@ const layers = computed(() => tm('home.stack.layers') || [])
       </div>
     </div>
 
-    <p class="stack__footnote home-plate">{{ t('home.stack.footnote') }}</p>
+    <p v-if="footnote" class="stack__footnote home-plate">{{ footnote }}</p>
   </section>
 </template>
 
 <style scoped>
-.stack { padding: 84px 0; }
+.stack { padding: 64px 0; }
 
 .sec-head {
   display: flex;
@@ -53,9 +58,9 @@ const layers = computed(() => tm('home.stack.layers') || [])
 }
 
 .stack__intro {
-  margin: 0 0 40px;
+  margin: 0 0 26px;
   max-width: 60ch;
-  font-size: 17px;
+  font-size: 16px;
   line-height: 1.6;
   color: var(--tx-2);
   font-weight: 300;
@@ -87,7 +92,7 @@ const layers = computed(() => tm('home.stack.layers') || [])
   background: var(--panel-2);
 }
 .layer__name {
-  padding: 18px 20px;
+  padding: 13px 20px;
   border-right: 1px solid var(--line-2);
   display: flex;
   flex-direction: column;
@@ -107,7 +112,7 @@ const layers = computed(() => tm('home.stack.layers') || [])
   letter-spacing: -0.01em;
 }
 .layer__detail {
-  padding: 18px 22px;
+  padding: 13px 22px;
   display: flex;
   align-items: center;
   font-size: 14px;
@@ -124,8 +129,8 @@ const layers = computed(() => tm('home.stack.layers') || [])
 }
 
 @media (max-width: 720px) {
-  .stack { padding: 36px 0; }
-  .stack__intro { margin-bottom: 22px; font-size: 14px; }
+  .stack { padding: 32px 0; }
+  .stack__intro { margin-bottom: 18px; font-size: 14px; }
   .layer {
     grid-template-columns: 1fr;
     padding: 14px 15px;
