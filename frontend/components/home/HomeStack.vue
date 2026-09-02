@@ -5,10 +5,9 @@ const vReveal = useScrollReveal()
 
 const layers = computed(() => tm('home.stack.layers') || [])
 
-// The intro and footnote are optional: clearing either field in the admin should
-// drop the paragraph rather than leave an empty <p> holding its margin.
+// The intro is optional: clearing the field in the admin should drop the
+// paragraph rather than leave an empty <p> holding its margin.
 const intro = computed(() => (t('home.stack.intro') || '').trim())
-const footnote = computed(() => (t('home.stack.footnote') || '').trim())
 </script>
 
 <template>
@@ -26,8 +25,6 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
         <div class="layer__detail">{{ layer.detail }}</div>
       </div>
     </div>
-
-    <p v-if="footnote" class="stack__footnote home-plate">{{ footnote }}</p>
   </section>
 </template>
 
@@ -115,14 +112,6 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
   font-size: 14px;
   color: var(--tx-2);
   line-height: 1.5;
-}
-
-.stack__footnote {
-  margin: 20px 2px 0;
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
-  line-height: 1.6;
 }
 
 @media (max-width: 720px) {

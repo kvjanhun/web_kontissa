@@ -36,7 +36,6 @@ HOME_CONTENT_FIELDS = {
     "home.hero.ctaSecondary": FIELD_STRING,
     "home.stack.label": FIELD_STRING,
     "home.stack.intro": FIELD_STRING,
-    "home.stack.footnote": FIELD_STRING,
     "home.stack.layers": FIELD_LAYER_LIST,
     "home.footer.blurb": FIELD_STRING,
     "home.footer.nuc": FIELD_STRING,

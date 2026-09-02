@@ -87,7 +87,7 @@ function toggle(i) {
 </template>
 
 <style scoped>
-.work { padding: 64px 0 32px; }
+.work { padding: 56px 0 40px; }
 
 .sec-head {
   margin: 0 0 24px;
@@ -112,9 +112,11 @@ function toggle(i) {
   border: none;
   cursor: pointer;
   padding: 22px 2px;
+  /* Same two tracks as .proj__panel-inner, so the caret sits on the axis the
+     screenshot column opens along instead of floating at the far edge. */
   display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 24px;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 32px;
   align-items: center;
   color: var(--tx);
 }
@@ -138,9 +140,8 @@ function toggle(i) {
 .proj__kind {
   font-family: var(--font-plex-mono);
   font-size: 11px;
-  color: var(--accent);
-  border: 1px solid var(--accent-dim);
-  background: var(--accent-dim);
+  color: var(--tx-3);
+  border: 1px solid var(--line);
   padding: 3px 9px;
   border-radius: 20px;
 }
@@ -153,9 +154,10 @@ function toggle(i) {
   font-family: var(--font-plex-mono);
   font-size: 22px;
   color: var(--tx-3);
-  transition: transform 0.25s ease;
-  justify-self: end;
+  transition: transform 0.25s ease, color 0.15s ease;
+  justify-self: start;
 }
+.proj__btn:hover .proj__caret { color: var(--accent); }
 .proj__caret--open { transform: rotate(45deg); }
 
 /* Accessible auto-height accordion via grid-template-rows */

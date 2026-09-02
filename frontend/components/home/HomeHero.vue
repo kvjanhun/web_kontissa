@@ -60,7 +60,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.hero { padding: 104px 0 84px; }
+.hero { padding: 104px 0 48px; }
 .hero__eyebrow {
   display: flex;
   align-items: center;

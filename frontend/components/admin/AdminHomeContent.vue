@@ -58,10 +58,6 @@ const GROUPS = [
         hint: 'One row per layer of the table, in the order listed here (top to bottom).',
         itemLabel: 'Layer', addLabel: 'Add layer',
       },
-      {
-        key: 'home.stack.footnote', label: 'Footnote', type: 'textarea',
-        hint: 'Small mono note under the table. The leading “//” is part of the text.',
-      },
     ],
   },
   {
