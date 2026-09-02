@@ -117,22 +117,35 @@ const intro = computed(() => (t('home.stack.intro') || '').trim())
 @media (max-width: 720px) {
   .stack { padding: 32px 0; }
   .stack__intro { margin-bottom: 18px; font-size: 14px; }
+  /* Two columns rather than three stacked rows: the chip shares its line with
+     the layer name instead of holding one of its own, and the detail spans
+     underneath. */
   .layer {
-    grid-template-columns: 1fr;
+    grid-template-columns: auto 1fr;
     padding: 14px 15px;
-    gap: 5px;
+    column-gap: 12px;
+    row-gap: 6px;
+    align-items: center;
   }
   .layer__z {
+    grid-area: 1 / 1;
     justify-content: flex-start;
     border-right: none;
   }
   .layer__name {
+    grid-area: 1 / 2;
     flex-direction: row;
+    flex-wrap: wrap;
     align-items: baseline;
-    gap: 10px;
+    justify-content: flex-start;
+    gap: 4px 10px;
     padding: 0;
     border-right: none;
   }
-  .layer__detail { padding: 0; font-size: 12.5px; }
+  .layer__detail {
+    grid-area: 2 / 1 / auto / span 2;
+    padding: 0;
+    font-size: 12.5px;
+  }
 }
 </style>
