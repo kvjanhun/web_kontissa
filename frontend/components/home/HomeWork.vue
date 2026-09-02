@@ -12,17 +12,11 @@ const openIndex = ref(0)
 function toggle(i) {
   openIndex.value = openIndex.value === i ? -1 : i
 }
-function projNum(i) {
-  return String(i + 1).padStart(3, '0')
-}
 </script>
 
 <template>
   <section id="work" class="work">
-    <div class="sec-head">
-      <h2 class="sec-head__label home-plate">01 — {{ t('home.work.label') }}</h2>
-      <span class="sec-head__aside home-plate">{{ t('home.work.count', { count: projects.length }) }}</span>
-    </div>
+    <h2 class="sec-head home-plate">{{ t('home.work.label') }}</h2>
 
     <div class="proj-list" v-reveal>
       <div v-for="(p, i) in projects" :key="p.name" class="proj">
@@ -33,7 +27,6 @@ function projNum(i) {
           :aria-controls="`proj-panel-${i}`"
           @click="toggle(i)"
         >
-          <span class="proj__num">{{ projNum(i) }}</span>
           <span class="proj__head home-plate">
             <span class="proj__title-row">
               <span class="proj__name">{{ p.name }}</span>
@@ -46,7 +39,6 @@ function projNum(i) {
 
         <div :id="`proj-panel-${i}`" class="proj__panel" :class="{ 'proj__panel--open': openIndex === i }">
           <div class="proj__panel-inner">
-            <span class="proj__spacer" aria-hidden="true"></span>
             <div class="proj__detail home-plate">
               <p class="proj__desc">{{ p.description }}</p>
               <div class="proj__tech">
@@ -95,26 +87,15 @@ function projNum(i) {
 </template>
 
 <style scoped>
-.work { padding: 80px 0 40px; }
+.work { padding: 64px 0 32px; }
 
 .sec-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 38px;
-}
-.sec-head__label {
-  margin: 0;
+  margin: 0 0 24px;
   font-size: 13px;
   font-family: var(--font-plex-mono);
   color: var(--accent);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-.sec-head__aside {
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
 }
 
 .proj-list {
@@ -130,17 +111,12 @@ function projNum(i) {
   background: none;
   border: none;
   cursor: pointer;
-  padding: 26px 4px;
+  padding: 22px 2px;
   display: grid;
-  grid-template-columns: 54px 1fr auto;
+  grid-template-columns: 1fr auto;
   gap: 24px;
   align-items: center;
   color: var(--tx);
-}
-.proj__num {
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
 }
 .proj__head {
   display: flex;
@@ -193,8 +169,8 @@ function projNum(i) {
   overflow: hidden;
   min-height: 0;
   display: grid;
-  grid-template-columns: 54px 1.1fr 1fr;
-  gap: 24px;
+  grid-template-columns: 1.1fr 1fr;
+  gap: 32px;
 }
 .proj__detail {
   display: flex;
@@ -307,12 +283,12 @@ function projNum(i) {
 }
 
 @media (max-width: 720px) {
-  .work { padding: 34px 0 8px; }
-  .sec-head { margin-bottom: 18px; }
+  .work { padding: 32px 0 8px; }
+  .sec-head { margin-bottom: 16px; }
   .proj__btn {
-    grid-template-columns: auto 1fr auto;
+    grid-template-columns: 1fr auto;
     gap: 12px;
-    padding: 18px 2px;
+    padding: 16px 2px;
     align-items: start;
   }
   .proj__name { font-size: 21px; }
@@ -320,7 +296,6 @@ function projNum(i) {
     grid-template-columns: 1fr;
     gap: 16px;
   }
-  .proj__spacer { display: none; }
   .proj__shot { order: -1; margin-bottom: 0; }
   .proj__detail { padding-bottom: 22px; }
 }

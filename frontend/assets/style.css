@@ -175,14 +175,14 @@
   --bg-2: #eceae4;
   --panel: #ffffff;
   --panel-2: #f7f5f1;
-  --line: rgba(20, 18, 15, 0.12);
-  --line-2: rgba(20, 18, 15, 0.07);
-  --tx: #1a1b1d;
-  --tx-2: #5b5e64;
-  --tx-3: #9a9da3;
+  --line: rgba(74, 58, 40, 0.16);
+  --line-2: rgba(74, 58, 40, 0.09);
+  --tx: #1c1a17;
+  --tx-2: #5f5b53;
+  --tx-3: #a19c93;
   --accent: #e8501f;
   --accent-dim: rgba(232, 80, 31, 0.10);
-  --grid: rgba(20, 18, 15, 0.025);
+  --grid: rgba(74, 58, 40, 0.03);
   --font-plex-sans: 'IBM Plex Sans', system-ui, sans-serif;
   --font-plex-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
 }
@@ -191,14 +191,14 @@
   --bg-2: #101216;
   --panel: #131519;
   --panel-2: #16191e;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-2: rgba(255, 255, 255, 0.05);
-  --tx: #e9eaec;
-  --tx-2: #9a9da3;
-  --tx-3: #62656c;
+  --line: rgba(255, 246, 236, 0.10);
+  --line-2: rgba(255, 246, 236, 0.055);
+  --tx: #ebe9e5;
+  --tx-2: #a19c93;
+  --tx-3: #67635b;
   --accent: #ff6a3d;
   --accent-dim: rgba(255, 106, 61, 0.14);
-  --grid: rgba(255, 255, 255, 0.022);
+  --grid: rgba(255, 246, 236, 0.024);
 }
 
 /* Readability plate for text that sits directly on the grid texture. A solid

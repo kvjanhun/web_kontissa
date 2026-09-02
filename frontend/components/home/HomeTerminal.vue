@@ -4,10 +4,7 @@ const { t } = useI18nStore()
 
 <template>
   <section id="terminal" class="terminal">
-    <div class="sec-head">
-      <h2 class="sec-head__label home-plate">03 — {{ t('home.terminal.label') }}</h2>
-      <span class="sec-head__aside home-plate">{{ t('home.terminal.tag') }}</span>
-    </div>
+    <h2 class="sec-head home-plate">{{ t('home.terminal.label') }}</h2>
 
     <div class="term-frame">
       <div class="term-frame__bar">
@@ -24,26 +21,15 @@ const { t } = useI18nStore()
 </template>
 
 <style scoped>
-.terminal { padding: 40px 0 90px; }
+.terminal { padding: 40px 0 72px; }
 
 .sec-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 24px;
-}
-.sec-head__label {
-  margin: 0;
+  margin: 0 0 20px;
   font-size: 13px;
   font-family: var(--font-plex-mono);
   color: var(--accent);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-.sec-head__aside {
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
 }
 
 .term-frame {

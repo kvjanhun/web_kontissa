@@ -43,15 +43,11 @@ const GROUPS = [
   },
   {
     title: 'Stack',
-    where: 'The “02 — The stack” section with the layered table.',
+    where: 'The stack section with the layered table.',
     fields: [
       {
         key: 'home.stack.label', label: 'Section title', type: 'text',
-        hint: 'Shown after the number, as “02 — <this>”.',
-      },
-      {
-        key: 'home.stack.tag', label: 'Section tag', type: 'text',
-        hint: 'Small mono text to the right of the title.',
+        hint: 'The section heading above the layer table.',
       },
       {
         key: 'home.stack.intro', label: 'Intro paragraph', type: 'textarea',

@@ -13,10 +13,7 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
 
 <template>
   <section id="stack" class="stack">
-    <div class="sec-head">
-      <h2 class="sec-head__label home-plate">02 — {{ t('home.stack.label') }}</h2>
-      <span class="sec-head__aside home-plate">{{ t('home.stack.tag') }}</span>
-    </div>
+    <h2 class="sec-head home-plate">{{ t('home.stack.label') }}</h2>
     <p v-if="intro" class="stack__intro home-plate">{{ intro }}</p>
 
     <div class="stack__table" v-reveal>
@@ -35,26 +32,15 @@ const footnote = computed(() => (t('home.stack.footnote') || '').trim())
 </template>
 
 <style scoped>
-.stack { padding: 64px 0; }
+.stack { padding: 56px 0; }
 
 .sec-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 14px;
-}
-.sec-head__label {
-  margin: 0;
+  margin: 0 0 14px;
   font-size: 13px;
   font-family: var(--font-plex-mono);
   color: var(--accent);
   letter-spacing: 0.1em;
   text-transform: uppercase;
-}
-.sec-head__aside {
-  font-family: var(--font-plex-mono);
-  font-size: 12px;
-  color: var(--tx-3);
 }
 
 .stack__intro {
