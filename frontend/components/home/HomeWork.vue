@@ -24,7 +24,7 @@ function toggle(i) {
           class="proj__btn"
           type="button"
           :aria-expanded="openIndex === i"
-          :aria-controls="`proj-panel-${i}`"
+          :aria-controls="`proj-panel-${i} proj-shot-${i}`"
           @click="toggle(i)"
         >
           <span class="proj__head home-plate">
@@ -68,6 +68,15 @@ function toggle(i) {
                 </a>
               </div>
             </div>
+          </div>
+        </div>
+
+        <div
+          :id="`proj-shot-${i}`"
+          class="proj__aside"
+          :class="{ 'proj__aside--open': openIndex === i }"
+        >
+          <div class="proj__aside-inner">
             <div class="proj__shot" :class="{ 'proj__shot--filled': p.image }">
               <img
                 v-if="p.image"
@@ -103,7 +112,12 @@ function toggle(i) {
   flex-direction: column;
   border-top: 1px solid var(--line);
 }
-.proj { border-bottom: 1px solid var(--line); }
+.proj {
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  column-gap: 32px;
+}
 
 .proj__btn {
   width: 100%;
@@ -112,12 +126,11 @@ function toggle(i) {
   border: none;
   cursor: pointer;
   padding: 22px 2px;
-  /* Same two tracks as .proj__panel-inner, so the caret sits on the axis the
-     screenshot column opens along instead of floating at the far edge. */
-  display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 32px;
+  grid-area: 1 / 1;
+  display: flex;
+  justify-content: space-between;
   align-items: center;
+  gap: 24px;
   color: var(--tx);
 }
 .proj__head {
@@ -162,6 +175,7 @@ function toggle(i) {
 
 /* Accessible auto-height accordion via grid-template-rows */
 .proj__panel {
+  grid-area: 2 / 1;
   display: grid;
   grid-template-rows: 0fr;
   transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1);
@@ -170,9 +184,25 @@ function toggle(i) {
 .proj__panel-inner {
   overflow: hidden;
   min-height: 0;
+}
+
+/* The shot spans the title row too, so it opens level with the project name
+   rather than starting a row-height below it. align-self keeps it content-sized:
+   a stretched item would be forced to the height of both rows and the 0fr/1fr
+   collapse would have nothing to animate. */
+.proj__aside {
+  grid-row: 1 / span 2;
+  grid-column: 2;
+  align-self: start;
+  margin-top: 22px;
   display: grid;
-  grid-template-columns: 1.1fr 1fr;
-  gap: 32px;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.proj__aside--open { grid-template-rows: 1fr; }
+.proj__aside-inner {
+  overflow: hidden;
+  min-height: 0;
 }
 .proj__detail {
   display: flex;
@@ -259,7 +289,6 @@ function toggle(i) {
   display: flex;
   align-items: flex-end;
   padding: 14px;
-  margin-bottom: 34px;
 }
 /* When a real screenshot is present the stripe placeholder is replaced by a
    solid panel (shown only while the image decodes); the image fills the box. */
@@ -287,18 +316,21 @@ function toggle(i) {
 @media (max-width: 720px) {
   .work { padding: 32px 0 8px; }
   .sec-head { margin-bottom: 16px; }
+  /* One column, shot between the title and the detail — there is no side column
+     to span, so the three parts stack in reading order. */
+  .proj { grid-template-columns: 1fr; }
   .proj__btn {
-    grid-template-columns: 1fr auto;
     gap: 12px;
     padding: 16px 2px;
     align-items: start;
   }
-  .proj__name { font-size: 21px; }
-  .proj__panel-inner {
-    grid-template-columns: 1fr;
-    gap: 16px;
+  .proj__aside {
+    grid-area: 2 / 1;
+    margin-top: 0;
   }
-  .proj__shot { order: -1; margin-bottom: 0; }
+  .proj__panel { grid-area: 3 / 1; }
+  .proj__name { font-size: 21px; }
+  .proj__shot { margin-bottom: 16px; }
   .proj__detail { padding-bottom: 22px; }
 }
 </style>
