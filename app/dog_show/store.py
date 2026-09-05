@@ -218,12 +218,13 @@ def _complete_result_cache_show_ids():
         return set()
 
 
-def _complete_cache_captures():
-    """{show_id: completed_breeds} for every complete result cache (no result rows).
+def _complete_cache_captures(show_ids):
+    """{show_id: completed_breeds} for the complete result caches among `show_ids`
+    (no result rows). Read in batches — see sqlstore.read_complete_cache_captures.
     Used by the operational heal tool (scripts/dog_heal_partial_breeds.py)."""
     try:
         with dog_db.session_scope() as session:
-            return sqlstore.read_complete_cache_captures(session)
+            return sqlstore.read_complete_cache_captures(session, show_ids)
     except Exception:
         logger.exception("dog_complete_cache_captures_read_failed")
         return {}

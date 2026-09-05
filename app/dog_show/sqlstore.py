@@ -855,18 +855,29 @@ def sweep_breed_judges_from_results(session):
     ).rowcount
 
 
-def read_complete_cache_captures(session):
-    """{show_id: completed_breeds} for every complete result cache — the capture
-    state without the result rows.
+def read_complete_cache_captures(session, show_ids):
+    """{show_id: completed_breeds} for the complete result caches among `show_ids`
+    — the capture state without the result rows.
 
     The heal tool has to look at every captured breed of every captured show to
     find the ones whose page was read mid-ring; hydrating each show's full doc to
-    do that would read the whole ~400k-row result table.
+    do that would read the whole ~400k-row result table. It reads in batches
+    because every show's meta blob at once does not fit the crawler container's
+    256 MB budget either.
     Used by the operational heal tool (scripts/dog_heal_partial_breeds.py)."""
+    ids = []
+    for sid in show_ids or []:
+        try:
+            ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not ids:
+        return {}
     captures = {}
     for cache_row in session.execute(
         select(DogResultCache.show_id, DogResultCache.meta)
         .where(DogResultCache.status == "complete")
+        .where(DogResultCache.show_id.in_(ids))
     ):
         if not cache_row.meta:
             continue

@@ -57,22 +57,33 @@ from app.dog_show.result_cache import (  # noqa: E402
     _breed_cache_key_from_breed, _breed_capture_is_settled,
     _fetch_breed_results_for_show_cache, crawl_result_cache_for_show,
 )
-from app.dog_show.store import _complete_cache_captures, _indexed_shows  # noqa: E402
+from app.dog_show.store import (  # noqa: E402
+    _complete_cache_captures, _complete_result_cache_show_ids, _indexed_shows,
+)
 
 logger = structlog.get_logger(__name__)
 
-SCAN_CHUNK = 200
+# Shows per scan batch. The crawler image this runs in is capped at 256 MB and a
+# ~125 MB floor is the Python process itself, so the scan reads capture meta and
+# breed lists in slices: 50 keeps the whole run (scan plus the largest show's
+# result doc) around 210 MB.
+SCAN_CHUNK = 50
 PROBE_BREEDS = 3
 
 
-def _unsettled_breeds(captures):
+def _unsettled_breeds():
     """{show_id: (breeds, missing_rows)} for every show holding at least one
     mid-ring capture. `missing_rows` is how many entered dogs those breeds are
-    short of — an estimate for the printout, since absentees still get a row."""
+    short of — an estimate for the printout, since absentees still get a row.
+
+    Scanned a batch of shows at a time: only the mid-ring breeds are kept, so the
+    capture meta and breed lists of the whole database never sit in memory at
+    once (they do not fit the crawler container's 256 MB budget)."""
     found = {}
-    show_ids = sorted(captures)
+    show_ids = sorted(_complete_result_cache_show_ids())
     for start in range(0, len(show_ids), SCAN_CHUNK):
         chunk = show_ids[start:start + SCAN_CHUNK]
+        captures = _complete_cache_captures(chunk)
         for sid_str, entry in (_indexed_shows(chunk) or {}).items():
             sid = int(sid_str)
             completed = captures.get(sid) or {}
@@ -134,7 +145,7 @@ def main():
 
     dog_db.init_db()
 
-    unsettled = _unsettled_breeds(_complete_cache_captures())
+    unsettled = _unsettled_breeds()
     since = _parse_since(args.since)
 
     ordered = _ordered_oldest_first(args.shows if args.shows else unsettled)
