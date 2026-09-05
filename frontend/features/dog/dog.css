@@ -900,44 +900,56 @@
   align-items: end;
   grid-template-columns: 1fr;
 }
+/* The result selects are a row of their own (`.dog-show-tools-filters`), so the
+   tools grid only ever lays out the search box and the one companion the current
+   state provides: the live breed-list toggle, or a progress / availability card.
+   Stacked below 640px. */
 @media (min-width: 640px) {
   .dog-results-filter-grid.dog-show-tools-grid {
     grid-template-columns: minmax(0, 1fr) minmax(16rem, 24rem);
-  }
-  .dog-results-filter-grid.dog-show-tools-grid-live {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
     column-gap: 1.25rem;
     row-gap: 1.15rem;
   }
-  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-tools-search {
-    grid-column: span 7;
-  }
-  .dog-results-filter-grid.dog-show-tools-grid-live .dog-results-only-col {
-    grid-column: span 5;
-  }
-  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-progress-inline {
-    grid-column: 1 / -1;
+  .dog-results-filter-grid.dog-show-tools-grid-live {
+    grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr);
   }
   .dog-results-filter-grid.dog-show-tools-grid-loading {
     grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
   }
-  .dog-results-filter-grid.dog-show-tools-grid-loading.dog-show-tools-grid-live {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
-  }
+  /* Nothing sits beside the search once the results are in: the filter row goes
+     underneath at full width. */
   .dog-results-filter-grid.dog-show-tools-grid-loaded {
-    grid-template-columns:
-      minmax(0, 2.2fr)
-      minmax(0, 0.8fr)
-      minmax(0, 0.8fr)
-      minmax(0, 0.85fr);
+    grid-template-columns: minmax(0, 1fr);
   }
   .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live {
-    grid-template-columns: repeat(12, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1.6fr) minmax(16rem, 1fr);
   }
-  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-grade-filter,
-  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-class-filter,
-  .dog-results-filter-grid.dog-show-tools-grid-loaded.dog-show-tools-grid-live .dog-show-award-filter {
-    grid-column: span 4;
+  .dog-results-filter-grid.dog-show-tools-grid .dog-show-tools-filters,
+  .dog-results-filter-grid.dog-show-tools-grid-live .dog-show-progress-inline {
+    grid-column: 1 / -1;
+  }
+}
+/* Which selects exist depends on the show — gender, PU/PN, class and award each
+   appear only when the results carry them — so they share one wrapping flex row
+   rather than fixed grid columns, which cannot be sized for a varying set without
+   crushing whichever select the count leaves over. Equal 15rem bases that all
+   grow: three fit the panel, so the usual five wrap 3 + 2 and every row fills
+   edge to edge whatever the show offers. */
+.dog-show-tools-filters {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1rem;
+  min-width: 0;
+}
+@media (min-width: 640px) {
+  .dog-show-tools-filters {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 1.15rem 1.25rem;
+  }
+  .dog-show-tools-filters .dog-filter-col {
+    flex: 1 1 15rem;
   }
 }
 .dog-breed-search {

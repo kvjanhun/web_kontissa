@@ -312,16 +312,25 @@ export function useDogBrowser() {
     return sortDogsByAwardFilter(filtered, dogAwardFilter.value)
   })
 
-  const showWideFiltersActive = computed(() => (
+  // Filters that narrow the dog rows themselves, so the filtered list replaces
+  // the default view. `resultBreedsOnly` is deliberately absent: it only drops
+  // result-less breeds from the breed list (`createShowBreedGroups`'s
+  // `resultsOnly`) and leaves every dog row in place. It is also switched on
+  // automatically for a live show, so counting it here would hide the finals for
+  // the whole show day — exactly when they matter.
+  const showResultFiltersActive = computed(() => (
     allDogsLoaded.value && Boolean(
       debouncedBreedSearch.value.trim() ||
-      resultBreedsOnly.value ||
       dogGradeFilter.value ||
       dogClassFilter.value ||
       dogAwardFilter.value ||
       dogGenderFilter.value ||
       dogPlacementFilter.value
     )
+  ))
+
+  const showWideFiltersActive = computed(() => (
+    showResultFiltersActive.value || (allDogsLoaded.value && resultBreedsOnly.value)
   ))
 
   const showBreedGroups = computed(() => createShowBreedGroups({
@@ -371,21 +380,21 @@ export function useDogBrowser() {
     dogAwardFilter.value,
   ))
 
-  // Show-winners summary (BIS sections): shown at the top of the default
-  // (unfiltered) detail view once the whole-show cache is loaded, hidden while any
-  // show-wide filter/search is active (the filtered breed list / award view takes
-  // over). Null when the show crowns no finals (e.g. a single-breed specialty).
+  // Show-winners summary (BIS sections): shown at the top of the detail view once
+  // the whole-show cache is loaded, hidden while a result filter/search is active
+  // (the filtered breed list / award view takes over). Null when the show crowns
+  // no finals (e.g. a single-breed specialty).
   const showWinnersGroups = computed(() => {
-    if (!allDogsLoaded.value || showWideFiltersActive.value) return null
+    if (!allDogsLoaded.value || showResultFiltersActive.value) return null
     const winners = buildShowWinnersGroups(allDogsResults.value)
     return winners.length ? winners : null
   })
 
   // Group placements (RYP) per FCI group, embedded as the top entry of each group
   // section in the breed list's FCI mode. Hidden alongside the winners summary
-  // while show-wide filters are active.
+  // while result filters are active.
   const showRypByGroup = computed(() => {
-    if (!allDogsLoaded.value || showWideFiltersActive.value) return {}
+    if (!allDogsLoaded.value || showResultFiltersActive.value) return {}
     return rypWinnersByFciGroup(allDogsResults.value)
   })
 

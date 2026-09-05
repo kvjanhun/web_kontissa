@@ -903,6 +903,98 @@ test.describe('Dog Show Browser', () => {
     await expect(page.locator('.dog-ryp-winners')).toHaveCount(0)
   })
 
+  test('a live show keeps its finals visible under the auto-enabled breed filter', async ({ page }) => {
+    // A live show switches the "Tuloksia saaneet" breed-list toggle on by itself.
+    // That toggle scopes the breed list only — it filters no dog rows — so the
+    // finals captured so far must stay on screen. Regression: it used to count as
+    // a show-wide filter and blanked the winners summary and the RYP entries for
+    // the whole show day, exactly when the finals are worth watching.
+    await page.route('**/api/dog/shows', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          shows: [
+            {
+              id: 14043,
+              date: YESTERDAY_FULL_DATE,
+              name: 'Kesken Show',
+              month: 'Tällä viikolla',
+              source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14043',
+              // is_live is what auto-enables the breed filter; the past date keeps
+              // the whole-show affordance settled at any hour of the run.
+              stats: {
+                indexed: true,
+                breed_count: 2,
+                entry_count: 4,
+                result_breed_count: 2,
+                is_live: true,
+                show_state: 'live',
+              },
+            },
+          ],
+          index: { indexed_show_count: 1, total_show_count: 1, last_updated: null, last_updated_iso: null },
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14043', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          id: 14043,
+          title: 'Kesken Show 2026',
+          breeds: [
+            { name: 'Basenji', count: 3, group: '6', breed_id: '123', has_results: true },
+            { name: 'Akita', count: 2, group: '5', breed_id: '124', has_results: true },
+          ],
+          source_url: 'https://tulospalvelu.kennelliitto.fi/nayttelyt/Tulokset?Id=14043',
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.route('**/api/dog/shows/14043/all-results', async route => {
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({
+          show_id: 14043,
+          results: [
+            {
+              number: 1, name: 'Best In Show Dog', reg_url: '', grade: 'ERI', placement: 1,
+              competitive_placement: 'PU1', awards: 'ROP, BIS-1', critique: '',
+              gender: 'uros', class_name: 'VAL', breedName: 'Basenji', breedGroup: '6', breedId: '123',
+              breedObj: { name: 'Basenji', count: 3, group: '6', breed_id: '123', has_results: true },
+            },
+            {
+              number: 2, name: 'Group Five Winner', reg_url: '', grade: 'EH', placement: 1,
+              competitive_placement: 'PN1', awards: 'ROP, RYP-1', critique: '',
+              gender: 'narttu', class_name: 'VAL', breedName: 'Akita', breedGroup: '5', breedId: '124',
+              breedObj: { name: 'Akita', count: 2, group: '5', breed_id: '124', has_results: true },
+            },
+          ],
+          cache: { status: 'complete', stale: false, total_breeds: 2, fetched_breeds: 2, failed_breeds: 0, total_dogs: 2, percent: 100 },
+          fetched_at: 1781431200,
+          fetched_at_iso: '2026-06-14T10:00:00Z',
+        }),
+      })
+    })
+
+    await page.goto('/dog')
+    await page.getByRole('button', { name: /Kesken Show/ }).click()
+
+    await expect(page.getByRole('checkbox', { name: 'Tuloksia saaneet' })).toBeChecked()
+    await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toBeVisible()
+    await expect(page.getByRole('button', { name: /^BIS/ })).toContainText('Best In Show Dog')
+    const groupFiveSection = page.locator('.dog-breed-section', { hasText: 'Ryhmä 5' })
+    await expect(groupFiveSection.locator('.dog-ryp-winners')).toContainText('Group Five Winner')
+
+    // A filter over the dog rows themselves still takes the view over.
+    await page.locator('.dog-show-grade-filter select').selectOption('eri')
+    await expect(page.getByRole('heading', { name: 'Näyttelyn voittajat' })).toHaveCount(0)
+    await expect(page.locator('.dog-ryp-winners')).toHaveCount(0)
+  })
+
   test('future shows explain that whole-show results are not checked yet', async ({ page }) => {
     let allResultsCalled = false
 

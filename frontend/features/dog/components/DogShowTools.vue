@@ -163,89 +163,91 @@ const placementFilterAvailable = computed(() => (
         </label>
       </div>
 
-      <div v-if="allDogsLoaded" class="dog-filter-col dog-show-grade-filter">
-        <label class="dog-filter-label">Laatuarvostelu</label>
-        <select
-          :value="dogGradeFilter"
-          class="dog-filter-select"
-          @change="$emit('update:dogGradeFilter', $event.target.value)"
-        >
-          <option
-            v-for="option in gradeOptions"
-            :key="option.value"
-            :value="option.value"
-            :disabled="option.count === 0 && option.value !== dogGradeFilter"
-            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+      <div v-if="allDogsLoaded" class="dog-show-tools-filters">
+        <div class="dog-filter-col dog-show-grade-filter">
+          <label class="dog-filter-label">Laatuarvostelu</label>
+          <select
+            :value="dogGradeFilter"
+            class="dog-filter-select"
+            @change="$emit('update:dogGradeFilter', $event.target.value)"
           >
-            {{ gradeOptionLabel(option) }}
-          </option>
-        </select>
-      </div>
+            <option
+              v-for="option in gradeOptions"
+              :key="option.value"
+              :value="option.value"
+              :disabled="option.count === 0 && option.value !== dogGradeFilter"
+              :class="{ 'dog-grade-option-empty': option.count === 0 }"
+            >
+              {{ gradeOptionLabel(option) }}
+            </option>
+          </select>
+        </div>
 
-      <div v-if="allDogsLoaded && availableShowClasses.length" class="dog-filter-col dog-show-class-filter">
-        <label class="dog-filter-label">Luokka</label>
-        <select
-          :value="dogClassFilter"
-          class="dog-filter-select"
-          @change="$emit('update:dogClassFilter', $event.target.value)"
-        >
-          <option value="">Kaikki luokat</option>
-          <option v-for="className in availableShowClasses" :key="className" :value="className">
-            {{ className }}
-          </option>
-        </select>
-      </div>
-
-      <div v-if="allDogsLoaded && genderFilterAvailable" class="dog-filter-col dog-show-gender-filter">
-        <label class="dog-filter-label">Sukupuoli</label>
-        <select
-          :value="dogGenderFilter"
-          class="dog-filter-select"
-          @change="$emit('update:dogGenderFilter', $event.target.value)"
-        >
-          <option
-            v-for="option in availableShowGenders"
-            :key="option.value"
-            :value="option.value"
-            :disabled="option.count === 0 && option.value !== dogGenderFilter"
-            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+        <div v-if="availableShowClasses.length" class="dog-filter-col dog-show-class-filter">
+          <label class="dog-filter-label">Luokka</label>
+          <select
+            :value="dogClassFilter"
+            class="dog-filter-select"
+            @change="$emit('update:dogClassFilter', $event.target.value)"
           >
-            {{ gradeOptionLabel(option) }}
-          </option>
-        </select>
-      </div>
+            <option value="">Kaikki luokat</option>
+            <option v-for="className in availableShowClasses" :key="className" :value="className">
+              {{ className }}
+            </option>
+          </select>
+        </div>
 
-      <div v-if="allDogsLoaded && placementFilterAvailable" class="dog-filter-col dog-show-placement-filter">
-        <label class="dog-filter-label">PU/PN-sijoitus</label>
-        <select
-          :value="dogPlacementFilter"
-          class="dog-filter-select"
-          @change="$emit('update:dogPlacementFilter', $event.target.value)"
-        >
-          <option
-            v-for="option in availableShowPlacements"
-            :key="option.value"
-            :value="option.value"
-            :disabled="option.count === 0 && option.value !== dogPlacementFilter"
-            :class="{ 'dog-grade-option-empty': option.count === 0 }"
+        <div v-if="genderFilterAvailable" class="dog-filter-col dog-show-gender-filter">
+          <label class="dog-filter-label">Sukupuoli</label>
+          <select
+            :value="dogGenderFilter"
+            class="dog-filter-select"
+            @change="$emit('update:dogGenderFilter', $event.target.value)"
           >
-            {{ gradeOptionLabel(option) }}
-          </option>
-        </select>
-      </div>
+            <option
+              v-for="option in availableShowGenders"
+              :key="option.value"
+              :value="option.value"
+              :disabled="option.count === 0 && option.value !== dogGenderFilter"
+              :class="{ 'dog-grade-option-empty': option.count === 0 }"
+            >
+              {{ gradeOptionLabel(option) }}
+            </option>
+          </select>
+        </div>
 
-      <div v-if="allDogsLoaded && availableShowAwards.length" class="dog-filter-col dog-show-award-filter">
-        <label class="dog-filter-label">Palkinto</label>
-        <select
-          :value="dogAwardFilter"
-          class="dog-filter-select"
-          @change="$emit('update:dogAwardFilter', $event.target.value)"
-        >
-          <option value="">Kaikki palkinnot</option>
-          <option v-for="award in availableShowAwards" :key="award" :value="award">
-            {{ award }}
-          </option>
-        </select>
+        <div v-if="placementFilterAvailable" class="dog-filter-col dog-show-placement-filter">
+          <label class="dog-filter-label">PU/PN-sijoitus</label>
+          <select
+            :value="dogPlacementFilter"
+            class="dog-filter-select"
+            @change="$emit('update:dogPlacementFilter', $event.target.value)"
+          >
+            <option
+              v-for="option in availableShowPlacements"
+              :key="option.value"
+              :value="option.value"
+              :disabled="option.count === 0 && option.value !== dogPlacementFilter"
+              :class="{ 'dog-grade-option-empty': option.count === 0 }"
+            >
+              {{ gradeOptionLabel(option) }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="availableShowAwards.length" class="dog-filter-col dog-show-award-filter">
+          <label class="dog-filter-label">Palkinto</label>
+          <select
+            :value="dogAwardFilter"
+            class="dog-filter-select"
+            @change="$emit('update:dogAwardFilter', $event.target.value)"
+          >
+            <option value="">Kaikki palkinnot</option>
+            <option v-for="award in availableShowAwards" :key="award" :value="award">
+              {{ award }}
+            </option>
+          </select>
+        </div>
       </div>
 
       <div
