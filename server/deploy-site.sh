@@ -42,6 +42,10 @@ trap 'rm -f "$DEPLOY_FLAG"' EXIT
 
 export GIT_SSH_COMMAND="ssh -i /home/kvjanhun/.ssh/webhook_deploy_key -o IdentitiesOnly=yes"
 echo "Pulling latest changes from GitHub..."
+# The snapshot refresh below rewrites a tracked file, so the checkout is dirty on
+# every run after the first. Reset it before pulling: a commit that also touches
+# it would otherwise abort the merge and fail the deploy.
+git checkout -- frontend/locales/home-content.snapshot.json
 git pull origin main || fail "git pull"
 
 # Refresh the home-content snapshot from the live database so `nuxt generate`
@@ -52,18 +56,24 @@ git pull origin main || fail "git pull"
 # — in that case we keep the committed snapshot (the client also re-fetches live
 # content at runtime, so visitors always see current data either way).
 echo "Refreshing home-content snapshot from the database (best effort)..."
+# Copy, never move: the bind mount hands app/data to the container's uid, so this
+# script can read the export but cannot unlink it from that directory. The leftover
+# is harmless — the container truncates it on the next run.
 if docker ps --format '{{.Names}}' | grep -q "^${WEB_CONTAINER}$" \
    && docker exec "$WEB_CONTAINER" python scripts/export_home_content.py --out /app/data/home-content.snapshot.json \
-   && [ -s app/data/home-content.snapshot.json ]; then
-  mv app/data/home-content.snapshot.json frontend/locales/home-content.snapshot.json
+   && [ -s app/data/home-content.snapshot.json ] \
+   && cp app/data/home-content.snapshot.json frontend/locales/home-content.snapshot.json; then
   echo "Snapshot refreshed from the database."
 else
-  rm -f app/data/home-content.snapshot.json
   # Deliberately non-fatal (see above), but NOT routine: if this fires on every deploy,
   # admin content edits never reach the prerendered HTML — visitors only get them after
   # the client-side /api/home-content fetch, and crawlers never see them at all. Check
-  # the traceback above before assuming it's the expected first-deploy case.
+  # the traceback above before assuming it's the expected first-deploy case. It alerts
+  # because the quiet version of this failure shipped stale HTML to crawlers unnoticed.
   echo "WARNING: snapshot export failed; falling back to the committed snapshot."
+  send_telegram "⚠️ <b>Home-content snapshot not refreshed</b>
+Prerendered HTML ships stale admin content; the live site still fetches it at runtime.
+Commit: <code>$(git log -1 --pretty=%h)</code>"
 fi
 
 echo "Rebuilding Docker container..."
