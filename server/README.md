@@ -29,7 +29,25 @@ No `set -e` / ERR trap. A deploy lock prevents overlapping webhook runs, and
 rebuilding. The script waits for the web container to report healthy and verifies
 `/api/meta` locally before sending the success notification.
 
-**Deployed to:** `/home/kvjanhun/Projects/web_kontissa/deploy-site.sh`
+Between the pull and the rebuild it refreshes
+`frontend/locales/home-content.snapshot.json` from the live database
+(`scripts/export_home_content.py`, run with `docker exec`) so `nuxt generate`
+bakes current admin content into the prerendered HTML. Two constraints hold that
+stage together:
+
+- **Copy the export out of `app/data`, never move it.** The bind mount gives that
+  directory to the container's uid, so the deploy user can read the file but
+  cannot unlink it — a `mv` fails there with `Permission denied`.
+- **Reset the snapshot before pulling.** The copy leaves that tracked file dirty
+  on the server after every deploy, and a commit that also touches it would
+  otherwise abort the merge.
+
+The stage is deliberately non-fatal: the build falls back to the committed
+snapshot, and the client re-fetches `/api/home-content` at runtime either way. It
+still alerts on Telegram, because a failure that only visitors-with-JS survive
+serves stale content to crawlers indefinitely.
+
+**Deployed to:** `/home/kvjanhun/Projects/web_kontissa/server/deploy-site.sh`
 **Triggered by:** `webhook.service` (listens on port 9000, token-authenticated)
 
 ### `scripts/prune_pageview_events.py` (in-container)
@@ -125,11 +143,27 @@ fires `deploy-site.sh`, and the CI job polls until the live site serves the
 pushed commit.
 
 `deploy-site.sh` itself is pulled by the deploy it performs, so it needs no
-manual copy. The only file here that is installed by hand is the observability
-config, and only when its containers are restarted:
+manual copy. The catch: bash reads a script from disk by byte offset as it runs,
+so the deploy carrying a change to this file rewrites it mid-execution and can
+resume at the wrong offset. Nothing in the script is destructive and it is
+idempotent, so let that run finish and then run it once by hand:
 
 ```bash
-cd ~/Projects/web_kontissa && git pull && docker compose up -d
+cd ~/Projects/web_kontissa && ./server/deploy-site.sh
+```
+
+Run the script rather than pulling first: it exports its own `GIT_SSH_COMMAND`,
+so it needs no key handling from you.
+
+The only file here that is installed by hand is the observability config, and
+only when its containers are restarted. A pull you run yourself has to name the
+deploy key — the checkout authenticates with `~/.ssh/webhook_deploy_key`, and
+`IdentitiesOnly=yes` means nothing else is offered:
+
+```bash
+cd ~/Projects/web_kontissa
+GIT_SSH_COMMAND="ssh -i ~/.ssh/webhook_deploy_key -o IdentitiesOnly=yes" git pull
+docker compose up -d
 ```
 
 For host configuration — nginx, fail2ban, cron scripts, systemd units — see
