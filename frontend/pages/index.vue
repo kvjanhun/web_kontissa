@@ -13,6 +13,19 @@ const { locale } = storeToRefs(i18n)
 // what the page actually says.
 useHead({
   title: computed(() => t('home.metaTitle')),
+  // Preloaded here rather than in nuxt.config.ts: IBM Plex Sans is this page's
+  // body font, and no other page uses it. Without the hint the browser only
+  // discovers it after matching the CSS, and font-display: swap paints the
+  // system-ui fallback first — whose metrics differ enough to reflow the page.
+  link: [
+    {
+      rel: 'preload',
+      as: 'font',
+      type: 'font/woff2',
+      href: '/fonts/ibm-plex-sans-latin.woff2',
+      crossorigin: '',
+    },
+  ],
   meta: [
     { name: 'description', content: computed(() => t('home.metaDescription')) },
     { property: 'og:title', content: computed(() => t('home.metaTitle')) },
