@@ -54,6 +54,30 @@ def generate_sitemap():
 
     return Response(xml, mimetype="application/xml")
 
+# Filenames under _nuxt/ carry a content hash, so a given URL's bytes never
+# change and it can be cached indefinitely. Font filenames are stable rather than
+# hashed, so cache them the same way but rename the file when replacing one —
+# cached clients will not re-fetch a name they already hold. Everything else (the
+# prerendered HTML, the SPA shell, robots.txt) keeps Flask's revalidate-always
+# default so a deploy reaches visitors immediately.
+CACHE_FOREVER = 31536000
+_CACHED_PREFIXES = ("_nuxt/", "fonts/")
+
+
+def _send_dist_file(directory, filename):
+    """Serve a file from dist/, caching the fingerprinted assets hard."""
+    cached = filename.startswith(_CACHED_PREFIXES)
+    response = send_from_directory(
+        directory, filename, max_age=CACHE_FOREVER if cached else None
+    )
+    if cached:
+        # `immutable` is the half that matters for a reload: plain max-age still
+        # lets the browser send a conditional request on F5, which is what made
+        # the webfonts re-swap on every refresh.
+        response.headers["Cache-Control"] = f"public, max-age={CACHE_FOREVER}, immutable"
+    return response
+
+
 def _resolve_within_dist(path):
     """Resolve `path` against the dist root, returning (dist_root, real_path).
 
@@ -76,7 +100,7 @@ def catch_all(path):
     dist_root, requested = _resolve_within_dist(path)
     if requested is not None:
         if os.path.isfile(requested):
-            return send_from_directory(dist_root, os.path.relpath(requested, dist_root))
+            return _send_dist_file(dist_root, os.path.relpath(requested, dist_root))
         index_path = os.path.join(requested, "index.html")
         if os.path.isfile(index_path):
             return send_from_directory(requested, "index.html")

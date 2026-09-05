@@ -126,3 +126,53 @@ class TestCatchAll:
     def test_root_is_not_a_404(self, client, fake_dist):
         res = client.get("/")
         assert res.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# Catch-all cache headers
+# ---------------------------------------------------------------------------
+
+class TestStaticCaching:
+    """Fingerprinted assets cache forever; anything that a deploy rewrites in
+    place must keep revalidating, or visitors keep the previous release."""
+
+    @pytest.fixture
+    def dist_with_assets(self, fake_dist):
+        (fake_dist / "_nuxt").mkdir()
+        (fake_dist / "_nuxt" / "AbC12345.js").write_text("console.log(1)")
+        (fake_dist / "fonts").mkdir()
+        (fake_dist / "fonts" / "ibm-plex-sans-latin.woff2").write_bytes(b"wOF2")
+        return fake_dist
+
+    @pytest.mark.parametrize("path", [
+        "/_nuxt/AbC12345.js",
+        "/fonts/ibm-plex-sans-latin.woff2",
+    ])
+    def test_fingerprinted_assets_are_immutable(self, client, dist_with_assets, path):
+        res = client.get(path)
+        assert res.status_code == 200
+        cache_control = res.headers["Cache-Control"]
+        assert "max-age=31536000" in cache_control
+        # Without `immutable` the browser still revalidates on an explicit
+        # reload, which is what made the webfonts re-swap on every refresh.
+        assert "immutable" in cache_control
+
+    @pytest.mark.parametrize("path", [
+        "/",                       # prerendered home, rewritten by every build
+        "/favicon.ico",
+        "/definitely-not-a-page",  # SPA shell
+    ])
+    def test_everything_else_revalidates(self, client, dist_with_assets, path):
+        res = client.get(path)
+        assert "immutable" not in res.headers.get("Cache-Control", "")
+        assert "max-age=31536000" not in res.headers.get("Cache-Control", "")
+
+    def test_directory_index_is_not_cached(self, client, dist_with_assets):
+        """A prerendered route lands at <dir>/index.html and carries baked
+        content, so it must not inherit the asset caching."""
+        sub = dist_with_assets / "about"
+        sub.mkdir()
+        (sub / "index.html").write_text("<h1>about</h1>")
+        res = client.get("/about/")
+        assert res.status_code == 200
+        assert "immutable" not in res.headers.get("Cache-Control", "")
