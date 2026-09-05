@@ -25,7 +25,7 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 | Whole-show result cache, progress, crawl passes | `result_cache.py` |
 | Show/breed/judge search assembly | `search.py` |
 | CLI crawler process | `../../scripts/dog_crawl.py` |
-| One-off ops tools (finals rescue, judge/flag sweep) | `../../scripts/dog_rescue_finals.py`, `../../scripts/dog_sweep_breed_judges.py` |
+| One-off ops tools (finals rescue, mid-ring heal, judge/flag sweep) | `../../scripts/dog_rescue_finals.py`, `../../scripts/dog_heal_partial_breeds.py`, `../../scripts/dog_sweep_breed_judges.py` |
 | Backend tests | `../../tests/test_dog.py` |
 
 ## Boundaries

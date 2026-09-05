@@ -45,15 +45,21 @@ RESULT_JOB_BACKOFF_SECONDS = 300
 RESULT_CRAWL_DEFAULT_DELAY = 0.4
 RESULT_CRAWL_DEFAULT_WORKERS = 3
 RESULT_LIVE_PROBE_BREED_LIMIT = int(os.environ.get("DOG_RESULT_LIVE_PROBE_BREED_LIMIT", "64"))
-# Captured breed results are immutable, so a live refresh re-fetches only newly
-# judged breeds — except the show finals (RYP/BIS-1/BIS JUN/VET), which Showlink
-# appends onto the winners' already-captured breed rows after every ring is
-# judged. While a show still owes finals, re-check a bounded, rotating chunk of
-# the *targeted* breeds per pass (groups still missing RYP-1, then the RYP-1
-# winners' pages for the main BIS) so the finals land within a few passes without
-# re-crawling the whole show. The candidate set is derived structurally in
-# finals.py, so this only caps how many are re-checked per pass.
+# A settled breed capture is final, so a live refresh re-fetches only newly judged
+# breeds and the ones still mid-ring — except the show finals (RYP/BIS-1/BIS
+# JUN/VET), which Showlink appends onto the winners' already-captured breed rows
+# after every ring is judged. While a show still owes finals, re-check a bounded,
+# rotating chunk of the *targeted* breeds per pass (groups still missing RYP-1,
+# then the RYP-1 winners' pages for the main BIS) so the finals land within a few
+# passes without re-crawling the whole show. The candidate set is derived
+# structurally in finals.py, so this only caps how many are re-checked per pass.
 RESULT_FINALS_SWEEP_BREED_LIMIT = int(os.environ.get("DOG_RESULT_FINALS_SWEEP_BREED_LIMIT", "30"))
+# Showlink fills a breed page class by class while the ring is judged, so a breed
+# captured the moment its first class appeared holds a fraction of the entry. Such
+# a capture is re-fetched until the source calls the ring done (honour roll crowns
+# ROP, or every entered dog has a row). This caps how many of those unsettled
+# captures one pass re-checks; the rest rotate in on following passes.
+RESULT_UNSETTLED_RECHECK_BREED_LIMIT = int(os.environ.get("DOG_RESULT_UNSETTLED_RECHECK_BREED_LIMIT", "48"))
 RESULT_LIVE_JOB_STALE_SECONDS = int(os.environ.get("DOG_RESULT_LIVE_JOB_STALE_SECONDS", str(RESULT_CACHE_LIVE_TTL)))
 RESULT_SHOW_MORNING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_MORNING_HOUR", "6"))
 RESULT_SHOW_EVENING_HOUR = int(os.environ.get("DOG_RESULT_SHOW_EVENING_HOUR", "21"))

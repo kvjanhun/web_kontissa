@@ -218,6 +218,17 @@ def _complete_result_cache_show_ids():
         return set()
 
 
+def _complete_cache_captures():
+    """{show_id: completed_breeds} for every complete result cache (no result rows).
+    Used by the operational heal tool (scripts/dog_heal_partial_breeds.py)."""
+    try:
+        with dog_db.session_scope() as session:
+            return sqlstore.read_complete_cache_captures(session)
+    except Exception:
+        logger.exception("dog_complete_cache_captures_read_failed")
+        return {}
+
+
 def _dog_results_by_reg_id(reg_id):
     """Every captured result row for one registered dog, newest show first (see
     sqlstore.read_results_by_reg_id). Read-only; returns [] on any failure."""

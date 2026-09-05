@@ -855,6 +855,31 @@ def sweep_breed_judges_from_results(session):
     ).rowcount
 
 
+def read_complete_cache_captures(session):
+    """{show_id: completed_breeds} for every complete result cache — the capture
+    state without the result rows.
+
+    The heal tool has to look at every captured breed of every captured show to
+    find the ones whose page was read mid-ring; hydrating each show's full doc to
+    do that would read the whole ~400k-row result table.
+    Used by the operational heal tool (scripts/dog_heal_partial_breeds.py)."""
+    captures = {}
+    for cache_row in session.execute(
+        select(DogResultCache.show_id, DogResultCache.meta)
+        .where(DogResultCache.status == "complete")
+    ):
+        if not cache_row.meta:
+            continue
+        try:
+            meta = json.loads(cache_row.meta)
+        except (ValueError, TypeError):
+            continue
+        completed = meta.get("completed_breeds")
+        if isinstance(completed, dict):
+            captures[int(cache_row.show_id)] = completed
+    return captures
+
+
 def sweep_breed_judges_from_cache_meta(session):
     """Copy judges recorded only in completed_breeds cache meta (a zero-result
     breed has a judged page but no result rows) onto index breeds missing one.

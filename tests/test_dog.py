@@ -1739,9 +1739,14 @@ def test_finals_resweep_targets_missing_ryp_groups_then_bis_finalists():
     assert keys(dog_result_cache._finals_resweep_breeds(breeds, completed, doc2, analysis2)) == [("5", "3"), ("6", "9"), ("7", "1")]
 
 
-def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None):
+def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None, unsettled=()):
     """Index a live two-FCI-group show and persist a complete result cache that
-    captured `captured` breed keys with `results` rows. Returns the breed list."""
+    captured `captured` breed keys with `results` rows. Returns the breed list.
+
+    Captured breeds are settled by default — their honour roll crowns ROP, so the
+    crawler treats their rows as the breed's final result. Keys listed in
+    `unsettled` are captured mid-ring instead (no ROP, fewer rows than entered),
+    which is what a breed page looks like while its ring is still being judged."""
     breeds = [
         {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
         {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
@@ -1762,7 +1767,14 @@ def _seed_live_two_breed_show(show_id, *, captured, results, extra_breeds=None):
         "updated_at": 1,
         "cached_at": 1,
         "total_breeds": len(breeds),
-        "completed_breeds": {key: {"name": key, "result_count": 1} for key in captured},
+        "completed_breeds": {
+            key: (
+                {"name": key, "result_count": 1}
+                if key in unsettled
+                else {"name": key, "result_count": 1, "awards": [{"type": "ROP", "name": key}]}
+            )
+            for key in captured
+        },
         "failed_breeds": {},
         "results": results,
     })
@@ -1789,8 +1801,8 @@ def _patch_live_refresh(monkeypatch, show_id, detail_breeds, fetcher):
 
 
 def test_live_refresh_fetches_only_newly_judged_breeds(monkeypatch, client):
-    """Captured breeds are immutable, so a live refresh re-fetches only the breed
-    that newly gained results — not the whole show."""
+    """A settled capture is final, so a live refresh re-fetches only the breed that
+    newly gained results — not the whole show."""
     breeds = _seed_live_two_breed_show(
         13900,
         captured=["5:3"],
@@ -1836,7 +1848,10 @@ def test_live_refresh_with_all_breeds_captured_skips_fetch_and_row_rewrite(monke
         "version": dog_result_cache.RESULT_CACHE_VERSION, "show_id": 13901, "status": "complete",
         "title": "Basenji", "source_url": dog_showlink._source_url(13901),
         "started_at": 1, "updated_at": 1, "cached_at": 1, "total_breeds": 1,
-        "completed_breeds": {"5:3": {"name": "basenji", "result_count": 1}},
+        "completed_breeds": {"5:3": {
+            "name": "basenji", "result_count": 1,
+            "awards": [{"type": "ROP", "name": "Basenji Dog"}],
+        }},
         "failed_breeds": {},
         "results": [{"name": "Basenji Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"}],
     })
@@ -1853,6 +1868,161 @@ def test_live_refresh_with_all_breeds_captured_skips_fetch_and_row_rewrite(monke
     assert fetched == []          # no breed pages fetched
     assert calls["doc"] == 0      # result rows were NOT rewritten
     assert calls["header"] == 1   # only the header/meta was refreshed
+
+
+def test_breed_capture_is_settled_reads_the_sources_own_ring_end():
+    """A capture is final when the honour roll crowns ROP, or every entered dog
+    already has a row. Class titles are not the breed's ROP; a championship suffix
+    on it still is."""
+    settled = dog_result_cache._breed_capture_is_settled
+    breed = {"count": 8}
+
+    assert settled({"result_count": 2, "awards": [{"type": "ROP"}]}, breed) is True
+    assert settled({"result_count": 2, "awards": [{"type": "ROP, V-24"}]}, breed) is True
+    assert settled({"result_count": 8}, breed) is True
+    assert settled({"result_count": 9}, breed) is True
+
+    # Mid-ring: the junior/puppy/breeder titles land before the breed is crowned.
+    assert settled({"result_count": 2, "awards": [{"type": "ROP juniori"}]}, breed) is False
+    assert settled({"result_count": 2, "awards": [{"type": "ROP pentu"}]}, breed) is False
+    assert settled({"result_count": 2, "awards": []}, breed) is False
+    # Nothing captured yet, and an entry count the index never learned.
+    assert settled({"result_count": 0, "awards": [{"type": "ROP"}]}, breed) is False
+    assert settled({"result_count": 2}, {"count": 0}) is False
+    assert settled(None, breed) is False
+
+
+def test_live_refresh_refetches_a_breed_captured_mid_ring(monkeypatch, client):
+    """The regression this fixes: Showlink flags a breed as having results the
+    moment its first class is judged, so a live pass captures a fraction of the
+    ring. That capture is re-fetched until the ring ends, and the fuller page
+    replaces the snapshot instead of duplicating it."""
+    breeds = _seed_live_two_breed_show(
+        13906,
+        captured=["5:3", "10:7"],
+        unsettled=["5:3"],
+        results=[
+            {"name": "Basenji Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Afgaani Dog", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"},
+        ],
+    )
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        return {
+            "breed": breed,
+            "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}, {}], "awards": [{"type": "ROP"}]},
+            "mapped_results": [
+                {"name": "Basenji Dog", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+                {"name": "Basenji Bitch", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            ],
+            "fetched_at": 2.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13906, breeds, fake_fetch)
+
+    summary = dog_result_cache.crawl_result_cache_for_show(13906, source="test", workers=1)
+
+    assert summary["status"] == "complete"
+    assert fetched == ["5:3"]  # only the mid-ring breed; the settled one is left alone
+    doc = dog_store._load_result_cache_doc(13906)
+    assert {r["name"] for r in doc["results"]} == {"Basenji Dog", "Basenji Bitch", "Afgaani Dog"}
+    # The ring is over now, so the next pass has nothing left to re-check.
+    assert doc["completed_breeds"]["5:3"]["result_count"] == 2
+    assert dog_result_cache._breed_capture_is_settled(doc["completed_breeds"]["5:3"], breeds[0]) is True
+
+
+def test_unsettled_recheck_is_bounded_and_rotates(monkeypatch):
+    """A big show can have more rings in flight than one pass should re-fetch, so
+    the re-checks are capped and the cursor carries the rest to the next pass."""
+    breeds = [
+        {"name": f"breed-{i}", "count": 4, "group": "1", "breed_id": str(i), "has_results": True}
+        for i in range(5)
+    ]
+    completed = {f"1:{i}": {"name": f"breed-{i}", "result_count": 1} for i in range(5)}
+    doc = {}
+
+    first = dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=2)
+    assert [b["breed_id"] for b in first] == ["0", "1"]
+    assert doc["unsettled_breed_count"] == 5
+
+    second = dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=2)
+    assert [b["breed_id"] for b in second] == ["2", "3"]
+
+    # No limit (the heal pass) takes every unsettled capture in one go.
+    assert len(dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=None)) == 5
+
+    # Settled captures never make the list.
+    completed["1:0"]["awards"] = [{"type": "ROP"}]
+    completed["1:1"]["result_count"] = 4
+    dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=None)
+    assert doc["unsettled_breed_count"] == 3
+
+
+def test_heal_refetches_partial_breeds_on_a_settled_show(monkeypatch, client):
+    """Healing history: a past show whose cache is complete and fresh is normally
+    left alone entirely. `heal=True` reopens it and re-fetches only the breeds
+    that never reached the end of their ring."""
+    breeds = [
+        {"name": "basenji", "count": 8, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 2, "group": "10", "breed_id": "7", "has_results": True},
+    ]
+    seed_index_show("13907", {
+        "title": "05.07.2026 Show", "date": "05.07.", "month": "heinäkuu 2026", "breeds": breeds,
+    })
+    dog_store._save_result_cache_doc(13907, {
+        "version": dog_result_cache.RESULT_CACHE_VERSION, "show_id": 13907, "status": "complete",
+        "title": "Show", "source_url": dog_showlink._source_url(13907),
+        "started_at": 1, "updated_at": 1, "cached_at": 1, "total_breeds": 2,
+        "completed_breeds": {
+            "5:3": {"name": "basenji", "result_count": 2},
+            "10:7": {"name": "afgaani", "result_count": 2, "awards": [{"type": "ROP"}]},
+        },
+        "failed_breeds": {},
+        "results": [
+            {"name": "Basenji A", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Basenji B", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Afgaani A", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"},
+            {"name": "Afgaani B", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"},
+        ],
+    })
+
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        return {
+            "breed": breed,
+            "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}] * 8, "awards": [{"type": "ROP"}]},
+            "mapped_results": [
+                {"name": f"Basenji {n}", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}
+                for n in "ABCDEFGH"
+            ],
+            "fetched_at": 2.0,
+        }
+
+    monkeypatch.setattr(dog_result_cache, "_show_detail_for_result_cache", lambda sid: {
+        "id": sid, "title": "Show", "source_url": dog_showlink._source_url(sid), "breeds": breeds,
+    })
+    monkeypatch.setattr(dog_result_cache, "_fetch_breed_results_for_show_cache", fake_fetch)
+
+    # Without heal the show is settled history and nothing is fetched at all.
+    skipped = dog_result_cache.crawl_result_cache_for_show(13907, source="test", workers=1)
+    assert skipped["status"] == "skipped"
+    assert fetched == []
+
+    summary = dog_result_cache.crawl_result_cache_for_show(13907, source="test", workers=1, heal=True)
+
+    assert summary["status"] == "complete"
+    assert fetched == ["5:3"]  # the settled afgaani ring is not re-fetched
+    doc = dog_store._load_result_cache_doc(13907)
+    assert len([r for r in doc["results"] if r["breedGroup"] == "5"]) == 8
+    assert len([r for r in doc["results"] if r["breedGroup"] == "10"]) == 2
 
 
 def test_finals_resweep_recaptures_ryp1_winners_until_main_bis(monkeypatch, client):
