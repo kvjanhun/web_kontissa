@@ -8,8 +8,8 @@ from . import config, finals
 # ladder, and utils imports finals). Re-exported here under the names the crawler
 # and the ops scripts have always used.
 from .finals import (  # noqa: F401
-    _breed_bob_awarded, _breed_capture_has_full_rows, _breed_capture_is_provisional,
-    _breed_capture_is_settled,
+    _breed_bob_awarded, _breed_capture_has_full_rows, _breed_capture_is_partial,
+    _breed_capture_is_provisional, _breed_capture_is_settled,
 )
 from .indexing import (
     _indexed_result_flags_need_refresh, _is_show_recent_by_id,
@@ -611,16 +611,27 @@ def _finals_resweep_breeds(breeds, completed_breeds, doc, analysis, limit=None):
     doc["finals_sweep_cursor"] = (cursor + len(selected)) % len(candidates)
     return selected
 
-def _unsettled_capture_breeds(breeds, completed_breeds, doc, limit=None):
+def _unsettled_capture_breeds(breeds, completed_breeds, doc, limit=None, mid_ring_only=False):
     """The already-captured breeds whose rows aren't final yet, to re-fetch now.
 
     Bounded per pass and rotated via `unsettled_recheck_cursor`, so a 300-breed
     show re-checks a slice each pass instead of bursting over every ring still in
-    progress. `limit=None` (the heal pass) takes them all."""
+    progress. `limit=None` (the heal pass) takes them all.
+
+    `mid_ring_only` narrows it to captures that are genuinely partial. The heal
+    pass repairs settled history, where a provisional capture has nothing to
+    repair: it already holds every entered dog, and the second fetch that would
+    promote it only ever comes from a live crawl the show will never get again.
+    Re-fetching those would re-crawl most of the database on every run."""
     candidates = []
     for breed in breeds or []:
         entry = (completed_breeds or {}).get(_breed_cache_key_from_breed(breed))
-        if entry is None or _breed_capture_is_settled(entry, breed):
+        if entry is None:
+            continue
+        if mid_ring_only:
+            if not _breed_capture_is_partial(entry, breed):
+                continue
+        elif _breed_capture_is_settled(entry, breed):
             continue
         candidates.append(breed)
 
@@ -1144,7 +1155,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     cool_breeds = []
     if heal:
         recheck_breeds = _unsettled_capture_breeds(
-            breeds_with_results, completed_breeds, doc, limit=None,
+            breeds_with_results, completed_breeds, doc, limit=None, mid_ring_only=True,
         )
     elif not refetch_window:
         recheck_breeds = _unsettled_capture_breeds(

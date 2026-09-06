@@ -330,3 +330,32 @@ Still outstanding: `scripts/dog_rescue_finals.py`'s `_owes_finals` selector, as
 the plan noted. It reads `finals.analyze`, which falls back to the old structural
 rule for settled history (no probe stored), so it will keep re-selecting
 combined-ring shows. Running it against 14014 needs that fixed first.
+
+## Revision 2026-09-07 — provisional was too strong
+
+Deployed, and two things broke, both from one error: the plan said full rows
+without `ROP` should mean "stop fast-polling, stay eligible for re-check", and
+the implementation made it mean "not finished". Those are not the same claim, and
+the difference showed up in the two places that ask whether a *show* is done and
+whether a *capture* is worth repairing.
+
+- **Shows 14014 and 13768 read `Jatkuu` after concluding with every result in
+  hand.** Ten of 14014's 96 breeds and 29 of 13768's 237 hold their whole entry
+  with no honour roll — single-entry and tiny breeds genuinely never get one. Rung
+  2 required every capture to be *final*, so nothing could promote them and the
+  show could never settle.
+- **The heal pass selected most of the database.** It selects breeds failing the
+  settled test, which now included every full-rows capture in all of history —
+  and in settled history nothing can ever promote them, because the second fetch
+  that writes `rows_confirmed_at` only comes from a live crawl.
+
+The fix is a third predicate rather than a weaker one. `_breed_capture_is_partial`
+— no `ROP` *and* fewer rows than entries — is the only state that means a ring was
+read mid-judging. Rung 2 and the heal pass both ask that instead. Provisional
+stays exactly what it was for the live tiering: re-read once more while the show
+runs, promoted by an agreeing fetch, and never a reason to call a finished show
+unfinished or to re-crawl history.
+
+`_unsettled_capture_breeds` gained `mid_ring_only` for the heal path — narrowing
+only the ops script's show list was not enough, since the heal crawl re-selects
+breeds itself.

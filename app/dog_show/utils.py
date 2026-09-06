@@ -129,9 +129,16 @@ def _nothing_left_to_judge(doc, indexed_breeds):
 
     Ladder rung 2, and the one a lunch break cannot fake: mid-show there are
     always breeds unstarted or mid-ring, so an hour of silence does not satisfy
-    it. A breed the source flags as having results but whose capture is not final
-    (`finals._breed_capture_is_settled`) leaves it unsatisfied, as does a breed
-    with no check icon at all.
+    it. A breed with no check icon leaves it unsatisfied, as does one whose
+    capture is still *partial* — a slice of a ring being judged.
+
+    A **provisional** capture counts as judged. It holds every entered dog and is
+    only waiting for a second fetch to agree before it counts as final, which is
+    a question about our confidence, not about the ring: the tiering keeps
+    re-reading it, and quiescence still has to pass. Requiring finality here
+    instead left a show that had genuinely finished unable to settle, because the
+    breeds that never get an honour roll at all — the single-entry ones — had
+    nothing left to promote them.
 
     Unknowable — no indexed breeds — is not "done": returns False.
     """
@@ -145,7 +152,7 @@ def _nothing_left_to_judge(doc, indexed_breeds):
         entry = completed.get(f"{breed.get('group')}:{breed.get('breed_id')}")
         if not entry:
             return False
-        if not finals._breed_capture_is_settled(entry, breed):
+        if finals._breed_capture_is_partial(entry, breed):
             return False
     return True
 

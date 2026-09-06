@@ -1,5 +1,6 @@
 import datetime
 import json
+import pathlib
 import time
 
 import pytest
@@ -17,6 +18,8 @@ from app.dog_show import store as dog_store
 from app.dog_show import db as dog_db
 from app.dog_show import shows as dog_shows
 from app.dog_show import utils as dog_utils
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+
 from app.dog_show.utils import (
     _in_fetch_window, _result_doc_last_result_at, _result_live_plan, _show_is_recent,
     _show_live_phase, _show_result_availability, _utc_iso,
@@ -2012,6 +2015,78 @@ def test_breed_capture_is_settled_reads_the_sources_own_ring_end():
     assert settled(None, breed) is False
 
 
+def test_partial_is_mid_ring_only_not_merely_unconfirmed():
+    """Three states, and conflating two of them broke a live show and the heal.
+
+    *Partial* is a ring read while it was still being judged — worth re-fetching
+    anywhere, including in settled history. *Provisional* holds every entered dog
+    and is only waiting for a second fetch to agree. Treating provisional as
+    "not finished" left shows 14014 and 13768 unable to settle (their single-entry
+    breeds never get an honour roll, so nothing could promote them) and made the
+    heal pass select most of the database."""
+    partial = dog_result_cache._breed_capture_is_partial
+    breed = {"count": 8}
+
+    assert partial({"result_count": 2}, breed) is True              # 2 of 8: mid-ring
+    assert partial({"result_count": 0}, breed) is True              # nothing captured
+    assert partial(None, breed) is True                             # never captured
+    assert partial({"result_count": 2}, {"count": 0}) is True       # entry count unknown
+
+    assert partial({"result_count": 8}, breed) is False             # provisional, not partial
+    assert partial({"result_count": 2, "awards": [{"type": "ROP"}]}, breed) is False
+    assert partial({"result_count": 1}, {"count": 1}) is False      # the single-entry breed
+
+
+def test_a_provisional_capture_does_not_stop_a_show_finishing():
+    """Shows 14014 and 13768 read `Jatkuu` after concluding with every result in
+    hand: ten and twenty-nine of their breeds held the whole entry with no honour
+    roll, and requiring finality on rung 2 meant a show could never be done."""
+    breeds = [
+        {"name": "basenji", "count": 2, "group": "5", "breed_id": "3", "has_results": True},
+        # The shape that broke it: one entry, one row, no honour roll, ever.
+        {"name": "kerrynterrieri", "count": 1, "group": "3", "breed_id": "180", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"breedGroup": "3", "breedId": "180", "awards": "SA"},
+        ],
+        "completed_breeds": {
+            "5:3": {"result_count": 2, "awards": [{"type": "ROP"}]},
+            "3:180": {"result_count": 1},  # provisional: full rows, no ROP, unconfirmed
+        },
+    }
+
+    assert dog_result_cache._breed_capture_is_provisional(doc["completed_breeds"]["3:180"], breeds[1]) is True
+    assert dog_result_cache._breed_capture_is_settled(doc["completed_breeds"]["3:180"], breeds[1]) is False
+    assert dog_utils._nothing_left_to_judge(doc, breeds) is True
+
+    # A ring genuinely still in progress does stop it.
+    doc["completed_breeds"]["5:3"] = {"result_count": 1}
+    assert dog_utils._nothing_left_to_judge(doc, breeds) is False
+
+
+def test_heal_selects_mid_ring_captures_not_provisional_ones():
+    """The heal pass repairs history; a provisional capture has nothing to
+    repair. Selecting on "not final" instead re-crawled most of the database on
+    every run, because full rows with no honour roll are only ever promoted by a
+    live re-fetch that settled history will never get."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "dog_heal_partial_breeds", REPO_ROOT / "scripts" / "dog_heal_partial_breeds.py",
+    )
+    heal = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(heal)
+
+    breed = {"name": "basenji", "count": 8, "group": "5", "breed_id": "3", "has_results": True}
+    single = {"name": "kerrynterrieri", "count": 1, "group": "3", "breed_id": "180", "has_results": True}
+
+    assert heal._breed_capture_is_partial({"result_count": 2}, breed) is True
+    assert heal._breed_capture_is_partial({"result_count": 8}, breed) is False
+    assert heal._breed_capture_is_partial({"result_count": 1}, single) is False
+
+
 def test_full_rows_without_rop_are_provisional_until_a_second_fetch_agrees():
     """Show 14014 froze 29 of 96 breeds — two of them the group winners its finals
     were waiting on — because full-looking rows were taken as final while the ring
@@ -2108,6 +2183,59 @@ def test_unsettled_recheck_is_bounded_and_rotates(monkeypatch):
     completed["1:2"]["result_count"] = 4  # full rows, first sighting
     dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=None)
     assert doc["unsettled_breed_count"] == 3
+
+
+def test_heal_crawl_leaves_provisional_captures_alone(monkeypatch, client):
+    """The heal *crawl* re-selects breeds itself, so narrowing only the script's
+    show list was not enough. A capture holding every entered dog with no honour
+    roll has nothing to repair in settled history — the second fetch that would
+    promote it only ever comes from a live crawl the show will never get again."""
+    breeds = [
+        {"name": "basenji", "count": 8, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "kerrynterrieri", "count": 1, "group": "3", "breed_id": "180", "has_results": True},
+    ]
+    seed_index_show("13918", {
+        "title": "05.07.2026 Show", "date": "05.07.", "month": "heinäkuu 2026", "breeds": breeds,
+    })
+    dog_store._save_result_cache_doc(13918, {
+        "version": dog_result_cache.RESULT_CACHE_VERSION, "show_id": 13918, "status": "complete",
+        "title": "Show", "source_url": dog_showlink._source_url(13918),
+        "started_at": 1, "updated_at": 1, "cached_at": 1, "total_breeds": 2,
+        "completed_breeds": {
+            "5:3": {"name": "basenji", "result_count": 2},          # 2 of 8: mid-ring
+            "3:180": {"name": "kerrynterrieri", "result_count": 1},  # 1 of 1: provisional
+        },
+        "failed_breeds": {},
+        "results": [
+            {"name": "Basenji A", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Basenji B", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Kerry A", "breedName": "kerrynterrieri", "breedGroup": "3", "breedId": "180"},
+        ],
+    })
+
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}] * 8, "awards": [{"type": "ROP"}]},
+            "mapped_results": [
+                {"name": f"Basenji {n}", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}
+                for n in "ABCDEFGH"
+            ],
+            "fetched_at": 2.0,
+        }
+
+    monkeypatch.setattr(dog_result_cache, "_show_detail_for_result_cache", lambda sid: {
+        "id": sid, "title": "Show", "source_url": dog_showlink._source_url(sid), "breeds": breeds,
+    })
+    monkeypatch.setattr(dog_result_cache, "_fetch_breed_results_for_show_cache", fake_fetch)
+
+    dog_result_cache.crawl_result_cache_for_show(13918, source="test", workers=1, heal=True)
+
+    assert fetched == ["5:3"]  # the mid-ring ring only, never the single-entry breed
 
 
 def test_heal_refetches_partial_breeds_on_a_settled_show(monkeypatch, client):

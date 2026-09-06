@@ -7,10 +7,15 @@ page at that moment holds a slice of the entry — two of eight flat-coats. Show
 that settled around such a snapshot keep it, because a settled show is never
 re-fetched. This re-fetches exactly those breeds.
 
-Selection is automatic and structural, using the same rule the crawler now
-applies (`result_cache._breed_capture_is_settled`): a captured breed is final
-once its honour roll crowns ROP or every entered dog has a row. Anything else was
-read mid-ring and is re-fetched.
+Selection is automatic and structural (`result_cache._breed_capture_is_partial`):
+a capture is mid-ring when its honour roll does not crown ROP *and* it holds
+fewer rows than the breed had entries. Those are re-fetched.
+
+A capture holding every entered dog with no honour roll is **not** mid-ring — a
+single-entry breed genuinely never gets one. The live crawler treats such a
+capture as provisional and re-reads it once while the show is still running, but
+in settled history there is nothing left to learn, and healing them would re-crawl
+most of the database to no effect.
 
 Showlink serves roughly a season, and a show past that answers every breed page
 with an empty result table. Each show is probed with up to three of its own
@@ -54,7 +59,7 @@ import structlog  # noqa: E402
 from app.dog_show import config, db as dog_db  # noqa: E402
 from app.dog_show.indexing import _show_date_for_id  # noqa: E402
 from app.dog_show.result_cache import (  # noqa: E402
-    _breed_cache_key_from_breed, _breed_capture_is_settled,
+    _breed_cache_key_from_breed, _breed_capture_is_partial,
     _fetch_breed_results_for_show_cache, crawl_result_cache_for_show,
 )
 from app.dog_show.store import (  # noqa: E402
@@ -93,7 +98,7 @@ def _unsettled_breeds():
                 if not breed.get("has_results"):
                     continue
                 capture = completed.get(_breed_cache_key_from_breed(breed))
-                if capture is None or _breed_capture_is_settled(capture, breed):
+                if capture is None or not _breed_capture_is_partial(capture, breed):
                     continue
                 breeds.append(breed)
                 missing += max(0, int(breed.get("count") or 0) - int(capture.get("result_count") or 0))

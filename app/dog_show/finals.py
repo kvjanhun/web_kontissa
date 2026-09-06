@@ -158,6 +158,30 @@ def _breed_capture_is_provisional(entry, breed):
     return _breed_capture_has_full_rows(entry, breed)
 
 
+def _breed_capture_is_partial(entry, breed):
+    """A capture read *mid-ring*: neither crowned nor holding every entered dog.
+
+    The distinct state from `_breed_capture_is_provisional`, and the distinction
+    matters twice. A partial capture is a slice of a ring still being judged —
+    two of eight flat-coats — and is worth re-fetching anywhere, including in
+    settled history. A provisional one already holds the whole entry and is only
+    waiting for a second fetch to agree before it counts as final; it is a
+    finished-looking ring, so it neither blocks the show from settling nor needs
+    repairing after the fact.
+
+    An entry that is missing or holds no rows counts as partial: there is nothing
+    there to call finished.
+    """
+    if not isinstance(entry, dict):
+        return True
+    result_count = _safe_int(entry.get("result_count")) or 0
+    if result_count <= 0:
+        return True
+    if _breed_bob_awarded(entry.get("awards")):
+        return False
+    return not _breed_capture_has_full_rows(entry, breed)
+
+
 def _breed_capture_is_settled(entry, breed):
     """Whether a captured breed's rows can be treated as the breed's final result.
 
