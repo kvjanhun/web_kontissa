@@ -4,6 +4,13 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import structlog
 
 from . import config, finals
+# The breed-ring predicates live in finals.py (utils needs them for the settle
+# ladder, and utils imports finals). Re-exported here under the names the crawler
+# and the ops scripts have always used.
+from .finals import (  # noqa: F401
+    _breed_bob_awarded, _breed_capture_has_full_rows, _breed_capture_is_provisional,
+    _breed_capture_is_settled,
+)
 from .indexing import (
     _indexed_result_flags_need_refresh, _is_show_recent_by_id,
     _mark_single_probe_breed_result_available, _persist_show_detail_to_index,
@@ -11,7 +18,9 @@ from .indexing import (
     _result_breeds_for_cache, _result_breeds_from_index,
     _show_date_for_id, _show_result_availability_for_id,
 )
-from .parsers import _parse_breed_results, _parse_show_detail
+from .parsers import (
+    FINALS_TARGETS, _parse_breed_results, _parse_finals_page, _parse_show_detail,
+)
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import (
@@ -24,8 +33,8 @@ from .store import (
 )
 from .utils import (
     _clean_all_results, _clean_breed_data, _clean_judge_name,
-    _local_dt, _result_live_plan, _show_age_days, _show_date_state,
-    _show_result_availability, _terminal_status, _utc_iso,
+    _fetch_window_open, _local_dt, _result_live_plan, _show_age_days,
+    _show_date_state, _show_result_availability, _terminal_status, _utc_iso,
 )
 
 logger = structlog.get_logger(__name__)
@@ -42,7 +51,14 @@ RESULT_CRAWL_DEFAULT_DELAY = config.RESULT_CRAWL_DEFAULT_DELAY
 RESULT_CRAWL_DEFAULT_WORKERS = config.RESULT_CRAWL_DEFAULT_WORKERS
 RESULT_LIVE_PROBE_BREED_LIMIT = config.RESULT_LIVE_PROBE_BREED_LIMIT
 RESULT_FINALS_SWEEP_BREED_LIMIT = config.RESULT_FINALS_SWEEP_BREED_LIMIT
+RESULT_FINALS_PROBE_TTL = config.RESULT_FINALS_PROBE_TTL
+RESULT_QUIESCENCE_SECONDS = config.RESULT_QUIESCENCE_SECONDS
+RESULT_QUIESCENCE_MAX_GAP = config.RESULT_QUIESCENCE_MAX_GAP
 RESULT_UNSETTLED_RECHECK_BREED_LIMIT = config.RESULT_UNSETTLED_RECHECK_BREED_LIMIT
+RESULT_HOT_BREED_LIMIT = config.RESULT_HOT_BREED_LIMIT
+RESULT_WARM_BREED_LIMIT = config.RESULT_WARM_BREED_LIMIT
+RESULT_COOL_SWEEP_BREED_LIMIT = config.RESULT_COOL_SWEEP_BREED_LIMIT
+RESULT_BREED_STATIC_FETCH_LIMIT = config.RESULT_BREED_STATIC_FETCH_LIMIT
 RESULT_LIVE_JOB_STALE_SECONDS = config.RESULT_LIVE_JOB_STALE_SECONDS
 
 def _result_cache_doc_is_complete(doc):
@@ -54,8 +70,8 @@ def _empty_result_cache_needs_refresh(show_id, doc, now=None):
 
 def _availability_now(now):
     # Absolute timestamps are converted to Finnish wall clock, never the
-    # container's UTC clock — the fetch window (06:00 morning / 21:00 evening)
-    # and settle deadlines are Finnish local, and the crawler runs in UTC.
+    # container's UTC clock — the fetch window and the settle deadlines are
+    # Finnish local, and the crawler runs in UTC.
     return _local_dt(now) if isinstance(now, (int, float)) else now
 
 def _show_dict_for_plan(show_id):
@@ -78,31 +94,53 @@ def _result_live_plan_for_id(show_id, doc=None, now=None):
         now=_availability_now(now if now is not None else time.time()),
     )
 
-def _mark_terminal_confirmation(doc, indexed_breeds):
-    """Confirm the terminal once a pass adds nothing new to it.
+def _mark_terminal_confirmation(doc, indexed_breeds, now=None):
+    """Accumulate observed quiescence, and confirm the terminal once it holds.
 
-    Stores the terminal signature; when a later pass (with the target already
-    met last time) produces the same signature, the finals — or the final
-    result rows, for a finals-less show — have stopped changing and the show may
-    settle. A late BIS-4 or a correction changes the signature and resets the
-    confirmation, so nothing settles while results are still moving."""
+    Rung 3 of the settle ladder. The signature covers the row count, whether
+    judging is finished and what the finals probe saw, so a late row, a late
+    `BIS-4` or a correction changes it and the window restarts — which is the
+    whole protection against terminating a show early.
+
+    Stability accumulates whether or not the target is met, unlike the previous
+    version, which reset the counter on every pass where it was not: a show could
+    never build up evidence that it had stopped moving, only that it had reached
+    a predicted award. That inversion is why a show with no reachable terminal
+    (a combined `FCI 5/6` ring, a show awarding no BIS at all) polled until the
+    two-day deadline.
+
+    Only observed time counts. A gap longer than `RESULT_QUIESCENCE_MAX_GAP`
+    means nobody was watching — the night stop, a restart, a run of failures —
+    and adds nothing, so the overnight silence cannot settle a show at dawn."""
     if not isinstance(doc, dict):
         return
+    now = now or time.time()
     status = _terminal_status(doc, indexed_breeds)
     signature = status["signature"]
     previous = doc.get("terminal_fingerprint")
+    last_checked = doc.get("terminal_checked_at") or 0
+
     doc["terminal_fingerprint"] = signature
-    if not status["target_met"]:
+    doc["terminal_checked_at"] = now
+    doc["terminal_target_met"] = bool(status["target_met"])
+
+    if previous != signature:
+        doc["terminal_stable_seconds"] = 0.0
         doc["terminal_confirmed"] = False
-        doc["terminal_target_met"] = False
         return
-    was_met = bool(doc.get("terminal_target_met"))
-    doc["terminal_target_met"] = True
-    doc["terminal_confirmed"] = bool(was_met and previous == signature)
+
+    gap = now - last_checked if last_checked else 0.0
+    if 0 < gap <= RESULT_QUIESCENCE_MAX_GAP:
+        doc["terminal_stable_seconds"] = float(doc.get("terminal_stable_seconds") or 0.0) + gap
+
+    doc["terminal_confirmed"] = bool(
+        status["target_met"]
+        and float(doc.get("terminal_stable_seconds") or 0.0) >= RESULT_QUIESCENCE_SECONDS
+    )
 
 def _result_cache_ttl_for_show(show_id, now, doc=None):
     plan = _result_live_plan_for_id(show_id, doc=doc, now=now)
-    if plan["phase"] in ("live", "overtime", "rescue"):
+    if plan["phase"] in ("live", "rescue"):
         return plan["ttl"]
     if plan["phase"] == "upcoming":
         # Not fetchable yet; fall through to the date-based settled TTL below.
@@ -375,9 +413,19 @@ def _all_results_doc_base(show_id, source, existing=None):
         "finals_sweep_breed_limit": existing.get("finals_sweep_breed_limit"),
         "unsettled_recheck_cursor": existing.get("unsettled_recheck_cursor", 0),
         "unsettled_breed_count": existing.get("unsettled_breed_count"),
+        "cool_sweep_cursor": existing.get("cool_sweep_cursor", 0),
+        # What the last probe read. Carried, or every pass would start blind to
+        # the finals it already knows about and re-derive structure it has been
+        # told; it is refreshed in the pass, not trusted forever.
+        "finals_probe": dict(existing.get("finals_probe") or {}),
         "terminal_target_met": existing.get("terminal_target_met"),
         "terminal_confirmed": existing.get("terminal_confirmed"),
         "terminal_fingerprint": existing.get("terminal_fingerprint"),
+        # The quiescence accumulator. Dropping these would restart the settle
+        # window on every pass, so a show could never accumulate the stability it
+        # settles on — the same shape of bug as resetting it on unmet passes.
+        "terminal_checked_at": existing.get("terminal_checked_at"),
+        "terminal_stable_seconds": existing.get("terminal_stable_seconds") or 0.0,
     }
 
 def _map_breed_results_to_all_results(show_id, breed, breed_data):
@@ -462,15 +510,78 @@ def _result_breeds_for_live_cache(show_id, breeds, doc, availability, now=None):
         return selected
     return selected + probes
 
-def _finals_resweep_breeds(breeds, completed_breeds, doc, analysis, limit=None):
-    """The targeted breeds to re-fetch this pass to capture missing/late finals.
+def _finals_probe_placements(doc):
+    """How many placements the last probe saw across both finals pages."""
+    pages = ((doc or {}).get("finals_probe") or {}).get("pages") or {}
+    return sum(
+        len(section.get("placements") or [])
+        for page in pages.values()
+        for section in (page.get("sections") or [])
+    )
 
-    Unlike the old blind rotation over every captured breed, `finals.candidate_
-    breed_keys` returns only the pages that can structurally carry the tokens we
-    still owe: groups missing RYP-1 (their ROP winners), then the RYP-1 winners'
-    pages for the main BIS, then the finals-carrying breeds once for a late
-    BIS-2..4. Bounded per pass and rotated via `finals_sweep_cursor` so a big
-    show's RYP-discovery phase doesn't burst."""
+
+def _finals_probe_due(doc, has_captures, all_captured, now=None):
+    """Whether to spend the two probe requests on this pass.
+
+    Nothing can be awarded before something has been judged, and a show whose
+    finals pages have been empty all morning does not need re-reading every two
+    minutes. Once the pages show anything — or every ring is captured, which is
+    when the finals are imminent — probe every pass: that is the window where
+    being minutes late costs a whole night.
+    """
+    if not has_captures:
+        return False
+    probe = (doc or {}).get("finals_probe") or {}
+    if not (probe.get("pages") or {}):
+        return True
+    if all_captured or _finals_probe_placements(doc):
+        return True
+    checked_at = probe.get("checked_at") or 0
+    return ((now or time.time()) - checked_at) >= RESULT_FINALS_PROBE_TTL
+
+
+def _probe_finals_pages(show_id, doc, delay=0.0):
+    """Read the show's own `R=RYP` and `R=BIS` pages into `doc["finals_probe"]`.
+
+    Two requests that answer directly what thirty breed re-reads could only
+    guess at: whether the finals have been awarded, how the show actually
+    partitions its rings (a combined `FCI 5/6` is one section, not two), and
+    which dog won what. Everything downstream — the settle ladder, the targeted
+    re-fetch — reads this rather than inferring structure from the breed index.
+
+    Failures are recorded and left: a probe that could not be read this pass is
+    not evidence that the finals do not exist, and must never be allowed to look
+    like it."""
+    probe = dict(doc.get("finals_probe") or {})
+    pages = dict(probe.get("pages") or {})
+    errors = {}
+    for target in FINALS_TARGETS:
+        if delay:
+            time.sleep(delay)
+        try:
+            soup = _fetch_page(_source_url(show_id, target))
+        except Exception as exc:  # noqa: BLE001 - recorded, never fatal to the pass
+            errors[target] = f"{type(exc).__name__}: {exc}"
+            logger.warning("dog_finals_probe_failed", show_id=show_id, target=target, error=errors[target])
+            continue
+        parsed = _parse_finals_page(soup, show_id)
+        pages[target] = {"sections": parsed["sections"]}
+
+    probe["pages"] = pages
+    probe["checked_at"] = time.time()
+    probe["errors"] = errors
+    doc["finals_probe"] = probe
+    return probe
+
+
+def _finals_resweep_breeds(breeds, completed_breeds, doc, analysis, limit=None):
+    """The breeds to re-fetch this pass so the finals land on their rows.
+
+    With a probe this is exact — `finals.candidate_breed_keys` returns the breeds
+    the finals pages name whose captured rows are still missing the promised
+    token — so the limit almost never binds. Without one it falls back to the
+    structural guesses, where it very much does. Bounded per pass and rotated via
+    `finals_sweep_cursor` either way, so a big show cannot burst."""
     if limit is None:
         limit = RESULT_FINALS_SWEEP_BREED_LIMIT
     limit = max(0, int(limit or 0))
@@ -499,41 +610,6 @@ def _finals_resweep_breeds(breeds, completed_breeds, doc, analysis, limit=None):
     ]
     doc["finals_sweep_cursor"] = (cursor + len(selected)) % len(candidates)
     return selected
-
-def _breed_bob_awarded(awards):
-    """True if a breed's honour roll crowns ROP — Best of Breed, the last award a
-    breed ring hands out, and therefore the source's own "this ring is finished".
-
-    Match the bare token: "ROP juniori" / "ROP pentu" / "ROP kasvattaja" are class
-    and breeder titles that can land long before the breed itself is crowned, while
-    a championship suffix ("ROP, V-24") is still the breed's own ROP."""
-    for award in awards or []:
-        label = str((award or {}).get("type") or "").split(",")[0].strip().upper()
-        if label == "ROP":
-            return True
-    return False
-
-def _breed_capture_is_settled(entry, breed):
-    """Whether a captured breed's rows can be treated as the breed's final result.
-
-    Showlink fills a breed page class by class as the ring is judged, so a capture
-    taken mid-ring holds whichever classes were done at that moment — the flat-coat
-    ring that reads "2 of 8 dogs" is a snapshot, not a result. A capture is final
-    only once the source says so: the honour roll crowns ROP, or every entered dog
-    already has a row (small breeds that get no honour roll at all, and rings whose
-    count already matches). Absentees are listed with grade "poissa", so the entry
-    count stays reachable. Measured against settled history, the two together
-    account for 99.96% of captured breeds, so this leaves nothing re-fetching
-    forever."""
-    if not isinstance(entry, dict):
-        return False
-    result_count = _safe_int(entry.get("result_count")) or 0
-    if result_count <= 0:
-        return False
-    if _breed_bob_awarded(entry.get("awards")):
-        return True
-    entry_count = _safe_int((breed or {}).get("count")) or 0
-    return bool(entry_count) and result_count >= entry_count
 
 def _unsettled_capture_breeds(breeds, completed_breeds, doc, limit=None):
     """The already-captured breeds whose rows aren't final yet, to re-fetch now.
@@ -569,6 +645,102 @@ def _unsettled_capture_breeds(breeds, completed_breeds, doc, limit=None):
     ]
     doc["unsettled_recheck_cursor"] = (cursor + len(selected)) % len(candidates)
     return selected
+
+def _rotating_slice(candidates, doc, cursor_key, limit):
+    """Take `limit` breeds from `candidates`, resuming where the last pass left
+    off. The cursor lives in the doc so a bounded pass round-robins the whole set
+    across passes rather than re-fetching the same head every time."""
+    if not candidates:
+        doc[cursor_key] = 0
+        return []
+    limit = max(0, int(limit or 0))
+    if limit <= 0:
+        return []
+    try:
+        cursor = max(0, int(doc.get(cursor_key) or 0)) % len(candidates)
+    except (TypeError, ValueError):
+        cursor = 0
+    selected = [
+        candidates[(cursor + offset) % len(candidates)]
+        for offset in range(min(limit, len(candidates)))
+    ]
+    doc[cursor_key] = (cursor + len(selected)) % len(candidates)
+    return selected
+
+
+def _breed_static_fetches(entry):
+    return _safe_int((entry or {}).get("static_fetches")) or 0
+
+
+def _judge_for_capture(entry, breed):
+    """The judge assigned to a breed, from the capture or the index row."""
+    return str((entry or {}).get("judge") or (breed or {}).get("judge") or "").strip()
+
+
+def _live_tier_breeds(breeds, completed_breeds, doc, hot_limit=None, warm_limit=None, cool_limit=None):
+    """Split the captured breeds into the three attention tiers.
+
+    **Hot** is each judge's first ring that is not finished yet. A judge judges
+    one breed, finishes it, and moves on, so at most one ring per judge can be
+    moving — which turns "which of 96 pages might have changed" into "these ten".
+    A breed whose rows have come back unchanged `RESULT_BREED_STATIC_FETCH_LIMIT`
+    times drops out of hot even if it is still its judge's first: that is the
+    fallback wherever the queue misfires, and it needs no judge at all.
+
+    **Warm** is every other capture that is not final, rotating under a cap.
+
+    **Cool** is the captures that look final. They are swept slowly for as long as
+    the show is live, because a judge advancing is *not* evidence that the breed
+    behind them is complete — a club secretary can register a row long after its
+    ring ended, and nothing else in the design would ever look again.
+    """
+    hot_limit = RESULT_HOT_BREED_LIMIT if hot_limit is None else hot_limit
+    warm_limit = RESULT_WARM_BREED_LIMIT if warm_limit is None else warm_limit
+    cool_limit = RESULT_COOL_SWEEP_BREED_LIMIT if cool_limit is None else cool_limit
+
+    unfinished = []
+    finished = []
+    for breed in breeds or []:
+        entry = (completed_breeds or {}).get(_breed_cache_key_from_breed(breed))
+        if entry is None:
+            continue  # never captured: it is pending, not a re-check
+        (finished if _breed_capture_is_settled(entry, breed) else unfinished).append((breed, entry))
+
+    # Breed-list order is programme order, so a judge's first unfinished breed is
+    # the ring they are most plausibly in.
+    hot_keys = set()
+    hot = []
+    seen_judges = set()
+    hot_limit = max(0, int(hot_limit or 0))
+    for breed, entry in unfinished:
+        if len(hot) >= hot_limit:
+            break
+        judge = _judge_for_capture(entry, breed)
+        if not judge or judge in seen_judges:
+            continue
+        seen_judges.add(judge)
+        if _breed_static_fetches(entry) >= RESULT_BREED_STATIC_FETCH_LIMIT:
+            continue
+        hot.append(breed)
+        hot_keys.add(_breed_cache_key_from_breed(breed))
+
+    warm_candidates = [
+        breed for breed, _entry in unfinished
+        if _breed_cache_key_from_breed(breed) not in hot_keys
+    ]
+    cool_candidates = [breed for breed, _entry in finished]
+
+    doc["unsettled_breed_count"] = len(unfinished)
+    doc["hot_breed_count"] = len(hot)
+    doc["warm_breed_count"] = len(warm_candidates)
+    doc["cool_breed_count"] = len(cool_candidates)
+
+    return {
+        "hot": hot,
+        "warm": _rotating_slice(warm_candidates, doc, "unsettled_recheck_cursor", warm_limit),
+        "cool": _rotating_slice(cool_candidates, doc, "cool_sweep_cursor", cool_limit),
+    }
+
 
 def _safe_int(value):
     try:
@@ -744,6 +916,25 @@ def _record_result_breed_success(show_id, doc, item, preserve_existing_complete)
     honor_roll = item["breed_data"].get("awards") or []
     if honor_roll:
         completed_entry["awards"] = honor_roll
+    # A breed with full rows and no honour roll is final only once a second fetch
+    # brings back the same rows. Carry the confirmation across re-fetches so the
+    # breed does not re-enter the provisional state every time it is re-read; a
+    # fetch that brought *more* rows is new data and starts the count again.
+    previous = (doc.get("completed_breeds") or {}).get(item["breed_key"]) or {}
+    if previous and previous.get("updated_at") != fetched_at:
+        if _safe_int(previous.get("result_count")) == result_count:
+            completed_entry["rows_confirmed_at"] = previous.get("rows_confirmed_at") or fetched_at
+            # Adaptive backoff: an unchanged re-fetch is evidence this ring is not
+            # where the data is. Enough of them and the breed leaves the hot tier,
+            # whether or not its judge queue says it should.
+            completed_entry["static_fetches"] = _breed_static_fetches(previous) + 1
+        # Rows grew: new data, so the breed is hot again and any confirmation of
+        # "these rows are final" is void.
+    elif previous:
+        completed_entry["rows_confirmed_at"] = previous.get("rows_confirmed_at")
+        completed_entry["static_fetches"] = _breed_static_fetches(previous)
+    if not completed_entry.get("rows_confirmed_at"):
+        completed_entry.pop("rows_confirmed_at", None)
     doc.setdefault("completed_breeds", {})[item["breed_key"]] = completed_entry
     doc.setdefault("failed_breeds", {}).pop(item["breed_key"], None)
     doc["updated_at"] = fetched_at
@@ -816,12 +1007,11 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     existing_for_plan = _load_result_cache_doc(show_id)
     plan = _result_live_plan_for_id(show_id, doc=existing_for_plan, now=now)
     # Fetch permission is the base availability window OR the finals-aware plan:
-    # the plan adds the final-day evening/night overtime and post-show rescue
-    # that the 21:00 cutoff would deny, while the base window keeps past-show
-    # re-crawls (backfill, forced rescue scripts) working as before. Only truly
-    # not-fetchable moments — upcoming, the pre-06:00 morning, and the between-day
-    # overnight lull — are skipped here; when to *invoke* a fetch is the
-    # scheduler's job (auto candidates / TTL), which does honor the plan window.
+    # both close outside the shared fetch window, so a pass reaching here at
+    # night is skipped whatever queued it. The plan is still consulted because it
+    # closes earlier than the base window for a show that has already settled.
+    # `force`/`heal` (the one-off ops scripts) bypass both deliberately; when to
+    # *invoke* a fetch is otherwise the scheduler's job (auto candidates / TTL).
     if not (force or heal) and not (availability.get("can_fetch", True) or plan.get("can_fetch", False)):
         logger.info(
             "dog_result_cache_skipped",
@@ -881,6 +1071,7 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
             "finals_sweep_cursor",
             "finals_sweep_breed_count",
             "finals_sweep_breed_limit",
+            "cool_sweep_cursor",
         ):
             if existing.get(key):
                 doc[key] = existing.get(key)
@@ -937,24 +1128,36 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     # whatever was on the page at that second. Treating that as a permanent
     # capture froze breeds at a fraction of the entry — two of eight flat-coats —
     # and, for a breed captured before any class was judged, at zero dogs.
-    # While fetching is permitted (live day, finals overtime, post-show rescue,
-    # or a heal pass) an unsettled capture stays re-fetchable; after that the
-    # show settles with whatever the source gave it.
+    # While fetching is permitted (live day, post-show rescue, or a heal pass) an
+    # unsettled capture stays re-fetchable; after that the show settles with
+    # whatever the source gave it.
     refetch_window = heal or plan.get("can_fetch", False)
 
     pending_breeds = [
         breed for breed in breeds_with_results
         if _breed_cache_key_from_breed(breed) not in completed_breeds
     ]
-    # limit=None takes every unsettled capture (the heal pass); 0 selects none but
-    # still records how many there are, so a pass outside the fetch window reports
-    # what it is leaving behind instead of a stale count.
-    recheck_limit = 0
-    if refetch_window:
-        recheck_limit = None if heal else RESULT_UNSETTLED_RECHECK_BREED_LIMIT
-    recheck_breeds = _unsettled_capture_breeds(
-        breeds_with_results, completed_breeds, doc, limit=recheck_limit,
-    )
+    # The heal pass re-fetches every unsettled capture in one go; a live pass
+    # spends its budget across the three attention tiers instead. Outside the
+    # fetch window nothing is selected, but the counts are still recorded, so a
+    # pass reports what it is leaving behind rather than a stale number.
+    cool_breeds = []
+    if heal:
+        recheck_breeds = _unsettled_capture_breeds(
+            breeds_with_results, completed_breeds, doc, limit=None,
+        )
+    elif not refetch_window:
+        recheck_breeds = _unsettled_capture_breeds(
+            breeds_with_results, completed_breeds, doc, limit=0,
+        )
+    else:
+        tiers = _live_tier_breeds(breeds_with_results, completed_breeds, doc)
+        recheck_breeds = tiers["hot"] + tiers["warm"]
+        # The cool sweep only runs while the show is still live: once it settles
+        # there is nothing left to catch, and re-reading finished history is
+        # exactly the traffic this redesign is removing.
+        if plan.get("show_state") == "live":
+            cool_breeds = tiers["cool"]
 
     # Targeted finals re-sweep: when nothing new is pending but the show still
     # owes its terminal award (or hasn't yet confirmed the finals are stable),
@@ -969,15 +1172,24 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         if breed.get("has_results")
     ]
     analysis = finals.analyze(doc, breeds_with_results)
-    # Keep re-checking the finals breeds until the terminal is confirmed stable
-    # (`_mark_terminal_confirmation` only sets terminal_confirmed once the target
-    # — main BIS for a multi-group show, entry completion otherwise — is met and
-    # a following pass adds nothing new).
+    # Keep watching the finals until they are confirmed stable
+    # (`_mark_terminal_confirmation` sets terminal_confirmed once the finals have
+    # stopped changing across passes).
     finals_hunt_active = (
         analysis["expects_finals"] and not doc.get("terminal_confirmed")
     )
     finals_resweep = 0
-    if not new_result_breeds and refetch_window and finals_hunt_active:
+    if refetch_window and finals_hunt_active:
+        # The probe runs whether or not new breeds are pending: it is two
+        # requests, it is the only direct view of the finals, and delaying it
+        # until the breed rings go quiet is what stranded show 14014's BIS.
+        if _finals_probe_due(
+            doc,
+            has_captures=bool(completed_breeds),
+            all_captured=bool(breeds_with_results) and not pending_breeds and not recheck_breeds,
+        ):
+            _probe_finals_pages(show_id, doc, delay=delay)
+            analysis = finals.analyze(doc, breeds_with_results)
         resweep_breeds = _finals_resweep_breeds(
             breeds_with_results, completed_breeds, doc, analysis
         )
@@ -989,11 +1201,14 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
     # fetched. A breed appearing in both lists is impossible — the re-check set is
     # drawn from completed_breeds, which pending_breeds excludes — but the finals
     # re-sweep can overlap it, so drop the duplicate rather than fetch twice.
-    resweep_keys = {_breed_cache_key_from_breed(breed) for breed in pending_breeds}
-    pending_breeds = pending_breeds + [
-        breed for breed in recheck_breeds
-        if _breed_cache_key_from_breed(breed) not in resweep_keys
-    ]
+    seen_keys = {_breed_cache_key_from_breed(breed) for breed in pending_breeds}
+    for extra in (recheck_breeds, cool_breeds):
+        for breed in extra:
+            key = _breed_cache_key_from_breed(breed)
+            if key in seen_keys:
+                continue
+            seen_keys.add(key)
+            pending_breeds.append(breed)
 
     logger.info(
         "dog_result_cache_crawl_start",
@@ -1008,6 +1223,8 @@ def crawl_result_cache_for_show(show_id, delay=RESULT_CRAWL_DEFAULT_DELAY, force
         pending_breeds=len(pending_breeds),
         unsettled_breeds=doc.get("unsettled_breed_count"),
         recheck_breeds=len(recheck_breeds),
+        hot_breeds=doc.get("hot_breed_count"),
+        cool_sweep=len(cool_breeds),
         finals_resweep=finals_resweep,
         workers=max(1, int(workers or 1)),
         delay=delay,
@@ -1090,6 +1307,10 @@ def _queued_result_cache_candidates(now):
 
 def _auto_result_cache_candidates(now):
     candidates = []
+    # Nothing this pass could schedule is fetchable outside the window, so stop
+    # before the show list rather than selecting shows the crawl would skip.
+    if not _fetch_window_open(now):
+        return candidates
     try:
         shows_list = _get_show_list()
     except Exception:
@@ -1098,8 +1319,8 @@ def _auto_result_cache_candidates(now):
 
     now_local = _local_dt(now)
     today = now_local.date()
-    # Only shows inside the auto window can ever become candidates: overtime and
-    # rescue end at the settle deadline, recent-past warming at the auto window.
+    # Only shows inside the auto window can ever become candidates: rescue ends
+    # at the settle deadline, recent-past warming at the auto window.
     # The Tulokset list carries the whole season (hundreds of settled shows), so
     # decide from the list row's date alone before paying for the doc load and
     # finals analysis. Unparseable dates fall through open, as before.
@@ -1151,11 +1372,11 @@ def _auto_result_cache_candidates(now):
 
         # Priority classes so a busy weekend can't starve time-critical work:
         # 0 brand-new live show (nothing cached yet) -> warm first so the page
-        #   shows something; 1 finals-owed (overtime/rescue) -> the failure this
-        #   redesign fixes; 2 live refresh; 3 recent-past warming. Cheap per pass.
+        #   shows something; 1 finals-owed (rescue) -> the failure this redesign
+        #   fixes; 2 live refresh; 3 recent-past warming. Cheap per pass.
         if phase == "live":
             priority = 0 if not doc else 2
-        elif phase in ("overtime", "rescue"):
+        elif phase == "rescue":
             priority = 1
         else:
             priority = 3

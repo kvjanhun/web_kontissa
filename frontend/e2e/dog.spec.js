@@ -1068,7 +1068,7 @@ test.describe('Dog Show Browser', () => {
     await page.getByRole('button', { name: /Future Basenji Show/ }).click()
 
     await expect(page.getByText('Tuloksia ei haeta vielä')).toBeVisible()
-    await expect(page.getByText(/aikaisintaan näyttelypäivänä klo 6/)).toBeVisible()
+    await expect(page.getByText(/aikaisintaan näyttelypäivänä klo \d+/)).toBeVisible()
     await expect(page.getByRole('button', { name: 'Suodata koko näyttelyä' })).toHaveCount(0)
     expect(allResultsCalled).toBe(false)
   })

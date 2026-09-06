@@ -10,14 +10,14 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 |------|------------|
 | Flask routes, request validation, rate limits | `../api/dog.py` |
 | Environment defaults and TTL constants | `config.py` |
-| Date parsing, timestamp formatting, judge/breed normalization | `utils.py` |
+| Date parsing, timestamp formatting, judge/breed normalization, the shared fetch window | `utils.py` |
 | Showlink URL building and HTTP fetches | `showlink.py` |
-| BeautifulSoup parsing for show lists, breed lists, breed results | `parsers.py` |
+| BeautifulSoup parsing for show lists, breed lists, breed results, the `R=RYP`/`R=BIS` finals pages | `parsers.py` |
 | Standalone dog.db engine + thread-local session | `db.py` |
 | ORM models for dog.db | `models.py` |
 | Dict-shape ↔ row conversion + all SQL queries (single source of truth) | `sqlstore.py` |
 | Persistence facade (sessions, retries, error handling), result jobs | `store.py` |
-| Award-structure terminal detection (is a live show finished?) | `finals.py` |
+| Award-structure analysis: the finals-page reconciliation, is one breed's ring finished, is the show | `finals.py` |
 | Indexed show stats, show-detail assembly, breed-list helpers | `indexing.py` |
 | Cross-show dog profile assembly (`/api/dog/dogs`, keyed on `dog_result.reg_id`) | `profile.py` |
 | Show-list cache refresh | `shows.py` |
@@ -35,7 +35,8 @@ For frontend behavior, read `../../frontend/features/dog/AGENTS.md`. For operati
 - Keep all dog.db reads/writes behind `store.py`; the dict↔row mapping and SQL queries live only in `sqlstore.py` and the schema only in `models.py`. Do not open the dog database directly from routes, indexing, or the crawler.
 - Keep GET handlers read-only. Judges and result flags are folded into `dog_breed` at capture time (result crawl success, re-index merge); never reintroduce write-backs into read paths.
 - Keep parser changes in `parsers.py` and cover Showlink page-shape changes in `tests/test_dog.py`.
-- Keep result-cache orchestration in `result_cache.py`; this is where concurrency, backoff, and stale-cache handling live.
+- Keep result-cache orchestration in `result_cache.py`; this is where concurrency, breed tiering, backoff, and stale-cache handling live. The pure predicates it leans on (`_breed_capture_is_settled` and friends, `parse_reg_id`) live in `finals.py` and are re-exported here, because `utils` needs them for the settle ladder and `utils` imports `finals` — keep that direction.
+- Nothing in this package reaches Showlink outside the fetch window; every path reads it from `utils._in_fetch_window`. Do not re-express those hours per call site.
 - Keep crawler loop orchestration in `scripts/dog_crawl.py`; reusable crawler pass functions live in `crawler.py` and `result_cache.py`.
 
 ## Architecture Note

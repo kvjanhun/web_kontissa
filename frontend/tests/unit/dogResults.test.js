@@ -629,14 +629,14 @@ describe('showDateBadgeParts', () => {
 describe('isOvernightResultWindow', () => {
   const at = (hour) => new Date(2026, 5, 20, hour, 0, 0)
 
-  it('is true before 06:00 and from 21:00 onward (default window)', () => {
-    expect(isOvernightResultWindow(at(5))).toBe(true)
+  it('is true before 08:00 and from 21:00 onward (default window)', () => {
+    expect(isOvernightResultWindow(at(7))).toBe(true)
     expect(isOvernightResultWindow(at(23))).toBe(true)
     expect(isOvernightResultWindow(at(21))).toBe(true)
   })
 
   it('is false during the day', () => {
-    expect(isOvernightResultWindow(at(6))).toBe(false)
+    expect(isOvernightResultWindow(at(8))).toBe(false)
     expect(isOvernightResultWindow(at(12))).toBe(false)
     expect(isOvernightResultWindow(at(20))).toBe(false)
   })
@@ -669,8 +669,8 @@ describe('show date result availability', () => {
     const show = { date: '20.06.', month: 'kesäkuu 2026' }
 
     const future = getShowResultAvailability(show, new Date(2026, 5, 17, 12, 0))
-    const earlyMorning = getShowResultAvailability(show, new Date(2026, 5, 20, 5, 59))
-    const showDay = getShowResultAvailability(show, new Date(2026, 5, 20, 6, 0))
+    const earlyMorning = getShowResultAvailability(show, new Date(2026, 5, 20, 7, 59))
+    const showDay = getShowResultAvailability(show, new Date(2026, 5, 20, 8, 0))
 
     expect(future).toMatchObject({
       canLoad: false,
@@ -684,7 +684,7 @@ describe('show date result availability', () => {
       phase: 'show_morning',
       title: 'Tuloksia odotetaan',
     })
-    expect(earlyMorning.availableFrom).toEqual(new Date(2026, 5, 20, 6, 0, 0, 0))
+    expect(earlyMorning.availableFrom).toEqual(new Date(2026, 5, 20, 8, 0, 0, 0))
     expect(showDay).toMatchObject({
       canLoad: true,
       phase: 'show_day',

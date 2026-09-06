@@ -5,7 +5,7 @@ import structlog
 
 from .config import BASE_URL
 from .showlink import _fetch_page, _source_url
-from .utils import _clean_judge_name
+from .utils import _clean_judge_name, _parse_reg_id
 
 logger = structlog.get_logger(__name__)
 
@@ -138,6 +138,121 @@ def _breed_list_targets_from_soup(soup, show_id):
         seen.add(target)
         unique_targets.append(target)
     return unique_targets
+
+FINALS_TARGETS = ("RYP", "BIS")
+
+
+def _finals_targets_from_soup(soup, show_id):
+    """Which of the finals pages the show's nav advertises.
+
+    Kept apart from `_breed_list_targets_from_soup`, which answers a different
+    question (which breed-list pages to crawl for the index) and drops these two
+    link values on purpose. Whether the nav offers a finals page before that
+    final has been judged is a live-show question the observer measures; until it
+    is answered, treat an advertised link as "worth probing", never as "the
+    finals exist".
+    """
+    content = soup.find(id="divContent") or soup.find(id="content") or soup
+    found = []
+    for anchor_el in content.find_all("a"):
+        href = anchor_el.get("href", "")
+        id_match = re.search(r"(?:[?&]|&amp;)Id=(\d+)", href)
+        if id_match and str(id_match.group(1)) != str(show_id):
+            continue
+        r_match = re.search(r"(?:[?&]|&amp;)R=([^&#]+)", href)
+        if not r_match:
+            continue
+        value = r_match.group(1).upper()
+        if value in FINALS_TARGETS and value not in found:
+            found.append(value)
+    return found
+
+_FCI_HEADING = re.compile(r"FCI\s*([0-9]+(?:\s*/\s*[0-9]+)*)")
+
+
+def _finals_heading_groups(heading):
+    """The FCI groups a RYP section covers, as strings.
+
+    A show may judge two groups in one ring, and Showlink then writes the section
+    as a single `FCI 5/6` heading with a single RYP-1. This page is the only place
+    the combined ring is visible: the breed index says group 5 and group 6, so
+    deriving one expected RYP-1 per indexed group makes such a show's terminal
+    unreachable. Non-group finals (Best in show, Paras veteraani, ...) return an
+    empty list.
+    """
+    match = _FCI_HEADING.search(heading or "")
+    if not match:
+        return []
+    return [part.strip() for part in match.group(1).split("/") if part.strip()]
+
+
+def _parse_finals_page(soup, show_id):
+    """Parse a show's `R=RYP` or `R=BIS` page.
+
+    Both use the same shape: one `table.tulostaulukko` of `tr.otsikko` section
+    headings (the ring or final, plus its judge) each followed by up to four
+    placement rows of `place | breed name | dog (+ owner)`. The dog link carries
+    the Kennelliitto registration number, so a winner named here reconciles to a
+    captured `dog_result` row by `reg_id` rather than by name.
+
+    An empty list of sections means the page exists but holds no finals yet —
+    which is a different fact from the nav not offering the page at all, and the
+    two must not be conflated.
+    """
+    sections = []
+    for table in soup.select("table.tulostaulukko"):
+        current = None
+        for row in table.find_all("tr"):
+            classes = row.get("class") or []
+            if "spacer" in classes:
+                continue
+            if "otsikko" in classes:
+                title_el = row.select_one("div.floatleft")
+                judge_el = row.select_one("div.floatright")
+                heading = title_el.get_text(" ", strip=True) if title_el else row.get_text(" ", strip=True)
+                judge = ""
+                if judge_el:
+                    text = judge_el.get_text(" ", strip=True)
+                    judge = _clean_judge_name(re.sub(r"^Tuomari\s*", "", text))
+                current = {
+                    "heading": re.sub(r"\s+", " ", heading).strip(),
+                    "fci_groups": _finals_heading_groups(heading),
+                    "judge": judge,
+                    "placements": [],
+                }
+                sections.append(current)
+                continue
+
+            cells = row.find_all("td")
+            if current is None or len(cells) < 3:
+                continue
+            place_text = cells[0].get_text(strip=True).rstrip(".")
+            if not place_text.isdigit():
+                continue
+            dog_link = cells[2].find("a")
+            reg_url = dog_link.get("href", "") if dog_link else ""
+            if reg_url and not reg_url.startswith("http"):
+                reg_url = "https://jalostus.kennelliitto.fi" + reg_url
+            dog_text = cells[2].get_text(" ", strip=True)
+            # The breeder-group final names a kennel, not a registered dog, so it
+            # carries no link: fall back to the text before the owner marker.
+            owner_split = re.split(r",?\s*Om\.\s*", dog_text, maxsplit=1)
+            name = dog_link.get_text(strip=True) if dog_link else owner_split[0].strip()
+            owner = owner_split[1].strip() if len(owner_split) > 1 else ""
+            current["placements"].append({
+                "place": int(place_text),
+                "breed_name": cells[1].get_text(" ", strip=True),
+                "name": name,
+                "owner": owner,
+                "reg_url": reg_url,
+                "reg_id": _parse_reg_id(reg_url),
+            })
+
+    return {
+        "show_id": show_id,
+        "sections": [section for section in sections if section["placements"]],
+    }
+
 
 def _parse_show_detail(soup, show_id):
     """Parse the show detail page: title and breed list."""

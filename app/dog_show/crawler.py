@@ -7,7 +7,8 @@ from .parsers import _parse_show_detail
 from .showlink import _fetch_page, _source_url
 from .shows import _get_show_list
 from .store import _index_states, _index_summary, _write_index_show
-from .utils import _show_is_recent
+from .config import INDEX_LIVE_TTL, INDEX_RECENT_TTL
+from .utils import _fetch_window_open, _show_date_state, _show_is_recent
 
 logger = structlog.get_logger(__name__)
 
@@ -56,30 +57,49 @@ def crawl_index_once(limit=None, delay=1.5):
 
     This is intentionally called by a standalone process, not by Flask workers.
     """
+    if not _fetch_window_open():
+        logger.info("dog_crawler_index_pass_skipped", reason="outside_fetch_window")
+        return {"total": 0, "updated": 0, "skipped": 0, "reason": "outside_fetch_window"}
+
     shows_list = _get_show_list()
     if not shows_list:
         logger.info("dog_crawler_index_pass_complete", total=0, updated=0, failed=0, skipped=0)
         return {"total": 0, "updated": 0, "skipped": 0}
 
+    now = time.time()
     index_states = _index_states()
     missing = []
     empty_indexed = []
+    live = []
     recent = []
     for show in shows_list:
         state = index_states.get(str(show["id"]))
         if not state:
             missing.append(show)
-        elif not state["breed_count"] and not state["empty_breed_list_confirmed"]:
+            continue
+        if not state["breed_count"] and not state["empty_breed_list_confirmed"]:
             empty_indexed.append(show)
-        elif _show_is_recent(show):
+            continue
+        if not _show_is_recent(show):
+            continue
+        age = now - (state["updated_at"] or 0)
+        # A show being judged today is the cheap tier: its breed check icons are
+        # what tells the result crawler which rings have started, so it is worth
+        # minutes. The rest of the recent window drifts over weeks.
+        if _show_date_state(show) == "live":
+            if age >= INDEX_LIVE_TTL:
+                live.append(show)
+        elif age >= INDEX_RECENT_TTL:
             recent.append(show)
 
-    # Stalest-first within the recent bucket, so a bounded pass round-robins the
-    # whole window across passes instead of re-fetching the same first-N shows
-    # (list order) every time. Empty/missing shows keep absolute priority.
-    recent.sort(key=lambda show: index_states[str(show["id"])]["updated_at"])
+    # Stalest-first within each bucket, so a bounded pass round-robins instead of
+    # re-fetching the same first-N shows (list order) every time.
+    for bucket in (live, recent):
+        bucket.sort(key=lambda show: index_states[str(show["id"])]["updated_at"])
 
-    to_update = empty_indexed + missing + recent
+    # Discovery first and never rate-limited — a show absent from the index has
+    # no page at all — then today's shows, then the slow drift.
+    to_update = empty_indexed + missing + live + recent
 
     if limit is not None:
         to_update = to_update[:limit]
@@ -89,6 +109,7 @@ def crawl_index_once(limit=None, delay=1.5):
         count=len(to_update),
         missing=len(missing),
         empty_indexed=len(empty_indexed),
+        live=len(live),
         recent=len(recent),
         total=len(shows_list),
     )
@@ -96,6 +117,7 @@ def crawl_index_once(limit=None, delay=1.5):
     summary = _crawl_index_candidates(to_update, len(shows_list), delay=delay, reason="maintenance")
     summary["missing_candidates"] = len(missing)
     summary["empty_candidates"] = len(empty_indexed)
+    summary["live_candidates"] = len(live)
     summary["recent_candidates"] = len(recent)
     logger.info("dog_crawler_index_pass_complete", **summary)
     return summary

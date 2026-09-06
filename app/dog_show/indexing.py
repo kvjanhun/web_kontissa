@@ -173,19 +173,20 @@ def _compute_show_stats(show_id, indexed_show, show=None, today=None):
     is_live = False
     is_paused = False
     if show_state == "live":
-        # result_doc is loaded above whenever the date-state is live; a live show
-        # in its multi-day nightly/evening lull reads as "paused" (Jatkuu) rather
-        # than actively "Käynnissä".
+        # `show_state` is already the settle ladder's answer: it is "live" only
+        # while `_result_live_plan` has not settled the show. So the badge is
+        # never absent for a show that has not concluded — it reads "Käynnissä"
+        # while judging, and "Jatkuu" through any hold it has not concluded from.
+        # Deriving `is_live` from the fetch window instead made the badge vanish
+        # at 21:00 on a show still owing its finals, which reads as finished.
         phase = _show_live_phase(
             show_item,
             now=_stats_now_for_today(today) if today else None,
             availability=availability,
             last_result_at=_result_doc_last_result_at(result_doc),
         )
-        if phase == "paused":
-            is_paused = True
-        else:
-            is_live = availability.get("can_fetch", True)
+        is_paused = phase == "paused"
+        is_live = not is_paused
     stats = {
         "indexed": True,
         "breed_count": len(breeds),

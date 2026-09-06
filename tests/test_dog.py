@@ -15,10 +15,43 @@ from app.dog_show import showlink as dog_showlink
 from app.dog_show import sqlstore as dog_sqlstore
 from app.dog_show import store as dog_store
 from app.dog_show import db as dog_db
+from app.dog_show import shows as dog_shows
+from app.dog_show import utils as dog_utils
 from app.dog_show.utils import (
-    _result_doc_last_result_at, _result_live_plan, _show_is_recent, _show_live_phase,
-    _show_result_availability, _utc_iso,
+    _in_fetch_window, _result_doc_last_result_at, _result_live_plan, _show_is_recent,
+    _show_live_phase, _show_result_availability, _utc_iso,
 )
+
+# Modules that hold their own reference to the shared fetch-window helpers.
+_FETCH_WINDOW_MODULES = (dog_crawler, dog_result_cache, dog_shows)
+
+
+@pytest.fixture(autouse=True)
+def _dog_daytime_clock(monkeypatch):
+    """Hold the shared fetch window open for tests that read the wall clock.
+
+    Nothing outside the window reaches Showlink, so a crawl test run at 22:00
+    would otherwise skip and fail. Tests that are *about* the window pass an
+    explicit `now`/hour, or restore the real helpers via `real_fetch_window`."""
+    for module in _FETCH_WINDOW_MODULES:
+        monkeypatch.setattr(module, "_fetch_window_open", lambda now=None: True)
+    monkeypatch.setattr(
+        dog_result_cache,
+        "_local_dt",
+        lambda now=None: dog_utils._local_dt(now).replace(hour=12, minute=0, second=0),
+    )
+    monkeypatch.setattr(
+        dog_utils,
+        "_local_now",
+        lambda: dog_utils._local_dt(time.time()).replace(hour=12, minute=0, second=0),
+    )
+
+
+@pytest.fixture
+def real_fetch_window(monkeypatch):
+    """Undo `_dog_daytime_clock`'s window override for tests that exercise it."""
+    for module in _FETCH_WINDOW_MODULES:
+        monkeypatch.setattr(module, "_fetch_window_open", dog_utils._fetch_window_open)
 
 SAMPLE_SHOW_LIST_HTML = """
 <table id="Nayttelylista">
@@ -34,6 +67,90 @@ SAMPLE_SHOW_LIST_HTML = """
         <td><a href="/nayttelyt/Tulokset?Id=14043">Villakoira erikoisnäyttely</a></td>
     </tr>
 </table>
+"""
+
+# The finals pages (R=RYP / R=BIS), trimmed from show 14014's real markup. The
+# RYP section headings are the only place a show's actual rings are visible: this
+# show judged FCI 5 and 6 in one ring, so it has four sections for five groups
+# and exactly one RYP-1 between them.
+SAMPLE_RYP_PAGE_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">FCI  3 - Terrierit</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Igoris Zizevskis</span></div>
+</td></tr>
+<tr><td>1.</td><td>amerikanstaffordshirenterrieri</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23">Mama Mia</a> Om. Lapuerta Katharina</td></tr>
+<tr><td>2.</td><td>skotlanninterrieri</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI24070%2F26">Piccola Strega</a> Om. - -</td></tr>
+<tr class="spacer"><td colspan="3"></td></tr>
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">FCI  5/6 - Pystykorvat ja alkukantaiset koirat - Ajavat ja jäljestävät koirat</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Sakari Poti</span></div>
+</td></tr>
+<tr><td>1.</td><td>harmaa norjanhirvikoira</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI45451%2F25">Geisterjäger</a> Om. Tolonen Mika</td></tr>
+</table>
+</div>
+"""
+
+SAMPLE_BIS_PAGE_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">Best in show</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Ramune Kazlauskaite</span></div>
+</td></tr>
+<tr><td>1.</td><td>fieldspanieli</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17">Noblefield's Gossip On Lips</a> Om.Väisänen Minna</td></tr>
+<tr class="spacer"><td colspan="3"></td></tr>
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">Paras kasvattajaryhmä</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Ramune Kazlauskaite</span></div>
+</td></tr>
+<tr><td>1.</td><td>walesinspringerspanieli</td><td>Sunnystorm Om.Vainikainen Noora</td></tr>
+</table>
+</div>
+"""
+
+# The same page before any final has been judged: the table scaffold is there,
+# the sections are not. "The page exists but is empty" and "the show awards no
+# finals" look identical here and are told apart by the ladder, not the parser.
+# A group-only show (e.g. group 10 alone): its RYP page crowns the one group it
+# ran, and it awards no main BIS at all, so its BIS page stays empty.
+SAMPLE_SINGLE_GROUP_RYP_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">FCI 10 - Vinttikoirat</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Sakari Poti</span></div>
+</td></tr>
+<tr><td>1.</td><td>afgaani</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20">Afgaani Yksi</a> Om. Omistaja A</td></tr>
+</table>
+</div>
+"""
+
+# A multi-group specialty cluster: it crowns BIS-1 directly, with no group stage
+# at all, so there is a BIS page and the RYP page is empty.
+SAMPLE_SPECIALTY_BIS_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">Best in show</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Carol Mulcahy</span></div>
+</td></tr>
+<tr><td>1.</td><td>basenji</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21">Basenji Yksi</a> Om. Omistaja B</td></tr>
+</table>
+</div>
+"""
+
+SAMPLE_EMPTY_FINALS_PAGE_HTML = """
+<div id="divContent">
+<table class="tulostaulukko"></table>
+</div>
 """
 
 SAMPLE_SHOW_DETAIL_HTML = """
@@ -323,10 +440,11 @@ def test_show_live_phase_multiday_nightly_hiatus():
     assert _show_live_phase(show, now=_dt(2026, 6, 27, 22)) == "paused"
     assert _show_live_phase(show, now=_dt(2026, 6, 28, 3)) == "paused"
 
-    # The first day's pre-dawn (show not started) and the final day's wind-down
-    # (no following day) both stay active rather than reading as "continues".
+    # The first day's pre-dawn stays active: nothing has happened to continue
+    # from. The final day's evening does not — the show has stopped for the night
+    # without concluding, and no badge at all would read as finished.
     assert _show_live_phase(show, now=_dt(2026, 6, 27, 5)) == "active"
-    assert _show_live_phase(show, now=_dt(2026, 6, 28, 22)) == "active"
+    assert _show_live_phase(show, now=_dt(2026, 6, 28, 22)) == "paused"
 
 
 def test_show_live_phase_evening_stall_only_on_non_final_day():
@@ -361,10 +479,10 @@ def test_show_live_phase_three_day_and_single_day():
     three_day = {"date": "26.-28.06.", "month": "kesäkuu 2026"}  # Fri→Sun
     assert _show_live_phase(three_day, now=_dt(2026, 6, 26, 22)) == "paused"  # Fri night
     assert _show_live_phase(three_day, now=_dt(2026, 6, 27, 22)) == "paused"  # Sat night
-    assert _show_live_phase(three_day, now=_dt(2026, 6, 28, 22)) == "active"  # Sun (final)
+    assert _show_live_phase(three_day, now=_dt(2026, 6, 28, 22)) == "paused"  # Sun night
 
     single = {"date": "28.06.", "month": "kesäkuu 2026"}
-    assert _show_live_phase(single, now=_dt(2026, 6, 28, 22)) == "active"
+    assert _show_live_phase(single, now=_dt(2026, 6, 28, 22)) == "paused"
     assert _show_live_phase(single, now=_dt(2026, 6, 28, 3)) == "active"
 
 
@@ -519,11 +637,11 @@ def test_show_result_availability_waits_until_show_morning():
     )
     early_morning = _show_result_availability(
         show,
-        now=datetime.datetime(2026, 6, 20, 5, 59),
+        now=datetime.datetime(2026, 6, 20, 7, 59),
     )
     show_day = _show_result_availability(
         show,
-        now=datetime.datetime(2026, 6, 20, 6, 0),
+        now=datetime.datetime(2026, 6, 20, 8, 0),
     )
     evening = _show_result_availability(
         show,
@@ -532,7 +650,7 @@ def test_show_result_availability_waits_until_show_morning():
 
     assert future["can_fetch"] is False
     assert future["reason"] == "future_show"
-    assert future["available_from_iso"] == "2026-06-20T06:00:00"
+    assert future["available_from_iso"] == "2026-06-20T08:00:00"
     assert early_morning["can_fetch"] is False
     assert early_morning["reason"] == "show_morning"
     assert show_day["can_fetch"] is True
@@ -543,7 +661,7 @@ def test_show_result_availability_waits_until_show_morning():
 
 
 def test_show_result_availability_pauses_between_show_days():
-    """A multi-day live show goes quiet overnight (21:00–06:00) between days."""
+    """A multi-day live show goes quiet overnight (21:00–08:00) between days."""
     show = {"date": "20.-21.06.", "month": "kesäkuu 2026"}
 
     night = _show_result_availability(
@@ -552,7 +670,7 @@ def test_show_result_availability_pauses_between_show_days():
     )
     next_morning_early = _show_result_availability(
         show,
-        now=datetime.datetime(2026, 6, 21, 5, 0),
+        now=datetime.datetime(2026, 6, 21, 7, 0),
     )
     next_day = _show_result_availability(
         show,
@@ -1798,6 +1916,10 @@ def _patch_live_refresh(monkeypatch, show_id, detail_breeds, fetcher):
         "breeds": detail_breeds,
     })
     monkeypatch.setattr(dog_result_cache, "_fetch_breed_results_for_show_cache", fetcher)
+    # No finals pages unless a test supplies them: these fixtures exercise the
+    # structural fallback, and an unstubbed probe would reach Showlink.
+    monkeypatch.setattr(dog_result_cache, "_probe_finals_pages",
+                        lambda sid, doc, delay=0.0: doc.get("finals_probe") or {})
 
 
 def test_live_refresh_fetches_only_newly_judged_breeds(monkeypatch, client):
@@ -1871,16 +1993,14 @@ def test_live_refresh_with_all_breeds_captured_skips_fetch_and_row_rewrite(monke
 
 
 def test_breed_capture_is_settled_reads_the_sources_own_ring_end():
-    """A capture is final when the honour roll crowns ROP, or every entered dog
-    already has a row. Class titles are not the breed's ROP; a championship suffix
-    on it still is."""
+    """A capture is final on the source's own statement that the ring ended — the
+    honour roll crowns ROP. Class titles are not the breed's ROP; a championship
+    suffix on it still is."""
     settled = dog_result_cache._breed_capture_is_settled
     breed = {"count": 8}
 
     assert settled({"result_count": 2, "awards": [{"type": "ROP"}]}, breed) is True
     assert settled({"result_count": 2, "awards": [{"type": "ROP, V-24"}]}, breed) is True
-    assert settled({"result_count": 8}, breed) is True
-    assert settled({"result_count": 9}, breed) is True
 
     # Mid-ring: the junior/puppy/breeder titles land before the breed is crowned.
     assert settled({"result_count": 2, "awards": [{"type": "ROP juniori"}]}, breed) is False
@@ -1890,6 +2010,31 @@ def test_breed_capture_is_settled_reads_the_sources_own_ring_end():
     assert settled({"result_count": 0, "awards": [{"type": "ROP"}]}, breed) is False
     assert settled({"result_count": 2}, {"count": 0}) is False
     assert settled(None, breed) is False
+
+
+def test_full_rows_without_rop_are_provisional_until_a_second_fetch_agrees():
+    """Show 14014 froze 29 of 96 breeds — two of them the group winners its finals
+    were waiting on — because full-looking rows were taken as final while the ring
+    was still being judged. Full rows now stop the fast polling but stay eligible
+    for re-check until a later fetch brings back the same rows."""
+    settled = dog_result_cache._breed_capture_is_settled
+    provisional = dog_result_cache._breed_capture_is_provisional
+    breed = {"count": 8}
+
+    first = {"result_count": 8}
+    assert provisional(first, breed) is True
+    assert settled(first, breed) is False
+
+    confirmed = {"result_count": 8, "rows_confirmed_at": 1000.0}
+    assert settled(confirmed, breed) is True
+    assert settled({"result_count": 9, "rows_confirmed_at": 1000.0}, breed) is True
+
+    # A single-entry breed genuinely has no honour roll, so full rows must still
+    # be able to settle it — one confirming fetch, and it is done.
+    assert settled({"result_count": 1, "rows_confirmed_at": 1000.0}, {"count": 1}) is True
+
+    # ROP short-circuits the confirmation: the source has said the ring ended.
+    assert provisional({"result_count": 8, "awards": [{"type": "ROP"}]}, breed) is False
 
 
 def test_live_refresh_refetches_a_breed_captured_mid_ring(monkeypatch, client):
@@ -1955,9 +2100,12 @@ def test_unsettled_recheck_is_bounded_and_rotates(monkeypatch):
     # No limit (the heal pass) takes every unsettled capture in one go.
     assert len(dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=None)) == 5
 
-    # Settled captures never make the list.
+    # Settled captures never make the list: one crowned with ROP, one whose full
+    # rows a later fetch confirmed. A first sighting of full rows is provisional
+    # and stays on the list.
     completed["1:0"]["awards"] = [{"type": "ROP"}]
-    completed["1:1"]["result_count"] = 4
+    completed["1:1"].update({"result_count": 4, "rows_confirmed_at": 1000.0})
+    completed["1:2"]["result_count"] = 4  # full rows, first sighting
     dog_result_cache._unsettled_capture_breeds(breeds, completed, doc, limit=None)
     assert doc["unsettled_breed_count"] == 3
 
@@ -2070,7 +2218,10 @@ def test_finals_settles_only_after_terminal_confirmed_stable(monkeypatch, client
     """After the terminal (all RYP-1 + BIS-1) is captured, the show is not
     confirmed until a following pass re-checks the finals-carrying breeds and
     nothing changes. A late BIS-4 landing on the confirm pass resets it; the pass
-    after that confirms."""
+    after that confirms.
+
+    The quiescence *window* is zeroed here so the subject is the signature
+    changing, not the clock; the window itself is covered separately."""
     breeds = _seed_live_two_breed_show(
         13903,
         captured=["5:3", "10:7", "6:1", "7:2"],
@@ -2110,6 +2261,7 @@ def test_finals_settles_only_after_terminal_confirmed_stable(monkeypatch, client
 
     _patch_live_refresh(monkeypatch, 13903, breeds, fake_fetch)
     monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 0)
 
     def tokens():
         doc = dog_store._load_result_cache_doc(13903)
@@ -2132,6 +2284,754 @@ def test_finals_settles_only_after_terminal_confirmed_stable(monkeypatch, client
     assert {"BIS-1", "BIS-4"} <= tokens()
     assert doc.get("terminal_confirmed") is True
     assert len(doc["results"]) == 4  # rows replaced in place, never duplicated
+
+
+def _finals_probe(ryp_html=None, bis_html=None, show_id=14014):
+    """A `finals_probe` blob as the crawler stores it, parsed from page markup."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    pages = {}
+    for target, html in (("RYP", ryp_html), ("BIS", bis_html)):
+        if html is None:
+            continue
+        pages[target] = {
+            "sections": _parse_finals_page(BeautifulSoup(html, "html.parser"), show_id)["sections"],
+        }
+    return {"checked_at": 1000.0, "pages": pages}
+
+
+def test_parse_finals_page_reads_rings_winners_and_reg_ids():
+    """Page-shape regression for `R=RYP`. The section heading is the only place a
+    combined ring is visible, and the dog link's registration number is what lets
+    a winner be reconciled to a captured row without matching on names."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    parsed = _parse_finals_page(BeautifulSoup(SAMPLE_RYP_PAGE_HTML, "html.parser"), 14014)
+    sections = parsed["sections"]
+
+    assert [section["heading"] for section in sections] == [
+        "FCI 3 - Terrierit",
+        "FCI 5/6 - Pystykorvat ja alkukantaiset koirat - Ajavat ja jäljestävät koirat",
+    ]
+    assert [section["fci_groups"] for section in sections] == [["3"], ["5", "6"]]
+    assert sections[0]["judge"] == "Igoris Zizevskis"
+    assert sections[0]["placements"][0] == {
+        "place": 1,
+        "breed_name": "amerikanstaffordshirenterrieri",
+        "name": "Mama Mia",
+        "owner": "Lapuerta Katharina",
+        "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23",
+        "reg_id": "FI48866/23",
+    }
+
+
+def test_parse_finals_page_reads_bis_and_the_unlinked_breeder_group():
+    """Page-shape regression for `R=BIS`. The breeder-group final names a kennel
+    rather than a registered dog, so it carries no link and no reg id."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    sections = _parse_finals_page(BeautifulSoup(SAMPLE_BIS_PAGE_HTML, "html.parser"), 14014)["sections"]
+    assert [section["heading"] for section in sections] == ["Best in show", "Paras kasvattajaryhmä"]
+    assert sections[0]["fci_groups"] == []
+    assert sections[0]["placements"][0]["breed_name"] == "fieldspanieli"
+    assert sections[0]["placements"][0]["reg_id"] == "FI49208/17"
+
+    breeder = sections[1]["placements"][0]
+    assert breeder["name"] == "Sunnystorm"
+    assert breeder["owner"] == "Vainikainen Noora"
+    assert breeder["reg_id"] == ""
+
+
+def test_empty_finals_page_parses_as_no_sections():
+    """An empty page is a real answer — "nothing awarded yet" — and must not be
+    confused with a fetch that failed."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    parsed = _parse_finals_page(BeautifulSoup(SAMPLE_EMPTY_FINALS_PAGE_HTML, "html.parser"), 14014)
+    assert parsed["sections"] == []
+
+
+def test_finals_targets_are_read_from_the_nav():
+    """`_breed_list_targets_from_soup` drops R=RYP and R=BIS on purpose; the
+    finals probe needs them, so it asks separately."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _breed_list_targets_from_soup, _finals_targets_from_soup
+
+    html = """
+    <div id="divContent">
+      <a href="?Id=14014&R=3">FCI 3</a>
+      <a href="?Id=14014&R=RYP">Ryhmien voittajat</a>
+      <a href="?Id=14014&R=BIS">BIS</a>
+      <a href="?Id=99999&R=BIS">another show</a>
+    </div>
+    """
+    soup = BeautifulSoup(html, "html.parser")
+    assert _finals_targets_from_soup(soup, 14014) == ["RYP", "BIS"]
+    assert _breed_list_targets_from_soup(soup, 14014) == ["3"]
+
+
+def test_probe_finds_the_combined_ring_and_the_exact_missing_breed():
+    """Show 14014's two failures, in one assertion each.
+
+    Its BIS-1 landed on `8:121` (fieldspanieli), which the structural candidate
+    rule never selected because it only ever looked at groups missing an RYP-1.
+    And group 6 could not have an RYP-1 at all — the show ran a combined FCI 5/6
+    ring — so the target was unreachable by construction. The finals pages say
+    both things outright."""
+    breeds = [
+        {"name": "amerikanstaffordshirenterrieri", "count": 4, "group": "3", "breed_id": "192", "has_results": True},
+        {"name": "skotlanninterrieri", "count": 2, "group": "3", "breed_id": "191", "has_results": True},
+        {"name": "harmaa norjanhirvikoira", "count": 3, "group": "5", "breed_id": "6", "has_results": True},
+        {"name": "venäjänajokoira", "count": 2, "group": "6", "breed_id": "64", "has_results": True},
+        {"name": "fieldspanieli", "count": 2, "group": "8", "breed_id": "121", "has_results": True},
+        {"name": "walesinspringerspanieli", "count": 2, "group": "8", "breed_id": "130", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            # The RYP-1 winner already carries its group placement...
+            {"breedGroup": "3", "breedId": "192", "awards": "SA, ROP, RYP-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23"},
+            # ...and the eventual BIS-1 winner carries only its ROP: this is the
+            # row the missing BIS-1 belongs on.
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17"},
+        ],
+        "finals_probe": _finals_probe(SAMPLE_RYP_PAGE_HTML, SAMPLE_BIS_PAGE_HTML),
+    }
+
+    analysis = dog_finals.analyze(doc, breeds)
+    probe = analysis["probe"]
+
+    # The rings as the show actually ran them: four groups, three sections.
+    assert probe["ryp_ring_groups"] == [["3"], ["5", "6"]]
+    assert probe["expected_ryp_rings"] == 2
+
+    candidates = dog_finals.candidate_breed_keys(analysis)
+    assert "8:121" in candidates                      # where BIS-1 actually is
+    assert "3:192" not in candidates                  # already has its RYP-1
+    # Exact, not a rotation: only breeds the pages name and our rows lack. The
+    # breeder-group kennel (8:130) is not among them — no row can carry it.
+    assert set(candidates) == {"3:191", "5:6", "8:121"}
+
+
+def test_probe_settles_a_show_whose_group_can_never_win_a_ryp():
+    """The combined-ring show settles once the pages' placements have all landed,
+    with no expectation that group 6 produce an RYP-1 of its own."""
+    breeds = [
+        {"name": "amerikanstaffordshirenterrieri", "count": 1, "group": "3", "breed_id": "192", "has_results": True},
+        {"name": "skotlanninterrieri", "count": 1, "group": "3", "breed_id": "191", "has_results": True},
+        {"name": "harmaa norjanhirvikoira", "count": 1, "group": "5", "breed_id": "6", "has_results": True},
+        {"name": "venäjänajokoira", "count": 1, "group": "6", "breed_id": "64", "has_results": True},
+        {"name": "fieldspanieli", "count": 1, "group": "8", "breed_id": "121", "has_results": True},
+        {"name": "walesinspringerspanieli", "count": 1, "group": "8", "breed_id": "130", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "3", "breedId": "192", "awards": "SA, ROP, RYP-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23"},
+            {"breedGroup": "3", "breedId": "191", "awards": "SA, ROP, RYP-2",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI24070%2F26"},
+            {"breedGroup": "5", "breedId": "6", "awards": "SA, ROP, RYP-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI45451%2F25"},
+            {"breedGroup": "6", "breedId": "64", "awards": "SA, ROP"},
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP, BIS-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17"},
+            # The breeder-group winner is a kennel with no registration of its
+            # own, so no row token exists for it and none is demanded.
+            {"breedGroup": "8", "breedId": "130", "awards": "SA, ROP"},
+        ],
+        "completed_breeds": {
+            f"{b['group']}:{b['breed_id']}": {"result_count": 1, "awards": [{"type": "ROP"}]}
+            for b in breeds
+        },
+        "finals_probe": _finals_probe(SAMPLE_RYP_PAGE_HTML, SAMPLE_BIS_PAGE_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["missing_keys"] == []
+    assert status["finals_published"] is True
+    assert status["judging_finished"] is True
+    assert status["target_met"] is True
+
+    # Group 6 never crowns anything, and that is no longer an obstacle.
+    assert "6" in status["analysis"]["missing_ryp_groups"]
+
+
+def test_show_awarding_no_finals_settles_on_judging_alone():
+    """Show 13914's shape: a single-breed specialty that advertises no finals and
+    awards none. Its finals pages are empty, and rung 2 carries it — no
+    assumption about groups, BIS or show type is involved."""
+    breeds = [{"name": "pyreneittenmastiffi", "count": 6, "group": "2", "breed_id": "92", "has_results": True}]
+    doc = {
+        "results": [{"breedGroup": "2", "breedId": "92", "awards": "SA, ROP"}],
+        "completed_breeds": {"2:92": {"result_count": 6, "awards": [{"type": "ROP"}]}},
+        "finals_probe": _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_EMPTY_FINALS_PAGE_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["published"] is False
+    assert status["finals_published"] is False
+    assert status["target_met"] is True  # rung 2 alone
+
+
+def test_show_with_finals_pending_does_not_settle_on_judging_alone():
+    """The other half of that rule: rings finished but the pages already showing a
+    placement we have not captured means the show is not done."""
+    breeds = [
+        {"name": "fieldspanieli", "count": 1, "group": "8", "breed_id": "121", "has_results": True},
+        {"name": "walesinspringerspanieli", "count": 1, "group": "8", "breed_id": "130", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP"},
+            {"breedGroup": "8", "breedId": "130", "awards": "SA, ROP"},
+        ],
+        "completed_breeds": {
+            "8:121": {"result_count": 1, "awards": [{"type": "ROP"}]},
+            "8:130": {"result_count": 1, "awards": [{"type": "ROP"}]},
+        },
+        "finals_probe": _finals_probe(bis_html=SAMPLE_BIS_PAGE_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["judging_finished"] is True
+    assert status["probe"]["missing_keys"] == ["8:121"]
+    assert status["target_met"] is False
+
+
+def test_group_only_show_settles_on_its_group_ryp_without_a_main_bis():
+    """A group-only show (group 10 alone) crowns its group's RYP and no main
+    BIS, so its BIS page stays empty. The pages say so outright, and nothing
+    waits for a `BIS-1` that is never coming."""
+    breeds = [{"name": "afgaani", "count": 1, "group": "10", "breed_id": "7", "has_results": True}]
+    doc = {
+        "results": [{"breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1",
+                     "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20"}],
+        "completed_breeds": {"10:7": {"result_count": 1, "awards": [{"type": "ROP"}]}},
+        "finals_probe": _finals_probe(SAMPLE_SINGLE_GROUP_RYP_HTML, SAMPLE_EMPTY_FINALS_PAGE_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["ryp_ring_groups"] == [["10"]]
+    assert status["probe"]["missing_keys"] == []
+    assert status["finals_published"] is True
+    assert status["target_met"] is True
+    assert status["analysis"]["has_bis1"] is False  # and that is fine
+
+
+def test_specialty_cluster_settles_on_bis_with_an_empty_ryp_page():
+    """A multi-group specialty cluster crowns BIS-1 with no group stage at all,
+    so its RYP page is empty. An empty RYP page is not an outstanding
+    obligation."""
+    breeds = [
+        {"name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 1, "group": "10", "breed_id": "7", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, BIS-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+        ],
+        "completed_breeds": {
+            "5:3": {"result_count": 1, "awards": [{"type": "ROP"}]},
+            "10:7": {"result_count": 1, "awards": [{"type": "ROP"}]},
+        },
+        "finals_probe": _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_SPECIALTY_BIS_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["expected_ryp_rings"] == 0
+    assert status["probe"]["missing_keys"] == []
+    assert status["target_met"] is True
+
+
+def test_a_failed_probe_never_reads_as_no_finals():
+    """A probe whose fetches all failed carries no pages. That must fall back to
+    the structural rules, not settle the show — the difference between "the
+    source says there are none" and "we could not ask"."""
+    breeds = [
+        {"name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 1, "group": "10", "breed_id": "7", "has_results": True},
+    ]
+    doc = {
+        "results": [{"breedGroup": "5", "breedId": "3", "awards": "SA, ROP"}],
+        "completed_breeds": {
+            "5:3": {"result_count": 1, "awards": [{"type": "ROP"}]},
+            "10:7": {"result_count": 1, "awards": [{"type": "ROP"}]},
+        },
+        "finals_probe": {"checked_at": 1000.0, "pages": {}, "errors": {"RYP": "Timeout"}},
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["seen"] is False
+    assert status["target_met"] is False  # multi-group show, no BIS-1 captured
+
+
+def _tier_breeds(count=6, judges=("A", "B"), captured_count=1, entry_count=4):
+    breeds = [
+        {"name": f"breed-{i}", "count": entry_count, "group": "1", "breed_id": str(i),
+         "has_results": True, "judge": judges[i % len(judges)]}
+        for i in range(count)
+    ]
+    completed = {
+        f"1:{i}": {"name": f"breed-{i}", "result_count": captured_count, "judge": judges[i % len(judges)]}
+        for i in range(count)
+    }
+    return breeds, completed
+
+
+def test_hot_tier_is_one_ring_per_judge():
+    """A judge judges one breed, finishes it, and moves on, so at most one ring
+    per judge can be moving. Two judges over six unfinished breeds means two hot
+    pages, not six — the whole point of the partition."""
+    breeds, completed = _tier_breeds(count=6, judges=("A", "B"))
+    doc = {}
+
+    tiers = dog_result_cache._live_tier_breeds(breeds, completed, doc, warm_limit=0, cool_limit=0)
+
+    assert [b["breed_id"] for b in tiers["hot"]] == ["0", "1"]  # each judge's first
+    assert doc["unsettled_breed_count"] == 6
+    assert doc["hot_breed_count"] == 2
+
+
+def test_static_breed_cools_off_without_any_judge_information():
+    """The fallback wherever the queue misfires: a breed whose rows keep coming
+    back unchanged leaves the hot tier on its own evidence. It needs no judge and
+    no schedule, which is what makes it safe when the queue is wrong."""
+    breeds, completed = _tier_breeds(count=4, judges=("A",))
+    limit = dog_result_cache.RESULT_BREED_STATIC_FETCH_LIMIT
+    completed["1:0"]["static_fetches"] = limit
+
+    tiers = dog_result_cache._live_tier_breeds(breeds, completed, {}, warm_limit=10, cool_limit=0)
+
+    # Judge A's first breed has gone quiet, so nothing is hot for them this pass
+    # (breed 0 still holds the queue position — the ring may simply be slow).
+    assert tiers["hot"] == []
+    assert {b["breed_id"] for b in tiers["warm"]} == {"0", "1", "2", "3"}
+
+
+def test_cool_sweep_rotates_over_finished_breeds():
+    """Goal 2's protection: breeds that look finished keep being re-read while the
+    show is live, because a club secretary can register a row long after its ring
+    ended. Bounded per pass and rotating, so a 96-breed show costs a handful of
+    requests a minute and still comes round within the hour."""
+    breeds, completed = _tier_breeds(count=4, judges=("A",))
+    for key in completed:
+        completed[key]["awards"] = [{"type": "ROP"}]  # all finished
+    doc = {}
+
+    first = dog_result_cache._live_tier_breeds(breeds, completed, doc, cool_limit=2)
+    second = dog_result_cache._live_tier_breeds(breeds, completed, doc, cool_limit=2)
+
+    assert [b["breed_id"] for b in first["cool"]] == ["0", "1"]
+    assert [b["breed_id"] for b in second["cool"]] == ["2", "3"]
+    assert first["hot"] == [] and first["warm"] == []
+    assert doc["cool_breed_count"] == 4
+
+
+def test_late_row_on_a_finished_breed_is_captured_and_resets_quiescence(monkeypatch, client):
+    """Goal 2, end to end. A breed is crowned ROP and its judge moves on; a row is
+    then registered against it anyway. The cool sweep re-reads it, the row lands,
+    and the show's quiescence window restarts instead of settling."""
+    breeds = _seed_live_two_breed_show(
+        13911,
+        captured=["5:3", "10:7"],
+        results=[
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+        ],
+    )
+    # Both breeds read as finished: crowned, and their judges have moved on.
+    doc = dog_store._load_result_cache_doc(13911)
+    for key in ("5:3", "10:7"):
+        doc["completed_breeds"][key]["awards"] = [{"type": "ROP"}]
+    doc["terminal_stable_seconds"] = 600.0
+    doc["terminal_fingerprint"] = "stale"
+    dog_store._save_result_cache_doc(13911, doc)
+
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        rows = [{"name": f"Winner-{key}", "breedName": breed["name"], "breedGroup": breed["group"],
+                 "breedId": breed["breed_id"], "awards": "SA, ROP"}]
+        if key == "5:3":
+            # The late entry: a row registered after the ring was over.
+            rows.append({"name": "Latecomer", "breedName": breed["name"], "breedGroup": breed["group"],
+                         "breedId": breed["breed_id"], "awards": "EH"})
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": rows, "awards": [{"type": "ROP"}]},
+            "mapped_results": rows,
+            "fetched_at": 3.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13911, breeds, fake_fetch)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+
+    dog_result_cache.crawl_result_cache_for_show(13911, source="test", workers=1)
+
+    assert "5:3" in fetched  # a finished breed was read again
+    doc = dog_store._load_result_cache_doc(13911)
+    assert any(row["name"] == "Latecomer" for row in doc["results"])
+    # The row changed the signature, so the settle window starts over.
+    assert doc["terminal_stable_seconds"] == 0.0
+    assert doc.get("terminal_confirmed") is False
+
+
+def test_show_14014_replay_lands_bis_on_the_right_breed_and_settles(monkeypatch, client):
+    """The failure this rework exists for, replayed end to end.
+
+    Show 14014 ran a combined FCI 5/6 ring, so group 6 could never crown an
+    RYP-1 and the old target was unreachable by construction. Its `BIS-1` landed
+    on `8:121` (fieldspanieli), a breed the structural candidate rule never
+    selected because it only ever looked at groups missing an RYP-1. The show
+    polled 30 wrong pages every two minutes for two days and settled
+    `settled_incomplete` with a permanently wrong cache.
+
+    With the finals pages read, the re-fetch list is exact and the show settles
+    correctly."""
+    breeds = [
+        {"name": "amerikanstaffordshirenterrieri", "count": 1, "group": "3", "breed_id": "192", "has_results": True},
+        {"name": "skotlanninterrieri", "count": 1, "group": "3", "breed_id": "191", "has_results": True},
+        {"name": "harmaa norjanhirvikoira", "count": 1, "group": "5", "breed_id": "6", "has_results": True},
+        {"name": "venäjänajokoira", "count": 1, "group": "6", "breed_id": "64", "has_results": True},
+        {"name": "fieldspanieli", "count": 1, "group": "8", "breed_id": "121", "has_results": True},
+    ]
+    seed_index_show("14014", {
+        "title": "06.09.2026 Suhmuran Santra", "date": "06.09.", "month": "syyskuu 2026",
+        "breeds": breeds,
+    })
+    # Every ring captured and crowned, no finals token anywhere: the state the
+    # show was actually stuck in.
+    reg_by_key = {
+        "3:192": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23",
+        "3:191": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI24070%2F26",
+        "5:6": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI45451%2F25",
+        "8:121": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17",
+        "6:64": "",
+    }
+    dog_store._save_result_cache_doc(14014, {
+        "version": dog_result_cache.RESULT_CACHE_VERSION, "show_id": 14014,
+        "status": "complete", "title": "Suhmuran Santra",
+        "source_url": dog_showlink._source_url(14014),
+        "started_at": 1, "updated_at": 1, "cached_at": 1, "total_breeds": len(breeds),
+        "completed_breeds": {
+            f"{b['group']}:{b['breed_id']}": {
+                "name": b["name"], "result_count": 1, "judge": "Judge",
+                "awards": [{"type": "ROP", "name": b["name"]}],
+            }
+            for b in breeds
+        },
+        "failed_breeds": {},
+        "results": [
+            {"name": f"Dog-{b['group']}:{b['breed_id']}", "breedName": b["name"],
+             "breedGroup": b["group"], "breedId": b["breed_id"], "awards": "SA, ROP",
+             "reg_url": reg_by_key[f"{b['group']}:{b['breed_id']}"]}
+            for b in breeds
+        ],
+    })
+
+    # The finals published while we were not looking. Re-fetching a named breed
+    # now returns its row with the promised token appended, as Showlink does.
+    tokens = {"3:192": "RYP-1", "3:191": "RYP-2", "5:6": "RYP-1", "8:121": "BIS-1"}
+    fetched = []
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        awards = "SA, ROP" + (f", {tokens[key]}" if key in tokens else "")
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": [{"type": "ROP"}]},
+            "mapped_results": [{
+                "name": f"Dog-{key}", "breedName": breed["name"], "breedGroup": breed["group"],
+                "breedId": breed["breed_id"], "awards": awards, "reg_url": reg_by_key[key],
+            }],
+            "fetched_at": 5.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 14014, breeds, fake_fetch)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 0)
+    probe = _finals_probe(SAMPLE_RYP_PAGE_HTML, SAMPLE_BIS_PAGE_HTML)
+    monkeypatch.setattr(
+        dog_result_cache, "_probe_finals_pages",
+        lambda sid, doc, delay=0.0: doc.__setitem__("finals_probe", probe) or probe,
+    )
+
+    dog_result_cache.crawl_result_cache_for_show(14014, source="test", workers=1)
+
+    # Exactly the breeds the finals pages name — and 6:64, whose group cannot
+    # crown anything, was never fetched.
+    assert set(fetched) == {"3:192", "3:191", "5:6", "8:121"}
+
+    doc = dog_store._load_result_cache_doc(14014)
+    by_key = {f'{r["breedGroup"]}:{r["breedId"]}': r["awards"] for r in doc["results"]}
+    assert "BIS-1" in by_key["8:121"]
+    assert len(doc["results"]) == len(breeds)  # replaced in place, not duplicated
+
+    status = dog_utils._terminal_status(doc, breeds)
+    assert status["probe"]["missing_keys"] == []
+    assert status["finals_published"] is True
+    assert status["target_met"] is True
+
+    # A second pass with nothing new confirms it, and the plan settles the show.
+    dog_result_cache.crawl_result_cache_for_show(14014, source="test", workers=1)
+    doc = dog_store._load_result_cache_doc(14014)
+    assert doc["terminal_confirmed"] is True
+    plan = _result_live_plan(
+        {"id": 14014, "date": "06.09.", "month": "syyskuu 2026"}, doc, breeds,
+        now=_hel_timestamp(2026, 9, 6, 20),
+    )
+    assert plan["phase"] == "settled"
+
+
+def test_provisional_capture_is_promoted_by_a_second_agreeing_fetch(monkeypatch, client):
+    """The integration half of the provisional rule: a breed with full rows and no
+    honour roll is re-fetched, and the fetch that brings back the same rows both
+    marks it final and stops it being re-fetched again."""
+    breeds = _seed_live_two_breed_show(
+        13916,
+        captured=["5:3", "10:7"],
+        unsettled=["5:3", "10:7"],
+        results=[
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"},
+        ],
+    )
+    # Both breeds have every entered dog on the page (count is 2) and no ROP —
+    # what a small breed with no honour roll looks like.
+    rows = {
+        "5:3": [{"name": "B1", "breedName": "basenji", "breedGroup": "5", "breedId": "3"},
+                {"name": "B2", "breedName": "basenji", "breedGroup": "5", "breedId": "3"}],
+        "10:7": [{"name": "A1", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"},
+                 {"name": "A2", "breedName": "afgaani", "breedGroup": "10", "breedId": "7"}],
+    }
+    fetched = []
+    clock = [10.0]
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        fetched.append(key)
+        # Must advance across passes, not restart: a capture carrying the same
+        # `fetched_at` as the previous one is the same fetch, not a confirming one.
+        clock[0] += 1
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": rows[key], "awards": []},
+            "mapped_results": rows[key],
+            "fetched_at": clock[0],
+        }
+
+    _patch_live_refresh(monkeypatch, 13916, breeds, fake_fetch)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+
+    # Pass 1: full rows arrive, but a first sighting is only provisional.
+    dog_result_cache.crawl_result_cache_for_show(13916, source="test", workers=1)
+    doc = dog_store._load_result_cache_doc(13916)
+    entry = doc["completed_breeds"]["5:3"]
+    assert entry["result_count"] == 2
+    assert "rows_confirmed_at" not in entry
+    assert dog_result_cache._breed_capture_is_provisional(entry, breeds[0]) is True
+    assert dog_result_cache._breed_capture_is_settled(entry, breeds[0]) is False
+
+    # Pass 2: the same rows come back, which is the confirmation.
+    fetched.clear()
+    dog_result_cache.crawl_result_cache_for_show(13916, source="test", workers=1)
+    doc = dog_store._load_result_cache_doc(13916)
+    entry = doc["completed_breeds"]["5:3"]
+    assert entry["rows_confirmed_at"]
+    assert dog_result_cache._breed_capture_is_settled(entry, breeds[0]) is True
+    assert set(fetched) == {"5:3", "10:7"}  # it took a re-fetch to learn that
+
+    # Pass 3: nothing unsettled is left, so neither breed is re-read for that
+    # reason — only the slow cool sweep may still touch them.
+    fetched.clear()
+    dog_result_cache.crawl_result_cache_for_show(13916, source="test", workers=1)
+    doc = dog_store._load_result_cache_doc(13916)
+    assert doc["unsettled_breed_count"] == 0
+    assert len(doc["results"]) == 4  # replaced in place across all three passes
+
+
+def test_finals_less_show_settles_without_any_finals_ever_publishing(monkeypatch, client):
+    """Quiescence settling, end to end: a show that awards no finals at all has
+    nothing to wait for, and reaching `settled` must not depend on a token that
+    is never coming."""
+    breeds = _seed_live_two_breed_show(
+        13917,
+        captured=["5:3", "10:7"],
+        results=[
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+        ],
+    )
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": [{"type": "ROP"}]},
+            "mapped_results": [{
+                "name": f"Dog-{key}", "breedName": breed["name"], "breedGroup": breed["group"],
+                "breedId": breed["breed_id"], "awards": "SA, ROP",
+            }],
+            "fetched_at": 9.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13917, breeds, fake_fetch)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 0)
+    empty = _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_EMPTY_FINALS_PAGE_HTML)
+    monkeypatch.setattr(
+        dog_result_cache, "_probe_finals_pages",
+        lambda sid, doc, delay=0.0: doc.__setitem__("finals_probe", empty) or empty,
+    )
+
+    for _ in range(3):
+        dog_result_cache.crawl_result_cache_for_show(13917, source="test", workers=1)
+
+    doc = dog_store._load_result_cache_doc(13917)
+    assert doc["terminal_confirmed"] is True
+    plan = _result_live_plan(
+        {"id": 13917, "date": "28.06.", "month": "kesäkuu 2026"}, doc, breeds,
+        now=_hel_timestamp(2026, 6, 28, 19),
+    )
+    assert plan["phase"] == "settled"
+
+
+def test_live_state_survives_the_doc_rebuild_between_passes(monkeypatch, client):
+    """Every pass rebuilds the working doc from the cache, so anything the settle
+    machinery accumulates has to be carried across explicitly.
+
+    Dropping the quiescence accumulator would restart the settle window on every
+    pass and a show could never settle on stability at all; dropping the finals
+    probe would make each pass start blind to finals it had already read."""
+    breeds = _seed_live_two_breed_show(
+        13915,
+        captured=["5:3", "10:7"],
+        results=[
+            {"name": "Basenji", "breedName": "basenji", "breedGroup": "5", "breedId": "3", "awards": "SA, ROP"},
+            {"name": "Afgaani", "breedName": "afgaani", "breedGroup": "10", "breedId": "7", "awards": "SA, ROP"},
+        ],
+    )
+
+    def fake_fetch(sid, breed):
+        key = f'{breed["group"]}:{breed["breed_id"]}'
+        return {
+            "breed": breed, "breed_key": key,
+            "breed_data": {"judge": "Judge", "results": [{}], "awards": [{"type": "ROP"}]},
+            "mapped_results": [{
+                "name": f"Dog-{key}", "breedName": breed["name"], "breedGroup": breed["group"],
+                "breedId": breed["breed_id"], "awards": "SA, ROP",
+            }],
+            "fetched_at": 7.0,
+        }
+
+    _patch_live_refresh(monkeypatch, 13915, breeds, fake_fetch)
+    monkeypatch.setattr(dog_result_cache, "_result_cache_doc_is_fresh", lambda *a, **k: False)
+    probe = _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_EMPTY_FINALS_PAGE_HTML)
+    monkeypatch.setattr(
+        dog_result_cache, "_probe_finals_pages",
+        lambda sid, doc, delay=0.0: doc.__setitem__("finals_probe", probe) or probe,
+    )
+
+    clock = [1000.0]
+    monkeypatch.setattr(dog_result_cache, "_mark_terminal_confirmation", (
+        lambda doc, indexed, now=None, _real=dog_result_cache._mark_terminal_confirmation:
+        _real(doc, indexed, now=clock[0])
+    ))
+
+    dog_result_cache.crawl_result_cache_for_show(13915, source="test", workers=1)
+    clock[0] += 120
+    dog_result_cache.crawl_result_cache_for_show(13915, source="test", workers=1)
+    clock[0] += 120
+    dog_result_cache.crawl_result_cache_for_show(13915, source="test", workers=1)
+
+    doc = dog_store._load_result_cache_doc(13915)
+    assert doc["terminal_stable_seconds"] == 240.0   # accumulated across passes
+    assert doc["finals_probe"]["pages"]              # the probe survived too
+
+
+def test_quiescence_counts_only_observed_time(monkeypatch):
+    """A show settles on stability it actually watched accumulate.
+
+    Two traps this closes: the overnight gap must not count (the crawler was not
+    looking, so the silence is not evidence), and a lunch break must not be able
+    to settle a show whose rings are still unjudged — which is why the target has
+    to be met as well as the window filled."""
+    mark = dog_result_cache._mark_terminal_confirmation
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 900)
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_MAX_GAP", 360)
+
+    breeds = [{"name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]
+    doc = {
+        "results": [{"breedGroup": "5", "breedId": "3", "awards": "SA, ROP"}],
+        "completed_breeds": {"5:3": {"result_count": 1, "awards": [{"type": "ROP"}]}},
+        "finals_probe": {"pages": {"RYP": {"sections": []}, "BIS": {"sections": []}}},
+    }
+
+    # Four passes two minutes apart: 6 minutes of watched stability, not 15.
+    for offset in range(4):
+        mark(doc, breeds, now=1000.0 + offset * 120)
+    assert doc["terminal_stable_seconds"] == 360.0
+    assert doc["terminal_confirmed"] is False
+
+    # The night: one pass at 20:58 and the next at 08:00. The gap is longer than
+    # any pass interval, so it contributes nothing at all.
+    mark(doc, breeds, now=1000.0 + 40000)
+    assert doc["terminal_stable_seconds"] == 360.0
+    assert doc["terminal_confirmed"] is False
+
+    # Watched stability resumes and completes the window.
+    now = 1000.0 + 40000
+    for _ in range(5):
+        now += 120
+        mark(doc, breeds, now=now)
+    assert doc["terminal_stable_seconds"] == 960.0
+    assert doc["terminal_confirmed"] is True
+
+    # A late row restarts the window — goal 2, in one assertion.
+    doc["results"].append({"breedGroup": "5", "breedId": "3", "awards": "EH"})
+    mark(doc, breeds, now=now + 120)
+    assert doc["terminal_stable_seconds"] == 0.0
+    assert doc["terminal_confirmed"] is False
+
+
+def test_quiescence_accumulates_before_the_target_is_met(monkeypatch):
+    """Stability must accumulate whether or not the target is met.
+
+    The previous version reset the counter on every pass where it was not, so a
+    show with an unreachable terminal — a combined `FCI 5/6` ring, a show that
+    awards no BIS — could never build evidence that it had simply stopped, and
+    polled to the two-day deadline instead."""
+    mark = dog_result_cache._mark_terminal_confirmation
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 300)
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_MAX_GAP", 360)
+
+    # A breed still mid-ring: the target cannot be met.
+    breeds = [{"name": "basenji", "count": 8, "group": "5", "breed_id": "3", "has_results": True}]
+    doc = {
+        "results": [{"breedGroup": "5", "breedId": "3", "awards": "EH"}],
+        "completed_breeds": {"5:3": {"result_count": 2}},
+    }
+    for offset in range(4):
+        mark(doc, breeds, now=1000.0 + offset * 120)
+
+    assert doc["terminal_target_met"] is False
+    assert doc["terminal_stable_seconds"] == 360.0  # accumulated regardless
+    assert doc["terminal_confirmed"] is False       # but never confirms on its own
 
 
 def test_past_show_owing_finals_is_rescued_until_confirmed(monkeypatch, client):
@@ -2205,17 +3105,39 @@ def _live_plan_doc(*, ryp1_groups=(), bis1=False, **extra):
     return {"status": "complete", "results": rows, **extra}
 
 
-def test_live_plan_final_day_evening_owing_finals_goes_overtime():
-    """The Oulu KV failure: an all-breed final day where only one group's RYP has
-    landed by 21:00. Instead of going quiet at the evening cutoff, the show enters
-    finals overtime and keeps fetching so the rest of the finals are captured."""
+@pytest.mark.parametrize("hour,open_window", [
+    (0, False), (3, False), (7, False), (8, True), (12, True), (20, True), (21, False), (23, False),
+])
+def test_live_plan_obeys_the_fetch_window_on_the_final_day(hour, open_window):
+    """A final day still owing its finals stops at 21:00 like everything else.
+
+    No dog show runs at night, so the finals typed in after the cutoff are worth
+    less than a quiet night; the next morning's rescue pass collects them, well
+    inside the settle deadline."""
     show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
     doc = _live_plan_doc(ryp1_groups=(9,))  # only group 9 has RYP-1, no BIS-1
-    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 4, 22))
-    assert plan["phase"] == "overtime"
-    assert plan["can_fetch"] is True
+    plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 4, hour))
+    assert plan["phase"] == "live"
+    assert plan["can_fetch"] is open_window
     assert plan["expects_finals"] is True
     assert plan["target_met"] is False
+
+
+def test_live_plan_finals_owed_at_night_resumes_next_morning_unsettled():
+    """The accepted cost of the night stop: a show that ended still owing its
+    finals must wait, not settle. It stays a fetchable rescue candidate when the
+    window reopens."""
+    show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
+    doc = _live_plan_doc(ryp1_groups=(9,))
+    breeds = _all_breed_breeds()
+
+    night = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 7, 4, 22))
+    morning = _result_live_plan(show, doc, breeds, now=_hel_timestamp(2026, 7, 5, 8))
+
+    assert night["can_fetch"] is False
+    assert night["phase"] == "live"
+    assert morning["phase"] == "rescue"
+    assert morning["can_fetch"] is True
 
 
 def test_live_plan_specialty_cluster_settles_on_bis_without_ryp():
@@ -2230,10 +3152,8 @@ def test_live_plan_specialty_cluster_settles_on_bis_without_ryp():
     assert plan["phase"] == "settled"
 
 
-def test_live_plan_non_final_night_stays_quiet_no_overtime():
-    """A multi-day show's first-night lull is not overtime — the finals overtime
-    tail is only for the final day, so earlier nights keep the polite 21:00–06:00
-    quiet window."""
+def test_live_plan_non_final_night_stays_quiet():
+    """A multi-day show's first-night lull: quiet until the morning, still live."""
     show = {"id": 13500, "date": "04.-05.07.", "month": "heinäkuu 2026"}
     doc = _live_plan_doc(ryp1_groups=(9,))
     plan = _result_live_plan(show, doc, _all_breed_breeds(), now=_hel_timestamp(2026, 7, 4, 22))
@@ -2243,8 +3163,8 @@ def test_live_plan_non_final_night_stays_quiet_no_overtime():
 
 
 def test_live_plan_rescue_hard_stops_overnight():
-    """Post-show rescue keeps fetching the owed finals during the day, but hard
-    stops between 01:00 and the morning hour."""
+    """Post-show rescue keeps fetching the owed finals during the day and stops
+    overnight, on the same window as everything else."""
     show = {"id": 13786, "date": "04.07.", "month": "heinäkuu 2026"}
     doc = _live_plan_doc(ryp1_groups=(9,))
     breeds = _all_breed_breeds()
@@ -2256,8 +3176,8 @@ def test_live_plan_rescue_hard_stops_overnight():
 
 def test_live_plan_single_group_show_does_not_rescue():
     """A single-FCI-group show (e.g. group 10 only) crowns junior/veteran/utility
-    BIS but no main BIS-1. It must settle when its date passes — not enter overtime
-    or rescue-poll for two days waiting for a BIS-1 that never comes (show 13664)."""
+    BIS but no main BIS-1. It must settle when its date passes — not rescue-poll
+    for two days waiting for a BIS-1 that never comes (show 13664)."""
     show = {"id": 13664, "date": "12.04.", "month": "huhtikuu 2026"}
     breeds = [{"group": "10", "breed_id": str(b), "count": 2, "has_results": True}
               for b in range(1, 5)]
@@ -2396,6 +3316,140 @@ def test_auto_result_cache_candidates_decide_settled_shows_from_dates_alone(monk
 
     assert [candidate["show_id"] for candidate in candidates] == [13771]
     assert set(loaded) == {13771}
+
+
+@pytest.mark.parametrize("hour,open_window", [
+    (0, False), (3, False), (7, False), (8, True), (12, True), (20, True), (21, False), (23, False),
+])
+def test_in_fetch_window_boundaries(hour, open_window):
+    """The one window every fetching path shares: 08:00–21:00 Finnish local."""
+    assert _in_fetch_window(hour) is open_window
+
+
+def test_index_pass_splits_discovery_live_and_recent_cadences(monkeypatch):
+    """Three jobs on one budget meant the slowest set the rate for all of them.
+
+    Discovery is never rate-limited — a show absent from the index has no page at
+    all. A show being judged today is the cheap tier the result crawler steers
+    by, so it is re-read in minutes. Everything else in the recent window drifts
+    over weeks and must not eat the budget."""
+    now = 10_000_000.0
+    shows = [
+        {"id": 14060, "date": "06.09.", "month": "syyskuu 2026", "name": "live-fresh"},
+        {"id": 14061, "date": "06.09.", "month": "syyskuu 2026", "name": "live-stale"},
+        {"id": 14062, "date": "20.09.", "month": "syyskuu 2026", "name": "recent-fresh"},
+        {"id": 14063, "date": "20.09.", "month": "syyskuu 2026", "name": "recent-stale"},
+        {"id": 14064, "date": "20.09.", "month": "syyskuu 2026", "name": "never-indexed"},
+    ]
+    ages = {
+        14060: dog_crawler.INDEX_LIVE_TTL - 60,      # judged today, just read
+        14061: dog_crawler.INDEX_LIVE_TTL + 60,      # judged today, due
+        14062: dog_crawler.INDEX_RECENT_TTL - 3600,  # upcoming, recently read
+        14063: dog_crawler.INDEX_RECENT_TTL + 3600,  # upcoming, due
+    }
+    for sid, age in ages.items():
+        seed_index_show(str(sid), {
+            "title": f"show {sid}", "date": "", "month": "", "updated_at": now - age,
+            "breeds": [{"name": "basenji", "count": 1, "group": "5", "breed_id": "3"}],
+        })
+
+    monkeypatch.setattr(dog_crawler, "_get_show_list", lambda: shows)
+    monkeypatch.setattr(dog_crawler.time, "time", lambda: now)
+    monkeypatch.setattr(dog_crawler, "_show_date_state",
+                        lambda show, today=None: "live" if show["date"] == "06.09." else "upcoming")
+    monkeypatch.setattr(dog_crawler, "_show_is_recent", lambda show, today=None: True)
+
+    updated = []
+    monkeypatch.setattr(dog_crawler, "_update_index_show", lambda show: updated.append(show["id"]))
+
+    summary = dog_crawler.crawl_index_once(delay=0)
+
+    # Never-indexed first, then today's stale show, then the slow drift.
+    assert updated == [14064, 14061, 14063]
+    assert summary["missing_candidates"] == 1
+    assert summary["live_candidates"] == 1
+    assert summary["recent_candidates"] == 1
+
+
+# The window's edges, and the two hours that used to be inside it: 06:00 (the old
+# morning) and 23:00 (the old finals overtime tail).
+_WINDOW_BOUNDARY_HOURS = [
+    ((0, 30), False), ((3, 0), False), ((6, 0), False), ((7, 59), False),
+    ((8, 0), True), ((12, 0), True), ((20, 59), True),
+    ((21, 0), False), ((23, 0), False),
+]
+
+
+@pytest.mark.parametrize("clock,open_window", _WINDOW_BOUNDARY_HOURS)
+def test_index_pass_fetches_only_inside_the_window(monkeypatch, real_fetch_window, clock, open_window):
+    """The index pass had no clock check at all and re-indexed shows all night.
+    Outside the window it must not even reach the show list."""
+    hour, minute = clock
+    fetched = []
+    monkeypatch.setattr(dog_crawler, "_get_show_list", lambda: fetched.append("list") or [])
+    monkeypatch.setattr(dog_utils, "_local_now",
+                        lambda: datetime.datetime(2026, 9, 6, hour, minute))
+
+    summary = dog_crawler.crawl_index_once(limit=2, delay=0)
+
+    assert (fetched == ["list"]) is open_window
+    assert (summary.get("reason") == "outside_fetch_window") is not open_window
+
+
+@pytest.mark.parametrize("clock,open_window", _WINDOW_BOUNDARY_HOURS)
+def test_show_list_refresh_is_gated_by_the_window(monkeypatch, real_fetch_window, clock, open_window):
+    """`_get_show_list` is reachable from request paths, so the gate lives inside
+    it rather than at the call sites: a visitor at 02:00 gets the cached list,
+    never a Showlink fetch."""
+    hour, minute = clock
+    fetched = []
+
+    def _fake_fetch(url):
+        fetched.append(url)
+        from bs4 import BeautifulSoup
+        return BeautifulSoup(SAMPLE_SHOW_LIST_HTML, "html.parser")
+
+    monkeypatch.setattr(dog_shows, "_fetch_page", _fake_fetch)
+    # `_get_show_list` evaluates the window against an explicit timestamp, so the
+    # clock has to be pinned at `_local_dt`, not `_local_now`.
+    monkeypatch.setattr(dog_utils, "_local_dt",
+                        lambda now=None: datetime.datetime(2026, 9, 6, hour, minute))
+    cached = [{"id": 14042, "date": "14.06.", "month": "kesäkuu 2026"}]
+    _show_list_cache["data"] = list(cached)
+    _show_list_cache["ts"] = 0  # stale: only the window can hold it shut
+
+    shows = dog_shows._get_show_list()
+
+    assert (len(fetched) == 1) is open_window
+    # Outside the window the stale cache is served rather than nothing: the show
+    # list only changes when a new show is announced.
+    if not open_window:
+        assert shows == cached
+
+
+def test_show_list_cold_cache_populates_once_outside_the_window(monkeypatch, real_fetch_window):
+    """A process that starts at night has nothing to serve, so it populates once.
+    One request per process start is not polling — and /dog has to render."""
+    calls = []
+
+    def _fake_fetch(url):
+        calls.append(url)
+        from bs4 import BeautifulSoup
+        return BeautifulSoup(SAMPLE_SHOW_LIST_HTML, "html.parser")
+
+    monkeypatch.setattr(dog_shows, "_fetch_page", _fake_fetch)
+    monkeypatch.setattr(dog_utils, "_local_now",
+                        lambda: datetime.datetime(2026, 9, 6, 2, 0))
+    _show_list_cache["data"] = None
+    _show_list_cache["ts"] = 0
+
+    first = dog_shows._get_show_list()
+    _show_list_cache["ts"] = 0  # expire the TTL; the window must still hold it shut
+    second = dog_shows._get_show_list()
+
+    assert len(first) == 2
+    assert second == first
+    assert len(calls) == 1
 
 
 def test_crawl_index_once_updates_stalest_recent_shows_first(monkeypatch):
@@ -3599,32 +4653,51 @@ def test_parse_show_meta_from_title():
     assert _parse_show_meta_from_title("Invalid Title Format") == {}
 
 
-def test_show_stats_is_live_only_when_results_fetchable(client):
+@pytest.mark.parametrize("hour,expect_live,expect_paused", [
+    (12, True, False),   # judging
+    (20, True, False),   # still inside the window
+    (21, False, True),   # the fetch window just closed — held, not finished
+    (23, False, True),
+    # A single-day show's pre-dawn is the documented exception: the show has not
+    # started, so there is nothing to continue from.
+    (3, True, False),
+])
+def test_show_stats_night_hold_reads_as_paused_not_finished(client, monkeypatch, hour,
+                                                            expect_live, expect_paused):
+    """Observed on show 14014: the badge disappeared at 21:00 while the crawler
+    was still hunting the finals, so a show that had merely stopped for the night
+    read as concluded — and no badge is indistinguishable from settled history.
+    An unsettled show always carries a badge: `Käynnissä` while judging, `Jatkuu`
+    while held.
+
+    Driven off the real clock rather than a mocked phase, because the 21:00 flip
+    is the whole subject."""
+    # The show has to be running *today* for its date-state to be live, and the
+    # date-state is read off the system date; only the hour is pinned.
+    from app.dog_show.config import FINNISH_MONTHS
+
+    show_date = datetime.date.today()
     seed_index_show("14021", {
-        "title": "21.06.2026 Amerikancockerspanieli",
+        "title": "Amerikancockerspanieli",
         "name": "Amerikancockerspanieli",
-        "date": "21.06.",
-        "month": "kesäkuu 2026",
+        "date": f"{show_date.day:02d}.{show_date.month:02d}.",
+        "month": FINNISH_MONTHS[show_date.month - 1] + f" {show_date.year}",
         "breeds": [
             {"name": "amerikancockerspanieli", "count": 21, "group": "8", "breed_id": "117"},
         ],
     })
+    pinned = datetime.datetime.combine(show_date, datetime.time(hour=hour))
+    monkeypatch.setattr(dog_utils, "_local_now", lambda: pinned)
+    monkeypatch.setattr(dog_indexing, "_local_now", lambda: pinned, raising=False)
+    dog_indexing._show_stats_cache.clear()
 
-    with patch("app.dog_show.indexing._show_result_availability") as mock_avail:
-        mock_avail.return_value = {"can_fetch": False}
-        stats = dog_indexing._show_stats_from_index(
-            14021,
-            today=datetime.date(2026, 6, 21)
-        )
-        assert stats["is_live"] is False
+    stats = dog_indexing._show_stats_from_index(14021)
 
-    with patch("app.dog_show.indexing._show_result_availability") as mock_avail:
-        mock_avail.return_value = {"can_fetch": True}
-        stats = dog_indexing._show_stats_from_index(
-            14021,
-            today=datetime.date(2026, 6, 21)
-        )
-        assert stats["is_live"] is True
+    assert stats["show_state"] == "live"
+    assert stats["is_live"] is expect_live
+    assert stats["is_paused"] is expect_paused
+    # Whatever the hour, the show is never badge-less while it is unsettled.
+    assert stats["is_live"] or stats["is_paused"]
 
 
 

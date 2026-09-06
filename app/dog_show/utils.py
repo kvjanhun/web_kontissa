@@ -3,9 +3,10 @@ import re
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from . import finals
+from .finals import parse_reg_id as _parse_reg_id  # noqa: F401 (re-exported)
 from .config import (
-    FINNISH_MONTHS, RESULT_CACHE_LIVE_TTL, RESULT_CACHE_OVERTIME_TTL,
-    RESULT_CACHE_RESCUE_TTL, RESULT_FINALS_NIGHT_STOP_HOUR, RESULT_LOCAL_TIMEZONE,
+    FINNISH_MONTHS, RESULT_CACHE_LIVE_TTL,
+    RESULT_CACHE_RESCUE_TTL, RESULT_LOCAL_TIMEZONE,
     RESULT_PAUSE_EVENING_HOUR, RESULT_PAUSE_STALL_SECONDS,
     RESULT_SETTLE_DEADLINE_DAYS, RESULT_SHOW_EVENING_HOUR, RESULT_SHOW_MORNING_HOUR,
     SHOW_RECENT_FUTURE_DAYS, SHOW_RECENT_PAST_DAYS,
@@ -20,10 +21,10 @@ except (ZoneInfoNotFoundError, ValueError):
 def _local_now():
     """Current Finnish wall-clock time as a naive datetime.
 
-    Show dates are Finnish local dates and the result-fetch windows
-    (06:00 morning, 21:00 evening) are Finnish local hours. The container
-    runs in UTC, so derive local time explicitly rather than trusting the
-    process timezone. Falls back to the process clock if tzdata is missing.
+    Show dates are Finnish local dates and the fetch window (08:00-21:00) is
+    Finnish local hours. The container runs in UTC, so derive local time
+    explicitly rather than trusting the process timezone. Falls back to the
+    process clock if tzdata is missing.
     """
     if _LOCAL_TZ is None:
         return datetime.datetime.now()
@@ -32,9 +33,9 @@ def _local_now():
 def _local_dt(now=None):
     """Finnish wall-clock datetime for a unix timestamp (or now if None).
 
-    Same timezone handling as _local_now(), but for an explicit timestamp — used
-    by the backfill off-peak window check, which must evaluate Finnish local
-    hours regardless of the container's UTC clock.
+    Same timezone handling as _local_now(), but for an explicit timestamp: the
+    fetch window is Finnish local hours and must be evaluated as such regardless
+    of the container's UTC clock.
     """
     if now is None:
         return _local_now()
@@ -73,20 +74,6 @@ def _clean_judge_name(value):
         return ""
     text = " ".join(str(value).split())
     return re.sub(r"^tuomari\s*", "", text, flags=re.IGNORECASE).strip()
-
-def _parse_reg_id(reg_url):
-    """Extract the dog registration number from a jalostus.kennelliitto.fi link.
-
-    e.g. '.../frmKoira.aspx?RekNo=FI44694%2F25' -> 'FI44694/25'. This reg id is
-    the cross-show anchor for a dog; it must survive URL-encoding of the slash.
-    """
-    if not reg_url:
-        return ""
-    match = re.search(r"[?&]RekNo=([^&#]+)", str(reg_url), flags=re.IGNORECASE)
-    if not match:
-        return ""
-    from urllib.parse import unquote
-    return unquote(match.group(1)).strip()
 
 def _clean_breed_data(breed):
     item = dict(breed or {})
@@ -137,56 +124,120 @@ def _result_doc_entries_complete(doc, entry_count):
     except (AttributeError, TypeError):
         return False
 
+def _nothing_left_to_judge(doc, indexed_breeds):
+    """Every breed the show lists has been judged and captured to the end.
+
+    Ladder rung 2, and the one a lunch break cannot fake: mid-show there are
+    always breeds unstarted or mid-ring, so an hour of silence does not satisfy
+    it. A breed the source flags as having results but whose capture is not final
+    (`finals._breed_capture_is_settled`) leaves it unsatisfied, as does a breed
+    with no check icon at all.
+
+    Unknowable — no indexed breeds — is not "done": returns False.
+    """
+    breeds = [breed for breed in indexed_breeds or [] if breed.get("group") and breed.get("breed_id")]
+    if not breeds:
+        return False
+    completed = (doc or {}).get("completed_breeds") or {}
+    for breed in breeds:
+        if not breed.get("has_results"):
+            return False
+        entry = completed.get(f"{breed.get('group')}:{breed.get('breed_id')}")
+        if not entry:
+            return False
+        if not finals._breed_capture_is_settled(entry, breed):
+            return False
+    return True
+
+
 def _terminal_status(doc, indexed_breeds):
-    """The show's terminal award state, unified across show types.
+    """Where the show stands on the settle ladder, unified across show types.
 
-    Both the live plan and the crawler's confirmation marker read the terminal
-    from here so they never diverge:
+    Both the live plan and the crawler's confirmation marker read this, so they
+    never diverge. The rungs, in order:
 
-    - a show that expects finals is done when `finals.analyze` says the target
-      is met (main BIS + every group's RYP, or BIS-1 for a specialty cluster);
-    - a finals-less show is done on entry completion.
+    1. **Finals published** — the show's own `R=BIS` / `R=RYP` pages hold
+       placements, and every one of them has landed on its breed's rows
+       (`finals.probe_state`). This is the source stating the finals exist;
+       nothing inferred from breed pages can say as much.
+    2. **Nothing left to judge** — every listed breed is checked and its capture
+       is final. Carries a show that awards no finals at all, and one whose
+       finals pages we could not read.
+    3. **Quiescence confirms** — neither rung is enough on its own: the caller
+       requires the signature to come back unchanged on a later pass
+       (`_mark_terminal_confirmation`), so a late row or correction resets it.
+    4. The deadline in `_result_live_plan` backstops all of it.
 
-    `signature` is a stable string of the terminal-relevant state; when it stops
-    changing across a pass the terminal is confirmed stable and may settle."""
+    No rung asks what *kind* of show this is. That is the point: combined `FCI
+    5/6` rings, group-only shows, puppy shows and single-breed specialties stop
+    being special cases, because none of them can produce an expectation the
+    source's own pages contradict.
+
+    `signature` is a stable string of the terminal-relevant state, and folds in
+    the row count so a late row anywhere resets the confirmation.
+    """
     analysis = finals.analyze(doc, indexed_breeds)
+    probe = analysis["probe"]
     entry_count = _entry_count_from_breeds(indexed_breeds)
     entries_complete = _result_doc_entries_complete(doc, entry_count)
     try:
         row_count = len(doc.get("results") or [])
     except (AttributeError, TypeError):
         row_count = 0
-    if analysis["expects_main_bis"]:
-        # Multi-group show: the terminal is the main BIS-1 (+ every group's RYP-1).
+
+    finals_published = bool(probe["seen"] and probe["published"] and not probe["missing_keys"])
+    judging_finished = _nothing_left_to_judge(doc, indexed_breeds)
+
+    if probe["seen"]:
+        # With the pages read, the show is done when they hold everything they
+        # are going to hold *and* the rings are finished. A show that awards no
+        # finals reaches the terminal on rung 2 alone — its pages are simply
+        # empty, which is an answer and not a reason to keep waiting.
+        target_met = judging_finished and (finals_published or not probe["published"])
+    elif analysis["expects_main_bis"]:
+        # No probe (an old cache, or the pages have not been read yet): fall back
+        # to the award-structure inference.
         target_met = analysis["target_met"]
-        signature = finals.fingerprint_token(analysis)
     else:
-        # Single-group or finals-less show: no main BIS to wait for. Settle on
-        # entry completion; any group RYP / side BIS is captured opportunistically
-        # by the finals sweep and folded into the signature so a late one resets
-        # the confirmation.
         target_met = entries_complete
-        signature = f"entries:{row_count}|{finals.fingerprint_token(analysis)}"
+
+    signature = "|".join([
+        f"rows:{row_count}",
+        f"judged:{int(judging_finished)}",
+        f"probe:{probe['placements']}:{len(probe['missing_keys'])}",
+        finals.fingerprint_token(analysis),
+    ])
     return {
         "analysis": analysis,
+        "probe": probe,
         "expects_finals": analysis["expects_finals"],
         "expects_main_bis": analysis["expects_main_bis"],
         "entries_complete": entries_complete,
+        "finals_published": finals_published,
+        "judging_finished": judging_finished,
         "target_met": target_met,
         "signature": signature,
     }
 
-def _in_finals_fetch_window(hour, morning_hour, evening_hour, night_stop_hour):
-    """Whether a finals-owed show may be fetched at this Finnish local hour.
+def _in_fetch_window(
+    hour,
+    morning_hour=RESULT_SHOW_MORNING_HOUR,
+    evening_hour=RESULT_SHOW_EVENING_HOUR,
+):
+    """Whether anything may reach Showlink at this Finnish local hour.
 
-    Extends past the normal evening cutoff into a nightly overtime tail so the
-    finals (published ~21:00–23:30) are captured, then hard-stops overnight
-    (night_stop..morning) to stay polite. Fetch allowed 06:00–01:00 by default."""
-    if morning_hour <= hour < evening_hour:
-        return True
-    if hour >= evening_hour:
-        return True
-    return hour < night_stop_hour
+    The one window every fetching path shares: the result plan, the crawler's
+    index pass and the show-list refresh. No dog show runs outside 08:00-21:00,
+    so a request made then buys nothing. Keep this the single definition — the
+    same hours expressed separately per path is how the index pass ended up
+    with no check at all."""
+    return morning_hour <= hour < evening_hour
+
+
+def _fetch_window_open(now=None):
+    """_in_fetch_window against Finnish local time, for callers holding a unix
+    timestamp (or nothing) rather than an hour."""
+    return _in_fetch_window(_local_dt(now).hour)
 
 def _result_live_plan(
     show,
@@ -195,7 +246,6 @@ def _result_live_plan(
     now=None,
     morning_hour=RESULT_SHOW_MORNING_HOUR,
     evening_hour=RESULT_SHOW_EVENING_HOUR,
-    night_stop_hour=RESULT_FINALS_NIGHT_STOP_HOUR,
     deadline_days=RESULT_SETTLE_DEADLINE_DAYS,
 ):
     """The single live/settle decision for a show's whole-show result cache.
@@ -212,10 +262,10 @@ def _result_live_plan(
       specialty cluster with no group stage settles on BIS-1 alone);
     - a finals-less show is done on entry completion / its date passing.
 
-    Phases: `live` (normal cadence), `overtime` (final-day evening tail, finals
-    still owed), `rescue` (past date but within the deadline, finals still owed),
-    `settled` / `settled_incomplete` (leave fast-polling). `can_fetch` folds in
-    the Finnish-local fetch window, extended for finals-owed shows.
+    Phases: `live` (normal cadence), `rescue` (past date but within the deadline,
+    finals still owed), `settled` / `settled_incomplete` (leave fast-polling).
+    `can_fetch` folds in the shared Finnish-local fetch window, which every phase
+    obeys — a show still owing its finals at 21:00 waits for the morning.
     """
     if now is None:
         localnow = _local_now()
@@ -277,37 +327,25 @@ def _result_live_plan(
     if settle_by_target and is_final_day:
         return _plan("settled", None, False)
 
-    # Overtime and rescue exist only to catch a **main BIS** and its group RYPs,
-    # which publish after the breed rings on a multi-group show. A single-group
-    # show (breed/group specialty) crowns no main BIS, so it never enters overtime
-    # or rescue — it settles when its date passes, like a finals-less show, having
-    # captured its side BIS / group RYP during the live day. This also stops a
-    # group-10-only show (junior/veteran/utility BIS, no `BIS-1`) from being
-    # rescue-polled for two days every time.
+    # Rescue exists only to catch a **main BIS** and its group RYPs, which publish
+    # after the breed rings on a multi-group show. A single-group show
+    # (breed/group specialty) crowns no main BIS, so it never enters rescue — it
+    # settles when its date passes, like a finals-less show, having captured its
+    # side BIS / group RYP during the live day. This also stops a group-10-only
+    # show (junior/veteran/utility BIS, no `BIS-1`) from being rescue-polled for
+    # two days every time.
     if not expects_main_bis and state == "past":
         return _plan("settled", None, False)
 
-    in_day = morning_hour <= hour < evening_hour
+    in_day = _in_fetch_window(hour, morning_hour, evening_hour)
 
     if state == "live":
-        if in_day:
-            return _plan("live", RESULT_CACHE_LIVE_TTL, True)
-        # Outside day hours on a live date-range. Only a multi-group final day's
-        # finals earn an evening/night overtime tail; earlier days and single-group
-        # shows keep the polite overnight lull between show days.
-        if (
-            is_final_day
-            and expects_main_bis
-            and not settle_by_target
-            and (hour >= evening_hour or hour < night_stop_hour)
-        ):
-            return _plan("overtime", RESULT_CACHE_OVERTIME_TTL, True)
-        return _plan("live", RESULT_CACHE_LIVE_TTL, False)
+        return _plan("live", RESULT_CACHE_LIVE_TTL, in_day)
 
     # state == "past", within the deadline, a multi-group show still owing its
-    # main BIS: rescue.
-    can_fetch = _in_finals_fetch_window(hour, morning_hour, evening_hour, night_stop_hour)
-    return _plan("rescue", RESULT_CACHE_RESCUE_TTL, can_fetch)
+    # main BIS: rescue. Finals typed in after the evening cutoff are picked up by
+    # the next morning's rescue pass, inside the deadline.
+    return _plan("rescue", RESULT_CACHE_RESCUE_TTL, in_day)
 
 def _result_doc_last_result_at(doc):
     """Unix timestamp of the most recent breed that actually produced results.
@@ -468,12 +506,17 @@ def _show_result_availability(
         now = datetime.datetime.combine(now, datetime.time())
 
     today = now.date()
+    # The shared fetch window applies to every show state, not just a live one:
+    # a past show still owing its finals, and a show whose date could not be
+    # parsed, are both waiting for the morning like everything else.
+    in_window = _in_fetch_window(now.hour, morning_hour, evening_hour)
+
     start_date, end_date = _parse_show_date_range(show, today=today)
     if not start_date or not end_date:
         return {
-            "can_fetch": True,
+            "can_fetch": in_window,
             "show_state": "unknown",
-            "reason": "unknown_date",
+            "reason": "unknown_date" if in_window else "show_night",
             "morning_hour": morning_hour,
             "evening_hour": evening_hour,
         }
@@ -499,7 +542,7 @@ def _show_result_availability(
     # Live date range. Results are only worth checking during the day: not
     # before the morning hour and not after the evening hour. This holds on
     # every day of a multi-day show, so a live show goes quiet overnight
-    # (e.g. 21:00–06:00) instead of polling Showlink between show days.
+    # (21:00–08:00) instead of polling Showlink between show days.
     if start_date <= today <= end_date:
         if now.hour < morning_hour:
             return {
@@ -524,9 +567,9 @@ def _show_result_availability(
 
     return {
         **base,
-        "can_fetch": True,
+        "can_fetch": in_window,
         "show_state": "past",
-        "reason": "past_show",
+        "reason": "past_show" if in_window else "show_night",
     }
 
 def _show_live_phase(
@@ -540,10 +583,16 @@ def _show_live_phase(
     """For a show whose date-state is already "live", classify the moment as
     "active" (Käynnissä) or "paused" (Jatkuu).
 
-    "paused" is the multi-day nightly/evening lull *before another show day*: the
-    21:00–06:00 quiet window, or a long result stall during the evening wind-down.
-    The first day's pre-dawn and the final day's wind-down stay "active" so the
-    show only reads as "continuing" when judging genuinely resumes later."""
+    "paused" is any hold the show has not concluded from: the 21:00–08:00 quiet
+    window on any day of the show, or a long result stall during the evening
+    wind-down before another show day. A show reaching its date-state "past"
+    (`_result_live_plan` settling it) is what removes the badge entirely — so a
+    show still owing its finals at 21:00 reads as continuing, not as finished.
+    Leaving it badge-less there made "stopped for the night" indistinguishable
+    from settled history.
+
+    The first day's pre-dawn stays "active": nothing has happened yet to
+    continue from."""
     now = now or _local_now()
     if isinstance(now, datetime.date) and not isinstance(now, datetime.datetime):
         now = datetime.datetime.combine(now, datetime.time(hour=12))
@@ -578,9 +627,13 @@ def _show_live_phase(
     if not in_lull:
         return "active"
 
-    # Only a lull that another in-range show day follows is "Jatkuu". Excludes the
-    # pre-show first morning (next_active_date == start_date) and the final day's
-    # wind-down (next_active_date past end_date).
-    if start_date < next_active_date <= end_date:
+    # The first morning before the show opens has nothing to continue from.
+    if next_active_date <= start_date:
+        return "active"
+
+    # A stall inside the fetch window only counts as a pause when another show
+    # day actually follows; outside the window the show is held for the night
+    # whether or not it will resume, and saying so beats saying nothing.
+    if next_active_date <= end_date:
         return "paused"
-    return "active"
+    return "paused" if not _in_fetch_window(now.hour, morning_hour, evening_hour) else "active"

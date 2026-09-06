@@ -93,15 +93,25 @@ useHead({
             tietoihin yhden ajon aikana; uusi ajo alkaa aikaisintaan 2 minuutin välein ja vain, jos
             kukaan kävijä ei odota tulostietoja ennestään. Käynnissä olevien näyttelyiden tulosvälimuisti
             vanhenee oletuksena 2 minuutissa.</li>
-          <li>Rotulistat: Enintään 6 näyttelyn tiedot haetaan noin 15 minuutin välein.</li>
+          <li>Rotulistat: Enintään 6 näyttelyn tiedot haetaan noin 15 minuutin välein. Uudet
+            näyttelyt haetaan heti, saman päivän näyttelyiden rotulistat noin 5 minuutin välein
+            ja muut tulevat näyttelyt muutaman kerran vuorokaudessa.</li>
+          <li>Käynnissä olevasta näyttelystä haetaan kaksi yhteenvetosivua (ryhmien voittajat ja
+            BIS). Näin nähdään suoraan mitkä loppukilpailut on jo ratkaistu, eikä tarvitse
+            arvailla sitä hakemalla kymmeniä rotusivuja uudelleen.</li>
+          <li>Rotusivuja haetaan uudelleen sen mukaan, mitkä kehät ovat todennäköisimmin kesken:
+            kunkin tuomarin ensimmäinen keskeneräinen rotu haetaan tiheimmin. Valmiiltakin
+            näyttäviä rotuja käydään läpi hitaasti niin kauan kuin näyttely on käynnissä, koska
+            tuloksia voidaan kirjata järjestelmään vasta kehän päätyttyä.</li>
           <li>Näyttelylista: Haetaan uudelleen aikaisintaan 30 minuutin välein.</li>
           <li>Tulevista näyttelyistä haetaan rotulistat. Tuloslistoja aletaan kysellä näyttelypäivänä
-            klo 6:00 aamulla alkaen.
+            klo 8:00 aamulla alkaen.
           </li>
-          <li>Käynnissä olevien näyttelyiden tuloksia ei haeta yöaikaan (klo 21–6). Monipäiväisen
-            näyttelyn tuloksia ei siis turhaan kysellä Showlinkistä öiden yli; aiemmin haetut tulokset
-            näkyvät silti sivulla. Monipäiväinen näyttely näkyy tällöin näyttelylistalla tilassa
-            <em>Jatkuu</em> <em>Käynnissä</em>-tilan sijaan ja jatkaa seuraavana näyttelypäivänä.</li>
+          <li>Mitään ei haeta Showlinkistä klo 21:00–8:00 välisenä aikana — ei tuloksia, ei rotulistoja,
+            ei näyttelylistaa. Yöllä ei ole käynnissä yhtään koiranäyttelyä, joten haku olisi turhaa
+            kuormaa. Aiemmin haetut tulokset näkyvät silti sivulla, ja haku jatkuu aamulla.
+            Monipäiväinen näyttely näkyy yön yli näyttelylistalla tilassa <em>Jatkuu</em>
+            <em>Käynnissä</em>-tilan sijaan ja jatkaa seuraavana näyttelypäivänä.</li>
         </ul>
 
         <h3>Kuka on vastuussa?</h3>
@@ -155,10 +165,12 @@ useHead({
         <ul>
           <li>A visitor wants result data for a show that is not yet cached: The fetch is run for at most one show at a time, in the batches described above.</li>
           <li>Automatic cache for recent shows: Data is fetched for at most 2 shows during one run; a new run starts no sooner than every 2 minutes and only if no visitor is already waiting for result data. Result caches for currently ongoing shows expire after 2 minutes by default.</li>
-          <li>Breed lists: Data for at most 6 shows is fetched about every 15 minutes.</li>
+          <li>Breed lists: Data for at most 6 shows is fetched about every 15 minutes. A show that is new to us is fetched immediately, a show being judged today about every 5 minutes, and other upcoming shows a few times a day.</li>
+          <li>For a show in progress we read two summary pages (group winners and BIS). That says directly which finals have been decided, instead of guessing at it by re-fetching dozens of breed pages.</li>
+          <li>Breed pages are re-read according to which rings are most likely still in progress: each judge's first unfinished breed is checked most often. Breeds that already look finished are still swept slowly for as long as the show runs, because results can be entered into the system after a ring has ended.</li>
           <li>Show list: Fetched again no sooner than every 30 minutes.</li>
-          <li>For upcoming shows, breed lists are fetched. Result lists are first checked on the show day, starting at 6:00 in the morning.</li>
-          <li>Results for ongoing shows are not checked overnight (21:00–06:00). A multi-day show is therefore not polled against Showlink between show days; results fetched earlier still stay visible on the page. During that lull the show appears in the list as <em>Jatkuu</em> ("continues") rather than <em>Käynnissä</em> ("ongoing"), and resumes on the next show day.</li>
+          <li>For upcoming shows, breed lists are fetched. Result lists are first checked on the show day, starting at 8:00 in the morning.</li>
+          <li>Nothing at all is fetched from Showlink between 21:00 and 08:00 — no results, no breed lists, no show list. No dog show runs at night, so those requests would be pure load. Results fetched earlier still stay visible on the page, and fetching resumes in the morning. Over the night a multi-day show appears in the list as <em>Jatkuu</em> ("continues") rather than <em>Käynnissä</em> ("ongoing"), and resumes on the next show day.</li>
         </ul>
 
         <h3>Who is responsible?</h3>

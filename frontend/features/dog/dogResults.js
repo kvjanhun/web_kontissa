@@ -1202,10 +1202,10 @@ function endOfDay(date) {
   return copy
 }
 
-export const RESULT_MORNING_HOUR = 6
+export const RESULT_MORNING_HOUR = 8
 export const RESULT_EVENING_HOUR = 21
 
-// True during the overnight quiet window (default 21:00–06:00 local) when a
+// True during the overnight quiet window (default 21:00–08:00 local) when a
 // live show is not producing results, so the frontend can pause periodic
 // live polling. Mirrors the backend fetch gate in app/dog_show/utils.py.
 export function isOvernightResultWindow(
@@ -1217,7 +1217,7 @@ export function isOvernightResultWindow(
   return hour < morningHour || hour >= eveningHour
 }
 
-export function getShowResultAvailability(show, now = new Date(), morningHour = 6) {
+export function getShowResultAvailability(show, now = new Date(), morningHour = RESULT_MORNING_HOUR) {
   const range = parseShowDateRange(show?.date, show?.month, now.getFullYear())
   if (!range?.start || !range?.end) {
     return {

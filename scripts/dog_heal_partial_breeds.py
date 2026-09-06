@@ -28,7 +28,7 @@ Polite and safe:
 Idempotent: a breed that comes back complete stops matching. A breed the source
 itself left short keeps matching, so use --since / --limit to bound a run. Aim it
 at settled history — shows inside the crawler's auto window are re-checked by its
-own live/overtime/rescue passes.
+own live/rescue passes.
 One-off operational tool; run against the host ./app/data; NOT part of the
 crawler loop.
 

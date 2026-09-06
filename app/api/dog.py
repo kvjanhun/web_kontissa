@@ -27,8 +27,8 @@ dog_bp = Blueprint('dog', __name__)
 def _results_not_ready_response(show_id, availability, reason=None):
     reason_messages = {
         "future_show": "Tuloksia ei haeta vielä ennen näyttelypäivän aamua.",
-        "show_morning": "Tuloksia ei haeta vielä ennen näyttelypäivän klo 6:ta.",
-        "show_night": "Tuloksia ei päivitetä yöaikaan (klo 21–6). Aiemmin haetut tulokset näkyvät yhä.",
+        "show_morning": "Tuloksia ei haeta vielä ennen näyttelypäivän klo 8:aa.",
+        "show_night": "Tuloksia ei päivitetä yöaikaan (klo 21–8). Aiemmin haetut tulokset näkyvät yhä.",
         "cache_warming": "Tuloksia haetaan parhaillaan taustalla. Yritä hetken kuluttua uudelleen.",
     }
     reason = reason or availability.get("reason")
