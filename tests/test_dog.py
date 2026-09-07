@@ -3566,8 +3566,11 @@ def test_show_list_cold_cache_populates_once_outside_the_window(monkeypatch, rea
         return BeautifulSoup(SAMPLE_SHOW_LIST_HTML, "html.parser")
 
     monkeypatch.setattr(dog_shows, "_fetch_page", _fake_fetch)
-    monkeypatch.setattr(dog_utils, "_local_now",
-                        lambda: datetime.datetime(2026, 9, 6, 2, 0))
+    # Pin at `_local_dt`: `_get_show_list` evaluates the window against an
+    # explicit timestamp, so patching `_local_now` alone leaves it on the real
+    # clock and the test passes or fails by the time of day.
+    monkeypatch.setattr(dog_utils, "_local_dt",
+                        lambda now=None: datetime.datetime(2026, 9, 6, 2, 0))
     _show_list_cache["data"] = None
     _show_list_cache["ts"] = 0
 
@@ -4800,24 +4803,24 @@ def test_show_stats_night_hold_reads_as_paused_not_finished(client, monkeypatch,
 
     Driven off the real clock rather than a mocked phase, because the 21:00 flip
     is the whole subject."""
-    # The show has to be running *today* for its date-state to be live, and the
-    # date-state is read off the system date; only the hour is pinned.
-    from app.dog_show.config import FINNISH_MONTHS
+    # Pin the whole clock, then seed the show from it. Deriving the show date
+    # from `date.today()` while the stats path reads Finnish local time made this
+    # depend on the runner's timezone: between 21:00 UTC and midnight the two are
+    # a day apart, and the show read as past on a UTC runner.
+    pinned = datetime.datetime(2026, 9, 6, hour, 0)
+    monkeypatch.setattr(dog_utils, "_local_now", lambda: pinned)
+    monkeypatch.setattr(dog_utils, "_local_dt", lambda now=None: pinned)
+    dog_indexing._show_stats_cache.clear()
 
-    show_date = datetime.date.today()
     seed_index_show("14021", {
         "title": "Amerikancockerspanieli",
         "name": "Amerikancockerspanieli",
-        "date": f"{show_date.day:02d}.{show_date.month:02d}.",
-        "month": FINNISH_MONTHS[show_date.month - 1] + f" {show_date.year}",
+        "date": "06.09.",
+        "month": "syyskuu 2026",
         "breeds": [
             {"name": "amerikancockerspanieli", "count": 21, "group": "8", "breed_id": "117"},
         ],
     })
-    pinned = datetime.datetime.combine(show_date, datetime.time(hour=hour))
-    monkeypatch.setattr(dog_utils, "_local_now", lambda: pinned)
-    monkeypatch.setattr(dog_indexing, "_local_now", lambda: pinned, raising=False)
-    dog_indexing._show_stats_cache.clear()
 
     stats = dog_indexing._show_stats_from_index(14021)
 

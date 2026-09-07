@@ -401,7 +401,7 @@ def _infer_show_year_from_date_month(month, today=None):
     if not month:
         return None
 
-    today = today or datetime.date.today()
+    today = today or _local_now().date()
     year = today.year
 
     # Showlink's relative sections ("Tänään", "Huomenna") omit the year.
@@ -480,7 +480,14 @@ def _parse_show_date(show, today=None):
     return end_date
 
 def _show_date_state(show, today=None):
-    today = today or datetime.date.today()
+    """Whether a show is upcoming, live or past, on the Finnish calendar.
+
+    The date must come from the same clock as everything else: the containers run
+    in UTC, so between 21:00 UTC and midnight the system date is still yesterday
+    in Helsinki terms. A show that ended that evening then reads as live here
+    while `_result_live_plan` — which has always used Finnish local time — reads
+    it as past, and the two disagree for three hours every night."""
+    today = today or _local_now().date()
     start_date, end_date = _parse_show_date_range(show, today=today)
     if not start_date or not end_date:
         return "unknown"
@@ -492,7 +499,7 @@ def _show_date_state(show, today=None):
     return "upcoming"
 
 def _show_age_days(show, today=None):
-    today = today or datetime.date.today()
+    today = today or _local_now().date()
     show_date = _parse_show_date(show, today=today)
     if not show_date:
         return None
