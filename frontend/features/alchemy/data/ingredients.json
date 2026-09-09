@@ -1,0 +1,223 @@
+[
+  {
+    "id": "amanita-muscaria",
+    "name": "Amanita Muscaria",
+    "category": "fungus",
+    "aliases": [
+      "fly agaric",
+      "toadstool",
+      "mushroom"
+    ]
+  },
+  {
+    "id": "belladonna",
+    "name": "Belladonna",
+    "category": "herb",
+    "aliases": [
+      "deadly nightshade",
+      "nightshade"
+    ]
+  },
+  {
+    "id": "boars-tusk",
+    "name": "Boar's Tusk",
+    "category": "animal",
+    "aliases": [
+      "tusk"
+    ]
+  },
+  {
+    "id": "chamomile",
+    "name": "Chamomile",
+    "category": "herb",
+    "aliases": [
+      "camomile"
+    ]
+  },
+  {
+    "id": "charcoal",
+    "name": "Charcoal",
+    "category": "mineral",
+    "aliases": []
+  },
+  {
+    "id": "cobweb",
+    "name": "Cobweb",
+    "category": "other",
+    "aliases": [
+      "spider web",
+      "web"
+    ]
+  },
+  {
+    "id": "comfrey",
+    "name": "Comfrey",
+    "category": "herb",
+    "aliases": [
+      "knitbone"
+    ]
+  },
+  {
+    "id": "dandelion",
+    "name": "Dandelion",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "elderberry-leaf",
+    "name": "Elderberry Leaf",
+    "category": "herb",
+    "aliases": [
+      "elder",
+      "elderberry"
+    ]
+  },
+  {
+    "id": "eyebright",
+    "name": "Eyebright",
+    "category": "herb",
+    "aliases": [
+      "euphrasia"
+    ]
+  },
+  {
+    "id": "feverfew",
+    "name": "Feverfew",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "freshwater-pearl",
+    "name": "Freshwater Pearl",
+    "category": "animal",
+    "aliases": [
+      "pearl",
+      "river pearl"
+    ]
+  },
+  {
+    "id": "ginger",
+    "name": "Ginger",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "henbane",
+    "name": "Henbane",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "herb-paris",
+    "name": "Herb Paris",
+    "category": "herb",
+    "aliases": [
+      "paris",
+      "true lover's knot"
+    ]
+  },
+  {
+    "id": "leached-coal",
+    "name": "Leached Coal",
+    "category": "mineral",
+    "aliases": [
+      "coal",
+      "leached charcoal",
+      "infused charcoal"
+    ]
+  },
+  {
+    "id": "mandrake-root",
+    "name": "Mandrake Root",
+    "category": "herb",
+    "aliases": [
+      "mandrake"
+    ]
+  },
+  {
+    "id": "marigold",
+    "name": "Marigold",
+    "category": "herb",
+    "aliases": [
+      "calendula"
+    ]
+  },
+  {
+    "id": "mint",
+    "name": "Mint",
+    "category": "herb",
+    "aliases": [
+      "mentha"
+    ]
+  },
+  {
+    "id": "nettle",
+    "name": "Nettle",
+    "category": "herb",
+    "aliases": [
+      "stinging nettle"
+    ]
+  },
+  {
+    "id": "poppy",
+    "name": "Poppy",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "sage",
+    "name": "Sage",
+    "category": "herb",
+    "aliases": [
+      "salvia"
+    ]
+  },
+  {
+    "id": "saltpetre",
+    "name": "Saltpetre",
+    "category": "mineral",
+    "aliases": [
+      "saltpeter",
+      "nitre",
+      "niter"
+    ]
+  },
+  {
+    "id": "st-johns-wort",
+    "name": "St. John's Wort",
+    "category": "herb",
+    "aliases": [
+      "hypericum",
+      "johns wort"
+    ]
+  },
+  {
+    "id": "sulphur",
+    "name": "Sulphur",
+    "category": "mineral",
+    "aliases": [
+      "sulfur",
+      "brimstone"
+    ]
+  },
+  {
+    "id": "thistle",
+    "name": "Thistle",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "valerian",
+    "name": "Valerian",
+    "category": "herb",
+    "aliases": []
+  },
+  {
+    "id": "wormwood",
+    "name": "Wormwood",
+    "category": "herb",
+    "aliases": [
+      "artemisia absinthium"
+    ]
+  }
+]

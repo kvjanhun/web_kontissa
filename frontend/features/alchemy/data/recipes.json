@@ -1,0 +1,1575 @@
+[
+  {
+    "id": "marigold-decoction",
+    "name": "Marigold Decoction",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "nettle",
+        "qty": 1
+      },
+      {
+        "id": "marigold",
+        "qty": 2
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add nettle and boil for 2 turns.",
+        "uses": [
+          "nettle"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind marigold and add it to the cauldron.",
+        "uses": [
+          "marigold"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Heals 25 Health over one minute, and hangovers pass 100% faster.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "chamomile-decoction",
+    "name": "Chamomile Decoction",
+    "base": "wine",
+    "ingredients": [
+      {
+        "id": "chamomile",
+        "qty": 2
+      },
+      {
+        "id": "sage",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add chamomile and boil for 1 turn.",
+        "uses": [
+          "chamomile"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind sage and add it to the cauldron.",
+        "uses": [
+          "sage"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "For one day, sleep heals you three times faster.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "saviour-schnapps",
+    "name": "Saviour Schnapps",
+    "base": "wine",
+    "ingredients": [
+      {
+        "id": "nettle",
+        "qty": 1
+      },
+      {
+        "id": "belladonna",
+        "qty": 2
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add nettle and boil for 2 turns.",
+        "uses": [
+          "nettle"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind belladonna, add it, and boil for 1 turn.",
+        "uses": [
+          "belladonna"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Saves the game, heals 10 Health and raises Strength, Vitality and Agility by 1 for 3 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "bane-potion",
+    "name": "Bane Potion",
+    "base": "wine",
+    "ingredients": [
+      {
+        "id": "wormwood",
+        "qty": 1
+      },
+      {
+        "id": "belladonna",
+        "qty": 2
+      },
+      {
+        "id": "amanita-muscaria",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add wormwood and boil for 2 turns.",
+        "uses": [
+          "wormwood"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind belladonna, add it, and boil for 1 turn with the bellows.",
+        "uses": [
+          "belladonna"
+        ],
+        "grind": true,
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Add Amanita Muscaria.",
+        "uses": [
+          "amanita-muscaria"
+        ]
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "A poison. Makes running impossible and reduces Health by 110 over 45 seconds.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "aesop",
+    "name": "Aesop",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "comfrey",
+        "qty": 2
+      },
+      {
+        "id": "boars-tusk",
+        "qty": 1
+      },
+      {
+        "id": "belladonna",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind comfrey and add it to the cauldron.",
+        "uses": [
+          "comfrey"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add the boar's tusk and boil for 2 turns.",
+        "uses": [
+          "boars-tusk"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind belladonna and add it to the cauldron.",
+        "uses": [
+          "belladonna"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Raises Horsemanship and Houndmaster by 3 for a quarter of a day. Animals take less notice of you.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "aqua-vitalis",
+    "name": "Aqua Vitalis",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "dandelion",
+        "qty": 2
+      },
+      {
+        "id": "marigold",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add dandelion and boil for 1 turn.",
+        "uses": [
+          "dandelion"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind marigold, add it, and boil for 2 turns.",
+        "uses": [
+          "marigold"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "You lose 15% less Health and bleeding is slowed by 10%, for 10 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "artemisia",
+    "name": "Artemisia",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "wormwood",
+        "qty": 2
+      },
+      {
+        "id": "sage",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add sage and boil for 1 turn.",
+        "uses": [
+          "sage"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind wormwood, add it, and boil for 2 turns.",
+        "uses": [
+          "wormwood"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Raises Strength by 4 for 10 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "bowmans-brew",
+    "name": "Bowman's Brew",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "eyebright",
+        "qty": 2
+      },
+      {
+        "id": "st-johns-wort",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add eyebright and boil for 3 turns.",
+        "uses": [
+          "eyebright"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind St. John's Wort and add it to the cauldron.",
+        "uses": [
+          "st-johns-wort"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Boil for 1 turn with the bellows.",
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Raises Marksmanship by 3 and slows Stamina loss when aiming by 20%, for 10 minutes.",
+    "verified": true,
+    "sources": [
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "bucks-blood",
+    "name": "Buck's Blood",
+    "base": "oil",
+    "ingredients": [
+      {
+        "id": "st-johns-wort",
+        "qty": 1
+      },
+      {
+        "id": "comfrey",
+        "qty": 1
+      },
+      {
+        "id": "dandelion",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind St. John's Wort and add it to the cauldron.",
+        "uses": [
+          "st-johns-wort"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add comfrey and boil for 1 turn.",
+        "uses": [
+          "comfrey"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Add dandelion and boil for 1 turn with the bellows.",
+        "uses": [
+          "dandelion"
+        ],
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Raises Stamina by 30% for 20 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "cockerel",
+    "name": "Cockerel",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "mint",
+        "qty": 2
+      },
+      {
+        "id": "valerian",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind mint, add it, and boil for 1 turn.",
+        "uses": [
+          "mint"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Add valerian and boil for 2 turns.",
+        "uses": [
+          "valerian"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Raises Energy by 20.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "decoction-of-st-roch",
+    "name": "Decoction of St. Roch",
+    "base": "wine",
+    "dlc": "Mysteria Ecclesiae",
+    "ingredients": [
+      {
+        "id": "st-johns-wort",
+        "qty": 2
+      },
+      {
+        "id": "chamomile",
+        "qty": 2
+      },
+      {
+        "id": "ginger",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind St. John's Wort, add it, and boil for 1 turn.",
+        "uses": [
+          "st-johns-wort"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Raise the cauldron, add chamomile, then lower it again without flipping the timer.",
+        "uses": [
+          "chamomile"
+        ]
+      },
+      {
+        "text": "Immediately grind ginger and drop it into the lowered cauldron.",
+        "uses": [
+          "ginger"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pull the bellows twice.",
+        "bellows": true
+      },
+      {
+        "text": "Raise the cauldron and distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Raises Vitality by 1, and healing potions heal you 30% faster, for 20 minutes.",
+    "verified": false,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "digestive-potion",
+    "name": "Digestive Potion",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "thistle",
+        "qty": 2
+      },
+      {
+        "id": "nettle",
+        "qty": 1
+      },
+      {
+        "id": "charcoal",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add thistle and boil for 2 turns.",
+        "uses": [
+          "thistle"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind nettle, add it, and boil for 1 turn.",
+        "uses": [
+          "nettle"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Grind charcoal and add it to the cauldron.",
+        "uses": [
+          "charcoal"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Lowers Nourishment by 20, cures food poisoning and raises Vitality by 1 for 10 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "dollmaker-potion",
+    "name": "Dollmaker Potion",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "herb-paris",
+        "qty": 2
+      },
+      {
+        "id": "valerian",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add Herb Paris and boil for 3 turns.",
+        "uses": [
+          "herb-paris"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind valerian, add it, and boil for 2 turns.",
+        "uses": [
+          "valerian"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "A poison. Makes running impossible, lowers all weapon skills by 3 and gradually reduces Health by 20.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "embrocation",
+    "name": "Embrocation",
+    "base": "oil",
+    "ingredients": [
+      {
+        "id": "poppy",
+        "qty": 1
+      },
+      {
+        "id": "valerian",
+        "qty": 1
+      },
+      {
+        "id": "eyebright",
+        "qty": 1
+      },
+      {
+        "id": "boars-tusk",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add poppy and valerian, then boil for 2 turns.",
+        "uses": [
+          "poppy",
+          "valerian"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind eyebright and add it to the cauldron.",
+        "uses": [
+          "eyebright"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add the boar's tusk and boil for 1 turn.",
+        "uses": [
+          "boars-tusk"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Raises Agility by 4 and sprinting costs 10% less Stamina, for 10 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "fever-tonic",
+    "name": "Fever Tonic",
+    "base": "wine",
+    "ingredients": [
+      {
+        "id": "feverfew",
+        "qty": 3
+      },
+      {
+        "id": "ginger",
+        "qty": 2
+      },
+      {
+        "id": "elderberry-leaf",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add feverfew and boil for 2 turns.",
+        "uses": [
+          "feverfew"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind elderberry leaf and add it to the cauldron.",
+        "uses": [
+          "elderberry-leaf"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add ginger.",
+        "uses": [
+          "ginger"
+        ]
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Alleviates fever if given in time.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "fox",
+    "name": "Fox",
+    "base": "oil",
+    "ingredients": [
+      {
+        "id": "st-johns-wort",
+        "qty": 1
+      },
+      {
+        "id": "nettle",
+        "qty": 1
+      },
+      {
+        "id": "belladonna",
+        "qty": 1
+      },
+      {
+        "id": "charcoal",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind St. John's Wort and nettle, add them, and boil for 2 turns.",
+        "uses": [
+          "st-johns-wort",
+          "nettle"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Grind charcoal and add it to the cauldron.",
+        "uses": [
+          "charcoal"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add belladonna and boil for 1 turn.",
+        "uses": [
+          "belladonna"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Raises Speech by 3 and increases your reading speed, for a day.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "hair-o-the-dog",
+    "name": "Hair o' the Dog",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "sage",
+        "qty": 1
+      },
+      {
+        "id": "st-johns-wort",
+        "qty": 1
+      },
+      {
+        "id": "mint",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add sage and St. John's Wort, then boil for 3 turns.",
+        "uses": [
+          "sage",
+          "st-johns-wort"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind mint and add it to the cauldron.",
+        "uses": [
+          "mint"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Lowers drunkenness, or removes a hangover.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "lead-shot-gunpowder",
+    "name": "Lead Shot Gunpowder",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "saltpetre",
+        "qty": 1
+      },
+      {
+        "id": "sulphur",
+        "qty": 1
+      },
+      {
+        "id": "charcoal",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind saltpetre and sulphur, add them, and boil for 2 turns.",
+        "uses": [
+          "saltpetre",
+          "sulphur"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Grind charcoal, add it, and boil for 2 turns.",
+        "uses": [
+          "charcoal"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Pour into the mortar and grind.",
+        "finish": "grind"
+      }
+    ],
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409"
+    ]
+  },
+  {
+    "id": "lethean-water",
+    "name": "Lethean Water",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "wormwood",
+        "qty": 2
+      },
+      {
+        "id": "belladonna",
+        "qty": 1
+      },
+      {
+        "id": "henbane",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind wormwood and add it to the cauldron.",
+        "uses": [
+          "wormwood"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add belladonna and boil for 3 turns.",
+        "uses": [
+          "belladonna"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Add henbane.",
+        "uses": [
+          "henbane"
+        ]
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Obliterates all perk points so they can be spent elsewhere.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "lion-perfume",
+    "name": "Lion Perfume",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "sage",
+        "qty": 2
+      },
+      {
+        "id": "mint",
+        "qty": 2
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add sage and boil for 2 turns.",
+        "uses": [
+          "sage"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind mint and add it to the cauldron.",
+        "uses": [
+          "mint"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "A perfume. Raises Charisma by 4 for 4 minutes.",
+    "verified": true,
+    "sources": [
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "lullaby",
+    "name": "Lullaby",
+    "base": "oil",
+    "ingredients": [
+      {
+        "id": "poppy",
+        "qty": 1
+      },
+      {
+        "id": "thistle",
+        "qty": 1
+      },
+      {
+        "id": "herb-paris",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add poppy and boil for 1 turn.",
+        "uses": [
+          "poppy"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Add thistle and boil for 1 turn.",
+        "uses": [
+          "thistle"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind Herb Paris and add it to the cauldron.",
+        "uses": [
+          "herb-paris"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "A poison. Drops Energy to 0, dulls perception and lowers Stamina and its regeneration by 10%.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "mintha-perfume",
+    "name": "Mintha Perfume",
+    "base": "wine",
+    "ingredients": [
+      {
+        "id": "dandelion",
+        "qty": 3
+      },
+      {
+        "id": "marigold",
+        "qty": 1
+      },
+      {
+        "id": "mint",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind dandelion and mint, add them, and boil for 2 turns.",
+        "uses": [
+          "dandelion",
+          "mint"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Add marigold and boil for 1 turn with the bellows.",
+        "uses": [
+          "marigold"
+        ],
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "A perfume. Raises Charisma by 2 for 20 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "moonshine",
+    "name": "Moonshine",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "wormwood",
+        "qty": 2
+      },
+      {
+        "id": "mint",
+        "qty": 2
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add wormwood and boil for 2 turns.",
+        "uses": [
+          "wormwood"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind mint, add it, and boil for 1 turn.",
+        "uses": [
+          "mint"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/"
+    ]
+  },
+  {
+    "id": "nighthawk",
+    "name": "Nighthawk",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "eyebright",
+        "qty": 2
+      },
+      {
+        "id": "belladonna",
+        "qty": 1
+      },
+      {
+        "id": "chamomile",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind eyebright and add it to the cauldron.",
+        "uses": [
+          "eyebright"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add belladonna and boil for 3 turns.",
+        "uses": [
+          "belladonna"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind chamomile and add it to the cauldron.",
+        "uses": [
+          "chamomile"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "You see better in the dark and Energy drains 25% slower, for 15 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "painkiller-brew",
+    "name": "Painkiller Brew",
+    "base": "spiritus",
+    "ingredients": [
+      {
+        "id": "poppy",
+        "qty": 3
+      },
+      {
+        "id": "comfrey",
+        "qty": 1
+      },
+      {
+        "id": "marigold",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind poppy and add it to the cauldron.",
+        "uses": [
+          "poppy"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Add marigold and boil for 1 turn with the bellows.",
+        "uses": [
+          "marigold"
+        ],
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Add comfrey and boil for 2 turns.",
+        "uses": [
+          "comfrey"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "effect": "Suppresses the effects of injury, and maximum Stamina drops with Health 30% less, for 15 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "quickfinger-potion",
+    "name": "Quickfinger Potion",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "valerian",
+        "qty": 2
+      },
+      {
+        "id": "eyebright",
+        "qty": 2
+      },
+      {
+        "id": "cobweb",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add cobweb and eyebright, then boil for 3 turns.",
+        "uses": [
+          "cobweb",
+          "eyebright"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind valerian, add it, and boil for 1 turn.",
+        "uses": [
+          "valerian"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Raises Craftsmanship and Thievery by 4 for 20 minutes.",
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "scattershot-powder",
+    "name": "Scattershot Powder",
+    "base": "water",
+    "ingredients": [
+      {
+        "id": "saltpetre",
+        "qty": 1
+      },
+      {
+        "id": "sulphur",
+        "qty": 1
+      },
+      {
+        "id": "leached-coal",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind sulphur and saltpetre, add them, and boil for 3 turns.",
+        "uses": [
+          "sulphur",
+          "saltpetre"
+        ],
+        "grind": true,
+        "turns": 3
+      },
+      {
+        "text": "Grind leached coal, add it, and boil for 1 turn.",
+        "uses": [
+          "leached-coal"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Pour into the mortar and grind.",
+        "finish": "grind"
+      }
+    ],
+    "verified": true,
+    "sources": [
+      "https://gist.github.com/nickheyer/fa24767640bd508be66507f51b6f2c6d",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409"
+    ]
+  },
+  {
+    "id": "soap",
+    "name": "Soap",
+    "base": "oil",
+    "ingredients": [
+      {
+        "id": "thistle",
+        "qty": 2
+      },
+      {
+        "id": "dandelion",
+        "qty": 1
+      },
+      {
+        "id": "charcoal",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind thistle, add it, and boil for 2 turns.",
+        "uses": [
+          "thistle"
+        ],
+        "grind": true,
+        "turns": 2
+      },
+      {
+        "text": "Add dandelion and boil for 1 turn.",
+        "uses": [
+          "dandelion"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind charcoal and add it to the cauldron.",
+        "uses": [
+          "charcoal"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "verified": true,
+    "sources": [
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409"
+    ]
+  },
+  {
+    "id": "mandrake-decoction",
+    "name": "Mandrake Decoction",
+    "base": "wine",
+    "dlc": "Brushes with Death",
+    "ingredients": [
+      {
+        "id": "mandrake-root",
+        "qty": 1
+      },
+      {
+        "id": "sage",
+        "qty": 2
+      },
+      {
+        "id": "freshwater-pearl",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add the mandrake root and boil for 1 turn.",
+        "uses": [
+          "mandrake-root"
+        ],
+        "turns": 1
+      },
+      {
+        "text": "Grind the freshwater pearl, add it, and boil for 1 turn.",
+        "uses": [
+          "freshwater-pearl"
+        ],
+        "grind": true,
+        "turns": 1
+      },
+      {
+        "text": "Grind sage, add it, and boil for 1 turn with the bellows.",
+        "uses": [
+          "sage"
+        ],
+        "grind": true,
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Distil into a phial.",
+        "finish": "distil"
+      }
+    ],
+    "verified": true,
+    "sources": [
+      "https://www.powerpyx.com/kingdom-come-deliverance-2-all-potions-alchemy-recipes/",
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409"
+    ]
+  },
+  {
+    "id": "anti-inflammatory-potion",
+    "name": "Anti-Inflammatory Potion",
+    "base": "water",
+    "dlc": "Mysteria Ecclesiae",
+    "ingredients": [
+      {
+        "id": "nettle",
+        "qty": 1
+      },
+      {
+        "id": "valerian",
+        "qty": 2
+      },
+      {
+        "id": "ginger",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Grind nettle and add it to the cauldron.",
+        "uses": [
+          "nettle"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Boil for 1 turn with the bellows.",
+        "bellows": true,
+        "turns": 1
+      },
+      {
+        "text": "Add valerian and boil for 2 turns.",
+        "uses": [
+          "valerian"
+        ],
+        "turns": 2
+      },
+      {
+        "text": "Grind ginger and add it to the cauldron.",
+        "uses": [
+          "ginger"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "effect": "Raises Agility and Strength by 2 for 10 minutes.",
+    "verified": false,
+    "sources": [
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409",
+      "https://kingdomcomedeliverance2.wiki.fextralife.com/Potions"
+    ]
+  },
+  {
+    "id": "essential-oil",
+    "name": "Essential Oil",
+    "base": "oil",
+    "dlc": "Mysteria Ecclesiae",
+    "ingredients": [
+      {
+        "id": "chamomile",
+        "qty": 3
+      },
+      {
+        "id": "sage",
+        "qty": 1
+      },
+      {
+        "id": "valerian",
+        "qty": 1
+      }
+    ],
+    "steps": [
+      {
+        "text": "Add chamomile and boil for 3 turns.",
+        "uses": [
+          "chamomile"
+        ],
+        "turns": 3
+      },
+      {
+        "text": "Grind sage and add it to the cauldron.",
+        "uses": [
+          "sage"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Boil for 1 turn.",
+        "turns": 1
+      },
+      {
+        "text": "Grind valerian and add it to the cauldron.",
+        "uses": [
+          "valerian"
+        ],
+        "grind": true
+      },
+      {
+        "text": "Pour into a phial.",
+        "finish": "pour"
+      }
+    ],
+    "verified": false,
+    "sources": [
+      "https://game-checklists.com/kcd2/potions-checklist/",
+      "https://steamcommunity.com/sharedfiles/filedetails/?id=3421800409"
+    ]
+  }
+]

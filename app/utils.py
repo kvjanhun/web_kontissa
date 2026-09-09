@@ -54,6 +54,7 @@ SPA_ROUTE_PREFIXES = (
     "/admin",
     "/recipes",
     "/dog",
+    "/alchemy",
     "/about",    # routeRules redirect → /
     "/contact",  # routeRules redirect → /
 )

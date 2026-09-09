@@ -31,6 +31,7 @@ Here's some documentation on the parts of the stack that are not available for n
 These docs cover stateful features, server-side integrations, and operational tooling that are not obvious from the public static pages.
 
 - [Dog show browser](./frontend/features/dog/README.md) — Human overview of the `/dog` frontend.
+- [Alchemy helper](./frontend/features/alchemy/README.md) — The `/alchemy` KCD2 recipe browser and ingredient matcher. Unlisted: nothing links to it and it is `noindex`, but it is a real route with its own tests.
 - [Dog show browser operations](./docs/dog-show-browser.md) — Showlink crawling, caching, whole-show filtering, and operations.
 - [Observability stack](./server/observability) - Live logging with Grafana, Loki, Alloy, Prometheus.
 

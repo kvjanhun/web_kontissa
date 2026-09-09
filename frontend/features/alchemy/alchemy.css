@@ -1,0 +1,602 @@
+/* ═══ Scoped design tokens ═══
+   One locked dark theme. Unlike .dog-page this feature deliberately ignores the
+   site's `.dark` class — there is no light variant, so the ground colour must be
+   painted here at full bleed rather than inherited from body, or the page would
+   sit as a dark slab on a white gutter whenever the site is in light mode. */
+.alchemy-page {
+  --al-bg: #17130f;
+  --al-bg-deep: #100d0a;
+  --al-surface: #211b16;
+  --al-surface-el: #2b231c;
+  --al-text: #ede4d6;
+  --al-text-muted: #a8998a;
+  --al-text-faint: #7d7062;
+  --al-border: #3a2f26;
+  --al-border-strong: #4d3f33;
+  --al-accent: #d9a441;
+  --al-accent-dim: #8a6a2b;
+  --al-copper: #b5673c;
+  --al-good: #8fb469;
+  --al-warn: #c2703c;
+  --al-radius-sm: 0.25rem;
+  --al-radius-md: 0.5rem;
+  --al-radius-lg: 0.75rem;
+
+  /* Native checkboxes and text inputs follow this rather than the OS theme,
+     which would otherwise render them as bright chrome on the dark ground. */
+  color-scheme: dark;
+
+  font-family: 'DM Sans', sans-serif;
+  color: var(--al-text);
+  background:
+    radial-gradient(120% 60% at 50% 0%, rgba(217, 164, 65, 0.07) 0%, transparent 60%),
+    var(--al-bg);
+  min-height: 100dvh;
+  padding: 0 1rem 5rem;
+}
+
+.alchemy-shell {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+/* ═══ Header ═══ */
+.al-header {
+  padding: 2.5rem 0 1.5rem;
+  border-bottom: 1px solid var(--al-border);
+  position: relative;
+}
+
+/* The thin second rule under the header is the one overt period flourish —
+   a manuscript double rule, done with a pseudo-element so it costs no markup. */
+.al-header::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -4px;
+  height: 1px;
+  background: var(--al-border);
+  opacity: 0.5;
+}
+
+.al-title {
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  margin: 0;
+  color: var(--al-text);
+}
+
+.al-title-mark {
+  color: var(--al-accent);
+}
+
+.al-subtitle {
+  margin: 0.4rem 0 0;
+  color: var(--al-text-muted);
+  font-size: 0.95rem;
+  letter-spacing: 0.04em;
+}
+
+/* ═══ Tabs ═══ */
+.al-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1.5rem 0 1.25rem;
+  flex-wrap: wrap;
+}
+
+.al-tab {
+  background: transparent;
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-md);
+  color: var(--al-text-muted);
+  padding: 0.55rem 1.1rem;
+  font: inherit;
+  font-size: 0.9rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.al-tab:hover {
+  color: var(--al-text);
+  border-color: var(--al-border-strong);
+}
+
+.al-tab-active,
+.al-tab-active:hover {
+  color: var(--al-bg-deep);
+  background: var(--al-accent);
+  border-color: var(--al-accent);
+  font-weight: 600;
+}
+
+/* ═══ Controls ═══ */
+.al-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+/* `flex` only applies inside .al-controls; the picker renders this input as a
+   plain block, where it would otherwise fall back to the browser's default
+   input width. */
+.al-search {
+  flex: 1 1 16rem;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--al-surface);
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-md);
+  color: var(--al-text);
+  padding: 0.6rem 0.85rem;
+  font: inherit;
+  font-size: 0.95rem;
+}
+
+.al-search::placeholder {
+  color: var(--al-text-faint);
+}
+
+.al-search:focus {
+  outline: 2px solid var(--al-accent-dim);
+  outline-offset: 1px;
+  border-color: var(--al-accent-dim);
+}
+
+.al-filters {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.al-chip {
+  background: var(--al-surface);
+  border: 1px solid var(--al-border);
+  border-radius: 999px;
+  color: var(--al-text-muted);
+  padding: 0.4rem 0.85rem;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+/* --al-media is read through a fallback rather than declared here, so a base
+   chip's own .al-base-* class supplies the hue whatever the source order is,
+   and the "All" chip falls back to the page accent. */
+.al-chip:hover {
+  color: var(--al-media, var(--al-accent));
+  border-color: var(--al-border-strong);
+}
+
+.al-chip-active,
+.al-chip-active:hover {
+  color: var(--al-media, var(--al-accent));
+  border-color: color-mix(in srgb, var(--al-media, var(--al-accent)) 55%, transparent);
+  background: color-mix(in srgb, var(--al-media, var(--al-accent)) 14%, var(--al-surface));
+}
+
+/* ═══ Section headings ═══ */
+.al-section-title {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--al-text-faint);
+  margin: 2rem 0 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.al-section-title::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--al-border);
+}
+
+.al-count {
+  color: var(--al-text-faint);
+  font-weight: 400;
+}
+
+/* ═══ Recipe list ═══ */
+.al-list {
+  display: grid;
+  gap: 0.6rem;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+
+/* A flex column rather than `display: block`: a <button> centres its content
+   box vertically, so a card whose title row wraps sat lower than its neighbours
+   in the same grid row. */
+.al-card {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  width: 100%;
+  text-align: left;
+  background: var(--al-surface);
+  border: 1px solid var(--al-border);
+  border-left: 3px solid var(--al-accent-dim);
+  border-radius: var(--al-radius-md);
+  padding: 0.9rem 1rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease, transform 0.15s ease;
+}
+
+.al-card:hover {
+  background: var(--al-surface-el);
+  border-left-color: var(--al-accent);
+  transform: translateY(-1px);
+}
+
+.al-card-good {
+  border-left-color: var(--al-good);
+}
+
+.al-card-short {
+  border-left-color: var(--al-warn);
+}
+
+.al-card-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 0.35rem;
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.al-card-meta {
+  margin: 0;
+  color: var(--al-text-muted);
+  font-size: 0.85rem;
+}
+
+.al-card-missing {
+  margin: 0.45rem 0 0;
+  color: var(--al-warn);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+/* ═══ Badges ═══ */
+.al-base {
+  --al-media: var(--al-copper);
+  display: inline-block;
+  font-size: 0.7rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--al-media);
+  border: 1px solid color-mix(in srgb, var(--al-media) 50%, transparent);
+  background: color-mix(in srgb, var(--al-media) 12%, transparent);
+  border-radius: var(--al-radius-sm);
+  padding: 0.1rem 0.4rem;
+  font-weight: 600;
+}
+
+/* ═══ Colour axis 1: solution media ═══
+   The base liquid is the first thing that decides whether a recipe is brewable
+   at all, so it gets its own hue rather than one shared copper. */
+.al-base-water { --al-media: #6fa8d0; }
+.al-base-wine { --al-media: #cf6b8a; }
+.al-base-oil { --al-media: #b9a95e; }
+.al-base-spiritus { --al-media: #9a8ad9; }
+
+/* ═══ Colour axis 2: ingredient categories ═══
+   Set on the row, read by both the name and the category label, so an
+   ingredient reads the same everywhere it appears. Minerals are deliberately
+   the dullest of the five — they are the inert ones. */
+.al-cat-herb { --al-cat: #9dc07a; }
+.al-cat-fungus { --al-cat: #d68fb4; }
+.al-cat-mineral { --al-cat: #9aa8b8; }
+.al-cat-animal { --al-cat: #e0916e; }
+.al-cat-other { --al-cat: #86b5ab; }
+
+.al-ing-name {
+  color: var(--al-cat, var(--al-text));
+}
+
+/* The quantity prefix on a match card. Dimmed against the ingredient name so
+   the name stays the thing you scan for. */
+.al-qty-inline {
+  font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
+  font-size: 0.78rem;
+  opacity: 0.7;
+}
+
+/* Inline runs of ingredients on the cards. The separator is a pseudo-element so
+   the names stay individually colourable without separator markup between them. */
+.al-inline-list > *:not(:last-child)::after {
+  content: ' · ';
+  color: var(--al-text-faint);
+}
+
+/* DLC recipes are not in the base game, so the badge answers "why have I never
+   seen this in my recipe book?" before it gets asked. */
+.al-dlc {
+  display: inline-block;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--al-text-muted);
+  border: 1px solid var(--al-border-strong);
+  border-radius: var(--al-radius-sm);
+  padding: 0.1rem 0.4rem;
+}
+
+/* An unverified recipe is one that has not yet been confirmed against a second
+   source. It must stay visibly marked rather than silently presented as fact. */
+.al-unverified {
+  display: inline-block;
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--al-warn);
+  border: 1px dashed color-mix(in srgb, var(--al-warn) 50%, transparent);
+  border-radius: var(--al-radius-sm);
+  padding: 0.1rem 0.4rem;
+}
+
+/* ═══ Recipe detail ═══ */
+.al-back {
+  background: none;
+  border: none;
+  color: var(--al-accent);
+  font: inherit;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  margin: 1.25rem 0;
+}
+
+.al-back:hover {
+  text-decoration: underline;
+}
+
+.al-detail {
+  background: var(--al-surface);
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-lg);
+  padding: 1.5rem;
+}
+
+.al-detail-name {
+  font-size: 1.6rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  letter-spacing: 0.02em;
+}
+
+.al-detail-badges {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.al-effect {
+  color: var(--al-text-muted);
+  margin: 0 0 0.4rem;
+  line-height: 1.55;
+}
+
+.al-effect-strong {
+  color: var(--al-accent);
+}
+
+.al-ingredients {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr));
+}
+
+.al-ingredient {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  background: var(--al-bg-deep);
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-sm);
+  padding: 0.45rem 0.65rem;
+}
+
+.al-qty {
+  font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
+  color: var(--al-accent);
+  font-size: 0.85rem;
+  font-weight: 600;
+  min-width: 1.5rem;
+}
+
+.al-ingredient-cat {
+  margin-left: auto;
+  font-size: 0.7rem;
+  color: var(--al-cat, var(--al-text-faint));
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ═══ Steps ═══ */
+.al-steps {
+  list-style: none;
+  counter-reset: al-step;
+  padding: 0;
+  margin: 0;
+}
+
+.al-step {
+  counter-increment: al-step;
+  display: flex;
+  gap: 0.85rem;
+  padding: 0.7rem 0;
+  border-bottom: 1px solid var(--al-border);
+  line-height: 1.55;
+}
+
+.al-step:last-child {
+  border-bottom: none;
+}
+
+.al-step::before {
+  content: counter(al-step);
+  font-family: 'Commit Mono', ui-monospace, Menlo, Consolas, monospace;
+  color: var(--al-accent-dim);
+  font-size: 0.85rem;
+  flex: 0 0 1.5rem;
+  text-align: right;
+  padding-top: 0.15rem;
+}
+
+.al-step-body {
+  flex: 1;
+}
+
+.al-step-ing {
+  color: var(--al-cat, var(--al-text));
+  font-weight: 700;
+}
+
+.al-step-tags {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+/* ═══ Colour axis 3: brewing operations ═══
+   Same treatment as the turn counter, which reads well: coloured text, a
+   matching border and a faint wash. Muted grey made the operation — the part
+   you actually have to perform at the cauldron — the least visible thing on
+   the step. */
+.al-tag {
+  --al-op: var(--al-text-faint);
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--al-op);
+  border: 1px solid color-mix(in srgb, var(--al-op) 50%, transparent);
+  background: color-mix(in srgb, var(--al-op) 12%, transparent);
+  border-radius: var(--al-radius-sm);
+  padding: 0.08rem 0.4rem;
+}
+
+/* Hues repeat across the three axes — 14 values will not fit in one wheel — but
+   grind and the spiritus base sit on the same screen (spiritus recipes are the
+   grind-heavy ones), so those two are deliberately pulled apart in hue. */
+.al-op-turns { --al-op: var(--al-accent); }
+.al-op-grind { --al-op: #cf8ee0; }
+.al-op-bellows { --al-op: #e07070; }
+.al-op-pour { --al-op: #7fc4a8; }
+.al-op-distil { --al-op: #6fb0d6; }
+.al-op-decant { --al-op: #d99a6f; }
+
+/* ═══ Ingredient picker ═══ */
+.al-picker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.al-clear {
+  background: none;
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-md);
+  color: var(--al-text-muted);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.8rem;
+  cursor: pointer;
+}
+
+.al-clear:hover {
+  color: var(--al-text);
+  border-color: var(--al-border-strong);
+}
+
+.al-picker {
+  margin-top: 0.75rem;
+  display: grid;
+  gap: 0.4rem;
+  grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr));
+}
+
+.al-pick {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  background: var(--al-surface);
+  border: 1px solid var(--al-border);
+  border-radius: var(--al-radius-md);
+  padding: 0.55rem 0.75rem;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.al-pick:hover {
+  border-color: var(--al-border-strong);
+}
+
+.al-pick-on {
+  border-color: var(--al-accent-dim);
+  background: color-mix(in srgb, var(--al-accent) 9%, var(--al-surface));
+}
+
+.al-pick input {
+  accent-color: var(--al-accent);
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+}
+
+.al-pick-cat {
+  margin-left: auto;
+  font-size: 0.68rem;
+  color: var(--al-cat, var(--al-text-faint));
+  opacity: 0.85;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ═══ Empty / hint rows ═══ */
+.al-empty {
+  color: var(--al-text-muted);
+  background: var(--al-surface);
+  border: 1px dashed var(--al-border-strong);
+  border-radius: var(--al-radius-md);
+  padding: 1.25rem;
+  text-align: center;
+  margin: 0;
+}
+
+.al-note {
+  color: var(--al-text-faint);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  margin: 1rem 0 0;
+}
+
+.al-note a {
+  color: var(--al-accent);
+}

@@ -60,7 +60,7 @@ class TestSitemap:
 
 class TestIsKnownRoute:
     @pytest.mark.parametrize("path", [
-        "/", "", "/login", "/admin", "/recipes", "/dog",
+        "/", "", "/login", "/admin", "/recipes", "/dog", "/alchemy",
         "/dog/about-crawler", "/recipes/pancakes", "/recipes/pancakes/edit",
         "/about", "/contact",
         "dog", "recipes/pancakes",       # Flask <path:path> form, no leading slash
@@ -71,7 +71,7 @@ class TestIsKnownRoute:
 
     @pytest.mark.parametrize("path", [
         "/nope", "/wp-admin", "/.env", "/doggy", "/recipesx",
-        "/admin-panel", "/login.php",
+        "/admin-panel", "/login.php", "/alchemyx",
     ])
     def test_unknown(self, path):
         assert is_known_route(path) is False

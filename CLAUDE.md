@@ -145,6 +145,7 @@ facts drift apart — each file has one job:
 | `CLAUDE.md` (= `AGENTS.md`, `GEMINI.md`) | How to work here: stack, commands, gates, security rules, conventions |
 | `docs/architecture.md` | How this app fits together: request lifecycle and auth diagrams |
 | `docs/dog-show-browser.md` | The `/dog` subsystem end to end |
+| `frontend/features/alchemy/CLAUDE.md` | The unlisted `/alchemy` page and its recipe dataset |
 | `server/README.md` | Deploying this app, and database backup/restore |
 | `server/observability/CLAUDE.md` | The observability stack's own rules |
 | `plans/` | Design plans for work not yet done (dated; delete once shipped) |

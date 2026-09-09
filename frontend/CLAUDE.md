@@ -42,6 +42,17 @@ Standalone `/dog` browser for Showlink data. Read `features/dog/AGENTS.md` befor
 - **Filters**: Whole-show and breed result filters support text, grade, class, and awards. `HYL`, `EVA`, and `POISSA` are intentionally separate grade filters.
 - **Search**: Show/breed/judge search uses the backend persisted index (polls index stats while indexing is incomplete); three-plus-char queries also match dog names and owners across all captured shows (tagged `Koira` / `Omistaja`).
 
+## Alchemy (`features/alchemy/`)
+
+Standalone `/alchemy` Kingdom Come: Deliverance II recipe reference and ingredient matcher. Read `features/alchemy/AGENTS.md` before changing this feature.
+
+- **Route entry**: `pages/alchemy.vue` only sets page metadata/layout and renders `features/alchemy/AlchemyBrowser.vue`.
+- **Feature module**: components, `useAlchemyBrowser.js`, `alchemyRecipes.js`, `alchemy.css`, and the bundled dataset under `data/` all live in `features/alchemy/`.
+- **Bundled data**: recipes and ingredients are JSON imported at build time — no API, nothing fetched on mount. `validateDataset()` in `alchemyRecipes.js` enforces referential integrity and is asserted-empty by Vitest, so a transcription typo fails the suite.
+- **Route state**: `?recipe=<id>` opens a recipe; `?tab=brew` opens the matcher; `?have=a,b,c` carries the selection (mirrored to `localStorage`, which is only read when the URL has no `have=`). Query-driven views render after `onMounted` — the route is pre-rendered without a query string, so painting them server-side would break hydration.
+- **Unlisted**: nothing links to `/alchemy`; it is absent from `useNavLinks.js`, the homepage footer `siteLinks`, and `generate_sitemap()`, and sets `robots: noindex`. It stays in `SPA_ROUTE_PREFIXES` so `/api/pageview` does not 400. Linking it publicly is the user's call.
+- **English only, one locked dark theme**: this feature has no `t()` calls and no `.dark` variant — a deliberate exception to the "both locales" rule in `.claude/skills/add-page`, matching the precedent of Finnish-only `/dog`. Do not "fix" it by adding locale keys.
+
 ## Composables
 
 All in `frontend/composables/` (auto-imported):
