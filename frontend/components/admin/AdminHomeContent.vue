@@ -241,6 +241,8 @@ function moveItem(f, i, dir) {
     <div v-if="error" class="hc__msg hc__msg--err" role="alert">{{ error }}</div>
     <div v-if="success" class="hc__msg hc__msg--ok" role="status">{{ success }}</div>
 
+    <AdminHomeSections />
+
     <div v-if="!loaded && !error" class="hc__loading">Loading…</div>
 
     <template v-else>

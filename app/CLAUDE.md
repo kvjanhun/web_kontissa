@@ -22,6 +22,7 @@ Never run a schema change from Flask startup, imports, or request handlers. `app
 |--------|----------|------|---------|
 | GET | `/api/home-content?locale=` | Public | DB-backed home content overlay map (fixed text blocks + assembled `home.projects`); limiter-exempt |
 | GET/PUT | `/api/admin/home-content` | Admin | List both locales / upsert one field (`{key, locale, value}`) |
+| GET/PUT | `/api/admin/sections` | Admin | List the hideable home bands / upsert one's visibility (`{key, hidden}`) |
 | GET/POST | `/api/admin/projects` | Admin | List (incl. hidden) / create a project |
 | PUT/DELETE | `/api/admin/projects/<id>` | Admin | Update (parent + translations) / delete |
 | PUT | `/api/admin/projects/reorder` | Admin | Reorder (`{"order": [id, ...]}`) |
@@ -49,9 +50,9 @@ Never run a schema change from Flask startup, imports, or request handlers. `app
 
 ## Models
 
-`User`, `HomeContent` (editable home `home.*` text blocks; one row per `key`+`locale`, JSON-encoded `value`), `Project` + `ProjectTranslation` (the home "Selected projects" collection — language-independent `position`/`hidden`/`image` on the parent, translatable text per locale in the child), `Recipe`, `Ingredient`, `Step`, `PageView`, `PageViewEvent`.
+`User`, `HomeContent` (editable home `home.*` text blocks; one row per `key`+`locale`, JSON-encoded `value`), `HomeSection` (visibility of one home band; one row per `key`, no locale column — a band hidden in one language only is not a valid state, and a missing row means visible), `Project` + `ProjectTranslation` (the home "Selected projects" collection — language-independent `position`/`hidden`/`image` on the parent, translatable text per locale in the child), `Recipe`, `Ingredient`, `Step`, `PageView`, `PageViewEvent`.
 
-Home content is served from the DB (`app/home_content.py`), not the locale files. `HOME_CONTENT_FIELDS` in that module is the allow-list of editable keys and their shapes (string / string[] / layer[] / link[]); the frontend admin editor mirrors it. New tables are created by the idempotent `db.create_all()`; initial data is loaded by `scripts/seed_home_content.py` (from the committed `frontend/locales/home-content.snapshot.json`).
+Home content is served from the DB (`app/home_content.py`), not the locale files. `HOME_CONTENT_FIELDS` in that module is the allow-list of editable keys and their shapes (string / string[] / layer[] / link[]); the frontend admin editor mirrors it. New tables are created by the idempotent `db.create_all()`; initial data is loaded by `scripts/seed_home_content.py` (from the committed `frontend/locales/home-content.snapshot.json`). `HOME_SECTIONS` is the matching allow-list of hideable bands (`work`, `stack`, `terminal` — keyed by the page's own `<section id>` anchors, so `work` is the Projects band); the hero and footer are chrome and are not hideable. The hidden ones ride the public overlay as `home.hiddenSections`, so the build snapshot carries them and a hidden band never paints.
 
 ## Dog Shows Backend (`api/dog.py`, `dog_show/`)
 

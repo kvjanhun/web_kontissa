@@ -54,6 +54,26 @@ class HomeContent(db.Model):
         return {"key": self.key, "locale": self.locale, "value": json.loads(self.value)}
 
 
+class HomeSection(db.Model):
+    """Visibility of one content band on the home page. One row per section key.
+
+    Language-independent on purpose, which is why this is not a `home_content`
+    row: those are keyed (key, locale), and a section shown in Finnish but hidden
+    in English is not a state the page can meaningfully be in.
+
+    A missing row means visible. Rows are written only when an admin toggles a
+    section, so a database that has never been touched renders the whole page.
+    """
+    __tablename__ = "home_section"
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(32), unique=True, nullable=False)
+    hidden = db.Column(db.Boolean, nullable=False, default=False)
+
+    def to_dict(self):
+        return {"key": self.key, "hidden": self.hidden}
+
+
 class Project(db.Model):
     """A portfolio project — the one home-content collection (add/remove/hide/reorder).
 

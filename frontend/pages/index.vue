@@ -34,6 +34,10 @@ useHead({
   ],
 })
 
+// Which content bands the admin has hidden. Part of the same overlay as the copy,
+// so the snapshot the static build bakes in already reflects it.
+const { isVisible } = useHomeSections()
+
 // The page paints from the build snapshot, then swaps in the live DB content.
 // Re-fetch when the visitor switches language so the other locale is fresh too.
 onMounted(() => loadHomeContent())
@@ -46,9 +50,9 @@ watch(locale, (loc) => loadHomeContent(loc))
     <HomeHeader />
     <main id="top" class="home-main">
       <HomeHero />
-      <HomeWork />
-      <HomeStack />
-      <HomeTerminal />
+      <HomeWork v-if="isVisible('work')" />
+      <HomeStack v-if="isVisible('stack')" />
+      <HomeTerminal v-if="isVisible('terminal')" />
     </main>
     <HomeFooter />
   </div>

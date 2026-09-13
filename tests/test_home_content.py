@@ -138,3 +138,65 @@ class TestAdminHomeContentList:
 
     def test_requires_admin(self, client, app):
         assert client.get("/api/admin/home-content").status_code == 401
+
+
+class TestSectionVisibility:
+    """Admin-toggled visibility of the home page's content bands."""
+
+    def test_lists_every_section_with_no_rows(self, logged_in_admin):
+        res = logged_in_admin.get("/api/admin/sections")
+        assert res.status_code == 200
+        data = res.get_json()
+        # All bands are listed in page order even though nothing has been saved.
+        assert [s["key"] for s in data] == ["work", "stack", "terminal"]
+        assert all(s["hidden"] is False for s in data)
+        assert data[0]["label"] == "Projects"
+
+    def test_requires_auth(self, client, app):
+        assert client.get("/api/admin/sections").status_code == 401
+        assert client.put("/api/admin/sections", json={"key": "stack", "hidden": True}).status_code == 401
+
+    def test_forbidden_for_regular_user(self, client, regular_user):
+        client.post("/api/login", json={"email": regular_user["email"], "password": regular_user["password"]})
+        assert client.get("/api/admin/sections").status_code == 403
+        res = client.put("/api/admin/sections", json={"key": "stack", "hidden": True})
+        assert res.status_code == 403
+
+    def test_unknown_key_rejected(self, logged_in_admin):
+        for key in ("hero", "footer", "", "not-a-section"):
+            res = logged_in_admin.put("/api/admin/sections", json={"key": key, "hidden": True})
+            assert res.status_code == 400, key
+
+    def test_non_boolean_hidden_rejected(self, logged_in_admin):
+        # "false" and 0 are the mistakes a caller actually makes here; coercing them
+        # would store the opposite of the intent.
+        for value in ("true", "false", 0, 1, None):
+            res = logged_in_admin.put("/api/admin/sections", json={"key": "stack", "hidden": value})
+            assert res.status_code == 400, repr(value)
+
+    def test_toggle_upserts_and_flips_back(self, logged_in_admin):
+        res = logged_in_admin.put("/api/admin/sections", json={"key": "stack", "hidden": True})
+        assert res.status_code == 200
+        assert res.get_json() == {"key": "stack", "hidden": True}
+
+        listed = logged_in_admin.get("/api/admin/sections").get_json()
+        assert [s["hidden"] for s in listed] == [False, True, False]
+
+        # Second write updates the same row rather than adding another.
+        res = logged_in_admin.put("/api/admin/sections", json={"key": "stack", "hidden": False})
+        assert res.get_json()["hidden"] is False
+        listed = logged_in_admin.get("/api/admin/sections").get_json()
+        assert all(s["hidden"] is False for s in listed)
+
+    def test_public_map_carries_hidden_sections(self, client, logged_in_admin):
+        # Nothing hidden: the key is present and empty, not absent.
+        assert client.get("/api/home-content").get_json()["home.hiddenSections"] == []
+
+        logged_in_admin.put("/api/admin/sections", json={"key": "stack", "hidden": True})
+        logged_in_admin.put("/api/admin/sections", json={"key": "terminal", "hidden": True})
+
+        for locale in ("en", "fi"):
+            data = client.get(f"/api/home-content?locale={locale}").get_json()
+            # Page order, and the same value in both locales — visibility is
+            # language-independent.
+            assert data["home.hiddenSections"] == ["stack", "terminal"], locale

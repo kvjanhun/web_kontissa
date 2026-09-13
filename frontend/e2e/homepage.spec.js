@@ -140,3 +140,61 @@ test.describe('Homepage — mobile nav drawer', () => {
     await expect(drawer.getByRole('link', { name: 'stack' })).toBeVisible()
   })
 })
+
+test.describe('Homepage — hidden sections', () => {
+  // The overlay is stubbed rather than toggled in the database: spec files run in
+  // parallel against one shared E2E database, and actually hiding a band would
+  // break whichever spec happened to load the page at the same moment. The
+  // admin→database half of the chain is covered by tests/test_home_content.py.
+  async function hide(page, keys) {
+    await page.route('**/api/home-content*', async (route) => {
+      const res = await route.fetch()
+      const body = await res.json()
+      await route.fulfill({ json: { ...body, 'home.hiddenSections': keys } })
+    })
+  }
+
+  test('a hidden band leaves no section, nav link or hero call to action', async ({ page }) => {
+    await hide(page, ['stack'])
+    await page.goto('/')
+
+    // The page paints from the build snapshot first, so the band goes once the
+    // live overlay lands.
+    await expect(page.locator('#stack')).toHaveCount(0, { timeout: 10000 })
+    await expect(page.locator('.nav__link[href="#stack"]')).toHaveCount(0)
+    await expect(page.locator('.nav-drawer a[href="#stack"]')).toHaveCount(0)
+    await expect(page.locator('.hero__cta a[href="#stack"]')).toHaveCount(0)
+
+    // The neighbouring bands and their links are untouched.
+    await expect(page.locator('#work')).toBeVisible()
+    await expect(page.locator('#terminal')).toBeVisible()
+    await expect(page.locator('.nav__link[href="#terminal"]')).toHaveCount(1)
+    await expect(page.locator('.hero__cta a[href="#work"]')).toHaveCount(1)
+  })
+
+  test('project reach chips stop linking to a hidden stack table', async ({ page }) => {
+    await hide(page, ['stack'])
+    await page.goto('/')
+    await expect(page.locator('#stack')).toHaveCount(0, { timeout: 10000 })
+
+    await page.getByRole('button', { name: /Sanakenno Admin tools/ }).click()
+    const reach = page.locator('#proj-panel-1 .layer-tag', { hasText: 'L6–L7' })
+    // Still shown — it says how deep the project went — but no longer a link to a
+    // table that is not on the page.
+    await expect(reach).toBeVisible()
+    await expect(page.locator('#proj-panel-1 a.layer-tag')).toHaveCount(0)
+  })
+
+  test('hiding every band leaves the hero and footer standing', async ({ page }) => {
+    await hide(page, ['work', 'stack', 'terminal'])
+    await page.goto('/')
+
+    await expect(page.locator('#work')).toHaveCount(0, { timeout: 10000 })
+    await expect(page.locator('#stack')).toHaveCount(0)
+    await expect(page.locator('#terminal')).toHaveCount(0)
+    // Chrome is not hideable, and the hero keeps its text with both CTAs gone.
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.locator('.hero__cta a')).toHaveCount(0)
+    await expect(page.getByText(/up \d+ (hour|day)s?/)).toBeVisible({ timeout: 10000 })
+  })
+})

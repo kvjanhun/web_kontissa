@@ -31,8 +31,8 @@ if not (ROOT == "/app" and os.path.isdir("/app/data")):
     os.environ.setdefault("DATABASE_URI", f"sqlite:///{os.path.join(ROOT, 'app', 'data', 'site.db')}")
 
 from app import app  # noqa: E402
-from app.models import db, HomeContent, Project, ProjectTranslation  # noqa: E402
-from app.home_content import HOME_CONTENT_FIELDS, LOCALES  # noqa: E402
+from app.models import db, HomeContent, HomeSection, Project, ProjectTranslation  # noqa: E402
+from app.home_content import HOME_CONTENT_FIELDS, HOME_SECTION_KEYS, LOCALES  # noqa: E402
 
 
 def _load_snapshot():
@@ -84,6 +84,15 @@ def _seed_projects(snapshot):
     return n
 
 
+def _seed_sections():
+    """Write every band as visible. A missing row already reads as visible, so this
+    is for a deterministic starting state (and a populated admin panel), not for
+    correctness."""
+    for key in HOME_SECTION_KEYS:
+        db.session.add(HomeSection(key=key, hidden=False))
+    return len(HOME_SECTION_KEYS)
+
+
 def seed(force=False):
     snapshot = _load_snapshot()
     with app.app_context():
@@ -99,12 +108,14 @@ def seed(force=False):
             ProjectTranslation.query.delete()
             Project.query.delete()
             HomeContent.query.delete()
+            HomeSection.query.delete()
 
         blocks = _seed_fixed_blocks(snapshot)
         projects = _seed_projects(snapshot)
+        sections = _seed_sections()
         db.session.commit()
-        print(f"Seeded home content: {blocks} fixed fields, {projects} projects "
-              f"(DB: {app.config['SQLALCHEMY_DATABASE_URI']})")
+        print(f"Seeded home content: {blocks} fixed fields, {projects} projects, "
+              f"{sections} sections (DB: {app.config['SQLALCHEMY_DATABASE_URI']})")
 
 
 if __name__ == "__main__":

@@ -2,6 +2,10 @@
 const i18n = useI18nStore()
 const { t, tm } = i18n
 
+// The hero always renders, but each call to action scrolls to a band that can be
+// hidden — so a CTA goes with its target rather than becoming a dead button.
+const { isVisible } = useHomeSections()
+
 const taglines = computed(() => tm('home.hero.taglines') || [])
 const index = ref(0)
 
@@ -53,8 +57,8 @@ onBeforeUnmount(() => {
     </h1>
     <p class="hero__body home-plate">{{ t('home.hero.body') }}</p>
     <div class="hero__cta">
-      <a href="#work" class="cta cta--primary">{{ t('home.hero.ctaPrimary') }} <span aria-hidden="true">→</span></a>
-      <a href="#stack" class="cta cta--ghost">{{ t('home.hero.ctaSecondary') }}</a>
+      <a v-if="isVisible('work')" href="#work" class="cta cta--primary">{{ t('home.hero.ctaPrimary') }} <span aria-hidden="true">→</span></a>
+      <a v-if="isVisible('stack')" href="#stack" class="cta cta--ghost">{{ t('home.hero.ctaSecondary') }}</a>
     </div>
   </section>
 </template>

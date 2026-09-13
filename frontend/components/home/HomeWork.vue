@@ -6,6 +6,12 @@ const vReveal = useScrollReveal()
 const { linkIcon, isExternal } = useLinkIcon()
 const { reachRanges } = useLayerReach()
 
+// The reach chip is a cross-reference to the stack table. With that band hidden
+// there is nothing to jump to, so the chip stays as a plain label rather than
+// becoming a link that scrolls nowhere.
+const { isVisible } = useHomeSections()
+const stackVisible = computed(() => isVisible('stack'))
+
 const projects = computed(() => tm('home.projects') || [])
 const openIndex = ref(0)
 
@@ -48,12 +54,13 @@ function toggle(i) {
                    jumps to the stack table, which is what reads it as a legend. -->
               <div v-if="reachRanges(p.layers).length" class="proj__layers">
                 <span class="proj__layers-label">{{ t('home.work.reach') }}</span>
-                <a
+                <component
+                  :is="stackVisible ? 'a' : 'span'"
                   v-for="range in reachRanges(p.layers)"
                   :key="range"
                   class="layer-tag"
-                  href="#stack"
-                >{{ range }}</a>
+                  :href="stackVisible ? '#stack' : undefined"
+                >{{ range }}</component>
               </div>
               <div class="proj__links">
                 <a

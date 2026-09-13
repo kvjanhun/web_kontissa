@@ -12,7 +12,7 @@ import json
 import re
 
 from flask import Blueprint, request, jsonify
-from .models import db, HomeContent, Project, ProjectTranslation
+from .models import db, HomeContent, HomeSection, Project, ProjectTranslation
 from .decorators import admin_required
 from . import limiter
 
@@ -43,6 +43,18 @@ HOME_CONTENT_FIELDS = {
     "home.footer.connectLinks": FIELD_LINK_LIST,
     "home.footer.siteLinks": FIELD_LINK_LIST,
 }
+
+# Content bands an admin can hide, in the order they appear on the page. Mirrors
+# HIDEABLE_SECTIONS in frontend/composables/useHomeSections.js. The keys are the
+# `<section id>` anchors the page already uses, so `work` is the Projects band.
+# The hero and the footer are page chrome and are deliberately not listed: a page
+# with neither is broken, not configured.
+HOME_SECTIONS = (
+    ("work", "Projects"),
+    ("stack", "Stack"),
+    ("terminal", "Terminal"),
+)
+HOME_SECTION_KEYS = tuple(key for key, _ in HOME_SECTIONS)
 
 MAX_PROJECTS = 50
 MAX_TECH = 30
@@ -187,6 +199,13 @@ def _apply_translation(trans, data):
     return None
 
 
+def _hidden_sections():
+    """Keys of the currently hidden bands, in page order. A section with no row is
+    visible, so this is a list of exceptions rather than a full state map."""
+    rows = {r.key: r.hidden for r in HomeSection.query.all()}
+    return [key for key in HOME_SECTION_KEYS if rows.get(key)]
+
+
 def _home_content_map(locale):
     """Assemble the full overlay map the frontend merges over its bundled
     fallbacks: every stored HomeContent key plus the assembled project list."""
@@ -198,6 +217,10 @@ def _home_content_map(locale):
         .all()
     )
     out["home.projects"] = [p.to_public_dict(locale) for p in projects]
+    # Same value in every locale — visibility is language-independent. It rides the
+    # content overlay rather than a second endpoint so the build snapshot carries it
+    # too, and the statically-generated first paint already omits a hidden band.
+    out["home.hiddenSections"] = _hidden_sections()
     return out
 
 
@@ -255,6 +278,45 @@ def api_update_home_content():
         db.session.add(row)
     else:
         row.value = json.dumps(clean)
+    db.session.commit()
+    return jsonify(row.to_dict())
+
+
+# --------------------------------------------------------------------------- #
+# Admin — section visibility
+# --------------------------------------------------------------------------- #
+@home_content_bp.route("/api/admin/sections")
+@admin_required
+def api_admin_sections():
+    """Every hideable band with its current state, in page order."""
+    rows = {r.key: r.hidden for r in HomeSection.query.all()}
+    return jsonify([
+        {"key": key, "label": label, "hidden": bool(rows.get(key, False))}
+        for key, label in HOME_SECTIONS
+    ])
+
+
+@home_content_bp.route("/api/admin/sections", methods=["PUT"])
+@admin_required
+def api_update_section():
+    data = request.get_json()
+    if not data:
+        return jsonify({"error": "Missing JSON body"}), 400
+
+    key = (data.get("key") or "").strip()
+    if key not in HOME_SECTION_KEYS:
+        return jsonify({"error": "Unknown section key"}), 400
+    # Strict bool, not truthiness: "false" and 0 are exactly the mistakes a caller
+    # makes here, and coercing them would silently store the opposite of the intent.
+    if not isinstance(data.get("hidden"), bool):
+        return jsonify({"error": "hidden must be true or false"}), 400
+
+    row = HomeSection.query.filter_by(key=key).first()
+    if row is None:
+        row = HomeSection(key=key, hidden=data["hidden"])
+        db.session.add(row)
+    else:
+        row.hidden = data["hidden"]
     db.session.commit()
     return jsonify(row.to_dict())
 

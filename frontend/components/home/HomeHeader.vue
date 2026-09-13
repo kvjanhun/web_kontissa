@@ -11,11 +11,15 @@ function closeMenu() {
   menuOpen.value = false
 }
 
-const navLinks = [
-  { href: '#work', key: 'home.nav.work' },
-  { href: '#stack', key: 'home.nav.stack' },
-  { href: '#terminal', key: 'home.nav.terminal' },
-]
+// Anchors are dropped along with their section: a link to a band that is not in
+// the DOM scrolls nowhere, which reads as a broken page rather than a hidden one.
+const { isVisible } = useHomeSections()
+
+const navLinks = computed(() => [
+  { href: '#work', key: 'home.nav.work', section: 'work' },
+  { href: '#stack', key: 'home.nav.stack', section: 'stack' },
+  { href: '#terminal', key: 'home.nav.terminal', section: 'terminal' },
+].filter(link => isVisible(link.section)))
 
 const langLabel = computed(() => (locale.value === 'en' ? 'EN / FI' : 'FI / EN'))
 const themeLabel = computed(() => (isDark.value ? t('theme.switchToLight') : t('theme.switchToDark')))

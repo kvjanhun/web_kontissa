@@ -85,4 +85,45 @@ test.describe('Admin', () => {
     })
     expect(restore.ok()).toBeTruthy()
   })
+
+  test('the sections panel lists every band and saves a toggle', async ({ adminPage }) => {
+    // The panel is driven from stubbed responses rather than the real endpoint:
+    // Playwright runs spec files in parallel against one shared E2E database, so a
+    // test that actually hid a band would make homepage.spec.js fail whenever the
+    // two overlapped. Persistence is covered by tests/test_home_content.py; what
+    // matters here is that the panel renders the API's list and sends back the
+    // right payload.
+    await adminPage.route('**/api/admin/sections', async (route) => {
+      if (route.request().method() === 'PUT') {
+        return route.fulfill({ json: JSON.parse(route.request().postData()) })
+      }
+      return route.fulfill({
+        json: [
+          { key: 'work', label: 'Projects', hidden: false },
+          { key: 'stack', label: 'Stack', hidden: false },
+          { key: 'terminal', label: 'Terminal', hidden: false },
+        ],
+      })
+    })
+
+    await adminPage.goto('/admin')
+    await adminPage.locator('.as-nav').getByRole('button', { name: 'Home content' }).click()
+
+    for (const label of ['Projects', 'Stack', 'Terminal']) {
+      await expect(adminPage.getByRole('switch', { name: `Show ${label} section` }))
+        .toHaveAttribute('aria-checked', 'true', { timeout: 10000 })
+    }
+    // The hero and footer are chrome, not toggleable.
+    await expect(adminPage.getByRole('switch', { name: /Show (Hero|Footer) section/ })).toHaveCount(0)
+
+    const [request] = await Promise.all([
+      adminPage.waitForRequest(r => r.url().includes('/api/admin/sections') && r.method() === 'PUT'),
+      adminPage.getByRole('switch', { name: 'Show Stack section' }).click(),
+    ])
+    expect(JSON.parse(request.postData())).toEqual({ key: 'stack', hidden: true })
+
+    const stackSwitch = adminPage.getByRole('switch', { name: 'Show Stack section' })
+    await expect(stackSwitch).toHaveAttribute('aria-checked', 'false')
+    await expect(adminPage.getByText('Hidden')).toBeVisible()
+  })
 })

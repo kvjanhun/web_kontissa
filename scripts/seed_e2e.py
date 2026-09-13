@@ -19,7 +19,12 @@ os.environ["DATABASE_URI"] = f"sqlite:///{DB_PATH}"
 from werkzeug.security import generate_password_hash
 from app import app
 from app.models import db, User, Recipe, Ingredient, Step
-from scripts.seed_home_content import _load_snapshot, _seed_fixed_blocks, _seed_projects
+from scripts.seed_home_content import (
+    _load_snapshot,
+    _seed_fixed_blocks,
+    _seed_projects,
+    _seed_sections,
+)
 
 # Known test credentials (used by e2e/fixtures/auth.js)
 ADMIN_EMAIL = "admin@test.com"
@@ -52,10 +57,11 @@ def seed():
         user.password_hash = generate_password_hash(USER_PASSWORD, method="pbkdf2:sha256")
         db.session.add(user)
 
-        # --- Home content (fixed text blocks + projects) ---
+        # --- Home content (fixed text blocks + projects + section visibility) ---
         snapshot = _load_snapshot()
         blocks = _seed_fixed_blocks(snapshot)
         projects = _seed_projects(snapshot)
+        sections = _seed_sections()
 
         # --- Recipe ---
         recipe = Recipe(title="Test Pancakes", slug="test-pancakes",
@@ -74,7 +80,7 @@ def seed():
         print(f"Seeded E2E database at {DB_PATH}")
         print(f"  Admin: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
         print(f"  User:  {USER_EMAIL} / {USER_PASSWORD}")
-        print(f"  Home content: {blocks} fixed fields, {projects} projects")
+        print(f"  Home content: {blocks} fixed fields, {projects} projects, {sections} visible sections")
         print(f"  Recipes: 1")
 
 
