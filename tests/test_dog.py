@@ -94,6 +94,13 @@ SAMPLE_RYP_PAGE_HTML = """
 </td></tr>
 <tr><td>1.</td><td>harmaa norjanhirvikoira</td>
   <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI45451%2F25">Geisterjäger</a> Om. Tolonen Mika</td></tr>
+<tr class="spacer"><td colspan="3"></td></tr>
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">FCI  8 - Noutajat, ylösajavat koirat ja vesikoirat</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Ramune Kazlauskaite</span></div>
+</td></tr>
+<tr><td>1.</td><td>fieldspanieli</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17">Field Of Dreams</a> Om. Omistaja F</td></tr>
 </table>
 </div>
 """
@@ -146,6 +153,32 @@ SAMPLE_SPECIALTY_BIS_HTML = """
 </td></tr>
 <tr><td>1.</td><td>basenji</td>
   <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21">Basenji Yksi</a> Om. Omistaja B</td></tr>
+</table>
+</div>
+"""
+
+# Both groups crowned, and a BIS page holding only the junior final — day one
+# of a two-day show, with the main Best in show still a day away.
+SAMPLE_TWO_GROUP_RYP_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3"><div class="floatleft">FCI 5 - Pystykorvat</div></td></tr>
+<tr><td>1.</td><td>basenji</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20">Basenji Yksi</a> Om. Omistaja A</td></tr>
+<tr class="spacer"><td colspan="3"></td></tr>
+<tr class="otsikko"><td colspan="3"><div class="floatleft">FCI 10 - Vinttikoirat</div></td></tr>
+<tr><td>1.</td><td>afgaani</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21">Afgaani Yksi</a> Om. Omistaja B</td></tr>
+</table>
+</div>
+"""
+
+SAMPLE_SIDE_BIS_ONLY_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3"><div class="floatleft">Paras juniori</div></td></tr>
+<tr><td>1.</td><td>basenji</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20">Basenji Yksi</a> Om. Omistaja A</td></tr>
 </table>
 </div>
 """
@@ -2444,8 +2477,9 @@ def test_parse_finals_page_reads_rings_winners_and_reg_ids():
     assert [section["heading"] for section in sections] == [
         "FCI 3 - Terrierit",
         "FCI 5/6 - Pystykorvat ja alkukantaiset koirat - Ajavat ja jäljestävät koirat",
+        "FCI 8 - Noutajat, ylösajavat koirat ja vesikoirat",
     ]
-    assert [section["fci_groups"] for section in sections] == [["3"], ["5", "6"]]
+    assert [section["fci_groups"] for section in sections] == [["3"], ["5", "6"], ["8"]]
     assert sections[0]["judge"] == "Igoris Zizevskis"
     assert sections[0]["placements"][0] == {
         "place": 1,
@@ -2540,8 +2574,11 @@ def test_probe_finds_the_combined_ring_and_the_exact_missing_breed():
     probe = analysis["probe"]
 
     # The rings as the show actually ran them: four groups, three sections.
-    assert probe["ryp_ring_groups"] == [["3"], ["5", "6"]]
-    assert probe["expected_ryp_rings"] == 2
+    assert probe["ryp_ring_groups"] == [["3"], ["5", "6"], ["8"]]
+    assert probe["expected_ryp_rings"] == 3
+    # Three rings cover four groups, so no group is left uncrowned and nothing
+    # waits for an RYP-1 that the combined ring already awarded.
+    assert probe["ryp_groups_awarded"] == ["3", "5", "6", "8"]
 
     candidates = dog_finals.candidate_breed_keys(analysis)
     assert "8:121" in candidates                      # where BIS-1 actually is
@@ -2571,7 +2608,7 @@ def test_probe_settles_a_show_whose_group_can_never_win_a_ryp():
             {"breedGroup": "5", "breedId": "6", "awards": "SA, ROP, RYP-1",
              "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI45451%2F25"},
             {"breedGroup": "6", "breedId": "64", "awards": "SA, ROP"},
-            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP, BIS-1",
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP, RYP-1, BIS-1",
              "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17"},
             # The breeder-group winner is a kennel with no registration of its
             # own, so no row token exists for it and none is demanded.
@@ -2681,6 +2718,94 @@ def test_specialty_cluster_settles_on_bis_with_an_empty_ryp_page():
     assert status["probe"]["expected_ryp_rings"] == 0
     assert status["probe"]["missing_keys"] == []
     assert status["target_met"] is True
+
+
+def test_empty_finals_pages_do_not_settle_a_show_that_is_awarding_finals():
+    """Show 13564 (Killerin NORD, 271 breeds, 10 groups) settled with no BIS and
+    only half its groups crowned.
+
+    Its `R=RYP` and `R=BIS` pages are empty — this show never populates them and
+    publishes its finals only as tokens appended to the winners' breed rows. The
+    ladder read empty pages as "this show awards no finals" and settled the
+    moment the last ring was captured, so the remaining group winners and the
+    BIS were never fetched. The rows themselves said otherwise: RYP-1..4 for five
+    groups and BIS JUN / BIS VET were already in the cache."""
+    breeds = [
+        {"name": f"breed-{g}", "count": 1, "group": str(g), "breed_id": str(g), "has_results": True}
+        for g in range(1, 11)
+    ]
+    # Five groups crowned, junior and veteran BIS in, main BIS and five groups
+    # still to come — exactly where 13564 was when it settled.
+    results = []
+    for g in range(1, 11):
+        awards = "SA, ROP"
+        if g in (3, 5, 7, 9, 10):
+            awards += ", RYP-1"
+        if g == 3:
+            awards += ", BIS JUN-1"
+        if g == 5:
+            awards += ", BIS VET-1"
+        results.append({"breedGroup": str(g), "breedId": str(g), "awards": awards})
+    doc = {
+        "results": results,
+        "completed_breeds": {
+            f"{g}:{g}": {"result_count": 1, "awards": [{"type": "ROP"}]} for g in range(1, 11)
+        },
+        "finals_probe": _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_EMPTY_FINALS_PAGE_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+
+    # Every ring is captured, and that is not the same as the show being over.
+    assert status["judging_finished"] is True
+    assert status["probe"]["seen"] is True
+    assert status["probe"]["published"] is False
+    assert status["analysis"]["finals_observed"] is True
+    assert status["target_met"] is False
+
+    # And the finals hunt has somewhere to look: empty pages promise nothing, so
+    # it falls back to the groups whose RYP-1 is still missing.
+    candidates = dog_finals.candidate_breed_keys(status["analysis"])
+    assert set(candidates) == {"1:1", "2:2", "4:4", "6:6", "8:8"}
+
+    # Once the rest land, including the main BIS, it settles.
+    for row in results:
+        if "RYP-1" not in row["awards"]:
+            row["awards"] += ", RYP-1"
+    results[0]["awards"] += ", BIS-1"
+    assert dog_utils._terminal_status(doc, breeds)["target_met"] is True
+
+
+def test_side_bis_alone_is_not_the_main_bis_on_a_finals_page():
+    """A two-day show's junior and veteran BIS land a day before the main one,
+    and they sit in their own sections of the same `R=BIS` page. Counting any
+    placement there as "the finals are in" settles the show a day early."""
+    breeds = [
+        {"name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True},
+        {"name": "afgaani", "count": 1, "group": "10", "breed_id": "7", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "5", "breedId": "3", "awards": "SA, ROP, RYP-1, BIS JUN-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI11111%2F20"},
+            {"breedGroup": "10", "breedId": "7", "awards": "SA, ROP, RYP-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI22222%2F21"},
+        ],
+        "completed_breeds": {
+            "5:3": {"result_count": 1, "awards": [{"type": "ROP"}]},
+            "10:7": {"result_count": 1, "awards": [{"type": "ROP"}]},
+        },
+        "finals_probe": _finals_probe(SAMPLE_TWO_GROUP_RYP_HTML, SAMPLE_SIDE_BIS_ONLY_HTML),
+    }
+
+    status = dog_utils._terminal_status(doc, breeds)
+    probe = status["probe"]
+
+    assert probe["published"] is True          # the page does hold placements
+    assert probe["ryp_groups_awarded"] == ["5", "10"]
+    assert probe["missing_keys"] == []         # and all of them have landed
+    assert probe["main_bis_awarded"] is False  # but none of them is the main BIS
+    assert status["target_met"] is False
 
 
 def test_a_failed_probe_never_reads_as_no_finals():
@@ -2873,7 +2998,8 @@ def test_show_14014_replay_lands_bis_on_the_right_breed_and_settles(monkeypatch,
 
     # The finals published while we were not looking. Re-fetching a named breed
     # now returns its row with the promised token appended, as Showlink does.
-    tokens = {"3:192": "RYP-1", "3:191": "RYP-2", "5:6": "RYP-1", "8:121": "BIS-1"}
+    tokens = {"3:192": "RYP-1", "3:191": "RYP-2", "5:6": "RYP-1",
+              "8:121": "RYP-1, BIS-1"}
     fetched = []
 
     def fake_fetch(sid, breed):

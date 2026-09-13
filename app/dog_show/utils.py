@@ -163,22 +163,23 @@ def _terminal_status(doc, indexed_breeds):
     Both the live plan and the crawler's confirmation marker read this, so they
     never diverge. The rungs, in order:
 
-    1. **Finals published** — the show's own `R=BIS` / `R=RYP` pages hold
-       placements, and every one of them has landed on its breed's rows
-       (`finals.probe_state`). This is the source stating the finals exist;
-       nothing inferred from breed pages can say as much.
+    1. **Finals in** — every final the show owes has landed on its breed's rows
+       (`finals.analyze`). Where the `R=BIS` / `R=RYP` pages hold placements they
+       settle it outright, naming each winner; where they are empty they say
+       nothing either way, because a show may publish its finals only as tokens
+       on the winners' breed rows, and the award structure decides instead.
     2. **Nothing left to judge** — every listed breed is checked and its capture
-       is final. Carries a show that awards no finals at all, and one whose
-       finals pages we could not read.
+       is no longer mid-ring. Carries a show that awards no finals at all, on its
+       own.
     3. **Quiescence confirms** — neither rung is enough on its own: the caller
        requires the signature to come back unchanged on a later pass
        (`_mark_terminal_confirmation`), so a late row or correction resets it.
     4. The deadline in `_result_live_plan` backstops all of it.
 
-    No rung asks what *kind* of show this is. That is the point: combined `FCI
-    5/6` rings, group-only shows, puppy shows and single-breed specialties stop
-    being special cases, because none of them can produce an expectation the
-    source's own pages contradict.
+    No rung asks what *kind* of show this is — combined `FCI 5/6` rings,
+    group-only shows, puppy shows and single-breed specialties are all decided by
+    what the source has actually awarded against what its entries oblige it to
+    award, never by a show-type guess.
 
     `signature` is a stable string of the terminal-relevant state, and folds in
     the row count so a late row anywhere resets the confirmation.
@@ -195,12 +196,20 @@ def _terminal_status(doc, indexed_breeds):
     finals_published = bool(probe["seen"] and probe["published"] and not probe["missing_keys"])
     judging_finished = _nothing_left_to_judge(doc, indexed_breeds)
 
-    if probe["seen"]:
-        # With the pages read, the show is done when they hold everything they
-        # are going to hold *and* the rings are finished. A show that awards no
-        # finals reaches the terminal on rung 2 alone — its pages are simply
-        # empty, which is an answer and not a reason to keep waiting.
-        target_met = judging_finished and (finals_published or not probe["published"])
+    if probe["published"]:
+        # The pages name every winner: they decide, against what the entries
+        # oblige the show to award.
+        target_met = judging_finished and analysis["target_met"]
+    elif probe["seen"] and analysis["finals_observed"]:
+        # Pages empty, but the captured rows already carry RYP or BIS tokens, so
+        # this show plainly awards finals and simply does not publish them on
+        # `R=RYP` / `R=BIS` — many append them to the winners' breed rows only.
+        # Reading that silence as "awards no finals" settles an all-breed show
+        # the moment its last ring lands and loses every final it had left.
+        target_met = judging_finished and analysis["target_met"]
+    elif probe["seen"]:
+        # Pages read, nothing on them, no finals token anywhere: awards none.
+        target_met = judging_finished
     elif analysis["expects_main_bis"]:
         # No probe (an old cache, or the pages have not been read yet): fall back
         # to the award-structure inference.

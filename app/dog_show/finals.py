@@ -279,6 +279,11 @@ def probe_state(doc, indexed_breeds):
       give;
     - `expected_ryp_rings` / `ryp_rings_awarded`: rings as the RYP page groups
       them, so a combined `FCI 5/6` ring counts once and not twice;
+    - `ryp_groups_awarded`: the FCI groups those crowned rings actually cover,
+      to be checked against the groups the index says have entries;
+    - `main_bis_awarded`: a placement in the *main* Best in show section. A side
+      final (BIS JUN / BIS VET) is not it, and on a two-day show those land a
+      whole day before the main one;
     - `missing_keys`: exactly the breed pages whose captured rows are missing a
       token the finals pages have already promised. This is the re-fetch list —
       the whole of it.
@@ -292,7 +297,8 @@ def probe_state(doc, indexed_breeds):
         return {
             "seen": False, "published": False, "advertised": [],
             "expected_ryp_rings": 0, "ryp_rings_awarded": 0,
-            "ryp_ring_groups": [], "missing_keys": [], "placements": 0,
+            "ryp_ring_groups": [], "ryp_groups_awarded": [],
+            "main_bis_awarded": False, "missing_keys": [], "placements": 0,
             "unmatched_breeds": [],
         }
 
@@ -304,6 +310,8 @@ def probe_state(doc, indexed_breeds):
     placements = 0
     ryp_ring_groups = []
     ryp_rings_awarded = 0
+    ryp_groups_awarded = set()
+    main_bis_awarded = False
 
     for page, section in _probe_sections(doc):
         heading = section.get("heading") or ""
@@ -313,6 +321,13 @@ def probe_state(doc, indexed_breeds):
             ryp_ring_groups.append(section.get("fci_groups") or [])
             if section_placements:
                 ryp_rings_awarded += 1
+                # The ring's own heading says which groups it crowned, so a
+                # combined `FCI 5/6` ring covers both at once.
+                ryp_groups_awarded.update(
+                    str(g) for g in (section.get("fci_groups") or []) if str(g).isdigit()
+                )
+        elif family == "BIS" and section_placements:
+            main_bis_awarded = True
         for placement in section_placements:
             placements += 1
             place = placement.get("place")
@@ -345,6 +360,8 @@ def probe_state(doc, indexed_breeds):
         "expected_ryp_rings": len((pages.get("RYP") or {}).get("sections") or []),
         "ryp_rings_awarded": ryp_rings_awarded,
         "ryp_ring_groups": ryp_ring_groups,
+        "ryp_groups_awarded": sorted(ryp_groups_awarded, key=int),
+        "main_bis_awarded": main_bis_awarded,
         "missing_keys": missing,
         "placements": placements,
         "unmatched_breeds": unmatched,
@@ -411,24 +428,53 @@ def analyze(doc, indexed_breeds):
 
     probe = probe_state(doc, indexed_breeds)
 
-    if probe["seen"]:
-        # The finals pages are the source's own statement of what it has awarded,
-        # so once they have been read there is nothing left to infer: the target
-        # is met when they hold placements and every one of those placements has
-        # landed on its breed's rows. This is what makes a combined `FCI 5/6`
-        # ring, a group-only show and a specialty cluster stop being special
-        # cases — none of them can produce an expectation the pages contradict.
-        target_met = probe["published"] and not probe["missing_keys"]
+    # The probe speaks only when it has something to say. Empty finals pages are
+    # an answer for a show that awards no finals, and silence for one that does:
+    # plenty of shows never populate `R=RYP` / `R=BIS` at all and publish their
+    # finals only as tokens appended to the winners' breed rows. Reading that
+    # silence as "no finals" settles an all-breed show the moment its last ring
+    # is captured, losing every RYP and the BIS with it.
+    probe_authoritative = probe["seen"] and probe["published"]
+
+    if probe_authoritative:
+        # The pages state what has been awarded; the index states what must still
+        # come. Both halves are needed — reconciling only what a page already
+        # shows is satisfied by the *first* finals to land and stays satisfied at
+        # every intermediate state.
+        #
+        # The page's own ring headings say which groups each ring crowned, so a
+        # combined `FCI 5/6` ring covers both and no group count is assumed; that
+        # is what keeps combined rings, group-only shows and specialty clusters
+        # from being special cases, without also blinding us to groups that have
+        # entries and no ring yet.
+        uncrowned_groups = (
+            result_groups - set(probe["ryp_groups_awarded"])
+            if probe["ryp_groups_awarded"] else set()
+        )
+        target_met = (
+            not probe["missing_keys"]
+            and not uncrowned_groups
+            # A specialty cluster crowns BIS-1 with no group stage at all, so the
+            # absence of any RYP ring is not an outstanding obligation — but a
+            # show that crowns a main BIS is not finished until it has.
+            and (probe["main_bis_awarded"] or not expects_main_bis)
+        )
     elif ryp_stage:
         target_met = has_bis1 and not missing_ryp_groups
     else:
-        # No probe yet and no group stage observed. A multi-group specialty
+        # No usable probe and no group stage observed. A multi-group specialty
         # cluster crowns BIS-1 directly; anything else with finals tokens but no
         # BIS yet keeps polling.
         target_met = has_bis1
 
     return {
         "probe": probe,
+        "probe_authoritative": probe_authoritative,
+        # Finals this show has *actually* awarded, as opposed to ones its group
+        # count implies it should. The difference decides what empty finals pages
+        # mean: silence for a show already handing out RYP, an answer for one
+        # that has never awarded anything.
+        "finals_observed": ryp_stage or has_bis1 or has_side_bis,
         "expects_finals": expects_finals,
         "expects_main_bis": expects_main_bis,
         "result_groups": result_groups,
@@ -448,15 +494,14 @@ def analyze(doc, indexed_breeds):
 def candidate_breed_keys(analysis):
     """Breed keys worth re-fetching to capture missing or late finals.
 
-    With the finals probe this is an exact list, not a guess: the pages name
-    every winner with their breed, so the breeds needing a re-read are precisely
-    those whose captured rows lack a token the pages have already promised. An
-    empty list then means there is nothing outstanding — including the case where
-    the pages hold no finals at all, which is a real answer and not a reason to
-    keep sweeping.
+    With finals pages that hold placements this is an exact list, not a guess:
+    they name every winner with their breed, so the breeds needing a re-read are
+    precisely those whose captured rows lack a token the pages have promised.
 
-    Without a probe (an old cache, or the pages never fetched) it falls back to
-    the structural guesses that were the only option before: groups still missing
+    Pages that hold *nothing* promise nothing, and are not evidence that nothing
+    is outstanding — a show may publish its finals only on the winners' breed
+    rows. Then, as without a probe at all (an old cache, or the pages never
+    fetched), it falls back to the structural guesses: groups still missing
     their RYP-1 -> those groups' ROP winners; all RYP-1 present but no BIS-1 ->
     the RYP-1 winners' breeds; a specialty cluster with no group stage -> the
     breed ROP winners; terminal reached -> the finals-carrying breeds once, for a
@@ -465,7 +510,7 @@ def candidate_breed_keys(analysis):
     Returns [] when the show expects no finals at all.
     """
     probe = analysis.get("probe") or {}
-    if probe.get("seen"):
+    if analysis.get("probe_authoritative"):
         return list(probe.get("missing_keys") or [])
 
     if not analysis.get("expects_finals"):
