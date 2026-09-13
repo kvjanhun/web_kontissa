@@ -1,6 +1,10 @@
 ---
 name: e2e
-description: Run the Playwright E2E suite locally with the documented gotchas handled — kill stray Flask on :5001, seed test-e2e.db if needed, and run with CI=1. Use when the user wants only the E2E suite (not the full /pre-push gauntlet) or is debugging a single E2E failure.
+description: Run the Playwright E2E suite locally with the documented gotchas handled — kill stray Flask on :5001, seed test-e2e.db if needed, and run with CI=1. Use when the user wants only the E2E suite (not the full /pre-push-kontissa gauntlet) or is debugging a single E2E failure.
+paths:
+  - tests/**
+  - frontend/**
+  - app/**
 ---
 
 # /e2e

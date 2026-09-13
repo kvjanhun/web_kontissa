@@ -41,7 +41,7 @@ land in the Litestream-replicated `site.db`.
   endpoints that the page calls on every load, and say why in a comment.
 - New model → `app/models.py`. New table is created by the idempotent
   `db.create_all()`; **a change to an existing table is not** — that is a schema
-  change, so run `schema-change` instead of reaching for `ALTER TABLE`.
+  change, so run `schema-change-kontissa` instead of reaching for `ALTER TABLE`.
 
 ## 3. Tests — same commit
 

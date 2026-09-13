@@ -1,6 +1,9 @@
 ---
 name: i18n-check
 description: Diff the en/fi locale files in frontend/locales and report any keys missing from either side, plus keys referenced in code but absent from both. Use after adding translatable copy, before pushing, or when the user reports a missing translation.
+paths:
+  - frontend/locales/**
+  - frontend/**
 ---
 
 # /i18n-check

@@ -1,5 +1,5 @@
 ---
-name: schema-change
+name: schema-change-kontissa
 description: Change the database schema for a feature — add or alter a column, table, or index in site.db or dog.db. Use whenever a feature needs the shape of the database to change. This repo has no migration runner, so the change is planned, tested, seeded, and applied to production by hand; the skill enforces that path and blocks the shortcuts CLAUDE.md forbids.
 paths:
   - app/models.py

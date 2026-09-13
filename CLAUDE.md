@@ -93,7 +93,7 @@ cd frontend && npm run build           # nuxt generate → .output/public/
 docker compose up --build -d
 ```
 
-**Database schema changes**: Never run a schema change from Flask startup, import time, or request handling. In particular, do not add `ALTER TABLE`, table rebuilds, or schema probes to `app/__init__.py` — it may create empty tables for fresh databases and nothing more. A schema change is planned explicitly, covered by tests and seed data updates, and applied to the production SQLite file by hand after review, with a backup taken first. The `schema-change` skill carries the procedure.
+**Database schema changes**: Never run a schema change from Flask startup, import time, or request handling. In particular, do not add `ALTER TABLE`, table rebuilds, or schema probes to `app/__init__.py` — it may create empty tables for fresh databases and nothing more. A schema change is planned explicitly, covered by tests and seed data updates, and applied to the production SQLite file by hand after review, with a backup taken first. The `schema-change-kontissa` skill carries the procedure.
 
 **Local E2E gotcha**: `playwright.config.js` sets `reuseExistingServer: !process.env.CI`, so any Flask already listening on :5001 (e.g. your dev server pointed at `site.db`) is reused instead of the correctly-configured test server. DB-backed specs (auth, admin, recipes) will fail. Stop the dev Flask before running E2E, invoke with `CI=1 npm run test:e2e`, or use alternate ports via `PLAYWRIGHT_API_PORT=5101 PLAYWRIGHT_WEB_PORT=3100`.
 

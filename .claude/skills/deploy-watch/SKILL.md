@@ -1,6 +1,9 @@
 ---
 name: deploy-watch
 description: After pushing to main, watch the GitHub Actions run and the live deploy webhook outcome, and report when erez.ac is actually serving the new commit. Use after `git push` to main, or when the user asks "is it deployed yet" / "did the deploy go through".
+paths:
+  - app/**
+  - frontend/**
 ---
 
 # /deploy-watch

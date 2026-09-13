@@ -1,9 +1,14 @@
 ---
-name: pre-push
+name: pre-push-kontissa
 description: Run the full local test gauntlet (pytest + vitest + playwright + nuxt generate) before pushing to main. Strict mode — reports failures, never auto-fixes. Use when the user is about to push, when they ask "is this ready to push", or after a non-trivial change before committing.
+paths:
+  - app/**
+  - frontend/**
+  - tests/**
+  - scripts/**
 ---
 
-# /pre-push
+# /pre-push-kontissa
 
 Push to `main` triggers an automatic deploy to erez.ac. A red CI run breaks the live site. This skill mirrors the GitHub Actions workflow locally so failures surface here, not in production.
 
@@ -43,7 +48,7 @@ Run these in order. Stop at the first failure and report — do not continue pas
 
 ## Reporting
 
-On success, one line: `pre-push: pytest ✓  vitest ✓  playwright ✓  build ✓ — safe to push`.
+On success, one line: `pre-push-kontissa: pytest ✓  vitest ✓  playwright ✓  build ✓ — safe to push`.
 
 On failure, report:
 - which suite failed,
