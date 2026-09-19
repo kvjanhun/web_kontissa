@@ -3225,6 +3225,36 @@ def test_quiescence_counts_only_observed_time(monkeypatch):
     looking, so the silence is not evidence), and a lunch break must not be able
     to settle a show whose rings are still unjudged — which is why the target has
     to be met as well as the window filled."""
+def test_the_default_quiescence_window_outlasts_a_real_mid_show_lull(monkeypatch):
+    """The window has to be longer than a show goes quiet while still judging.
+
+    Measured on two NORD shows on 2026-09-19: gaps of 18, 14, 12, 12 and 10
+    minutes between result rows during active judging. At the old 900s a
+    mid-afternoon lull filled the window on its own, leaving only `target_met`
+    between a half-judged show and settling."""
+    mark = dog_result_cache._mark_terminal_confirmation
+    monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_MAX_GAP", 360)
+
+    breeds = [{"name": "basenji", "count": 1, "group": "5", "breed_id": "3", "has_results": True}]
+    doc = {
+        "results": [{"breedGroup": "5", "breedId": "3", "awards": "SA, ROP"}],
+        "completed_breeds": {"5:3": {"result_count": 1, "awards": [{"type": "ROP"}]}},
+        "finals_probe": {"pages": {"RYP": {"sections": []}, "BIS": {"sections": []}}},
+    }
+
+    # 18 minutes of silence, watched in passes no wider than the max gap. This is
+    # the longest lull actually measured, and it used to be enough on its own.
+    for offset in (0, 300, 600, 900, 1080):
+        mark(doc, breeds, now=1_000_000 + offset)
+    assert 1080 > 900, "the old window was inside the measured noise"
+    assert doc["terminal_confirmed"] is False
+
+    # Carried out to 35 minutes, it does settle.
+    for offset in (1380, 1680, 1980, 2100):
+        mark(doc, breeds, now=1_000_000 + offset)
+    assert doc["terminal_confirmed"] is True
+
+
     mark = dog_result_cache._mark_terminal_confirmation
     monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_SECONDS", 900)
     monkeypatch.setattr(dog_result_cache, "RESULT_QUIESCENCE_MAX_GAP", 360)

@@ -67,9 +67,11 @@ RESULT_FINALS_SWEEP_BREED_LIMIT = int(os.environ.get("DOG_RESULT_FINALS_SWEEP_BR
 RESULT_FINALS_PROBE_TTL = int(os.environ.get("DOG_RESULT_FINALS_PROBE_TTL", "600"))
 # Quiescence: how long the show's terminal state must come back unchanged before
 # it may settle. It confirms a conclusion the settle ladder already reached; it
-# is never the conclusion itself, because a lunch break leaves a show quiet for
-# 30-60 minutes mid-judging.
-RESULT_QUIESCENCE_SECONDS = int(os.environ.get("DOG_RESULT_QUIESCENCE_SECONDS", "900"))
+# is never the conclusion itself, because a show goes quiet mid-judging — two
+# NORD shows observed on 2026-09-19 had gaps of 18, 14, 12, 12 and 10 minutes
+# between result rows while judging was plainly still going on, and a lunch break
+# can run far longer.
+RESULT_QUIESCENCE_SECONDS = int(os.environ.get("DOG_RESULT_QUIESCENCE_SECONDS", "1800"))
 # Only *observed* time counts toward that window. A gap longer than this means
 # nobody was watching — the night stop, a crawler restart, a run of failures —
 # and contributes nothing, or the overnight gap alone would settle every show at
