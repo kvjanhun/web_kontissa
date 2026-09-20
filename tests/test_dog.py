@@ -183,6 +183,73 @@ SAMPLE_SIDE_BIS_ONLY_HTML = """
 </div>
 """
 
+# The same ring after its photos are uploaded. Showlink swaps the placement rows
+# for a captioned gallery and every show does it, within hours of the ring — the
+# markup below is show 13780's `R=RYP` as served at 18:24 on 2026-09-20, trimmed
+# to two placements. The caption carries place, breed, dog and owner in the same
+# order the rows did.
+SAMPLE_GALLERY_RYP_PAGE_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3">
+  <div class="floatleft">FCI  3 - Terrierit</div>
+  <div class="floatright"><span><span class="tuomariotsikko">Tuomari </span>Igoris Zizevskis</span></div>
+</td></tr>
+<tr class="gallery"><td colspan="3">
+<div class="kuvaRivi">
+<div class="kuvaLeft"><div class="kuvaDiv">
+  <a class="kuvalinkki" href="https://kuvat.kennelliitto.fi/showimages/13780/GROUP_1410.jpg"><img class="pikkukuva"/></a>
+</div>
+<div class="kuvaTeksti">
+  1. amerikanstaffordshirenterrieri<br/>
+  <a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23" target="_blank">Mama Mia</a><br/>
+  Om. Lapuerta Katharina
+</div></div>
+<div class="kuvaRight"><div class="kuvaDiv">
+  <a class="kuvalinkki" href="https://kuvat.kennelliitto.fi/showimages/13780/GROUP_1171.jpg"><img class="pikkukuva"/></a>
+</div>
+<div class="kuvaTeksti">
+  2. skotlanninterrieri<br/>
+  <a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI24070%2F26" target="_blank">Piccola Strega</a><br/>
+  Om. - -
+</div></div>
+</div>
+</td></tr>
+</table>
+</div>
+"""
+
+# A gallery whose final places a *kennel* — the breeder group has no registered
+# dog and so no link, in this rendering as in the row one.
+SAMPLE_GALLERY_BIS_PAGE_HTML = """
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3"><div class="floatleft">Best in show</div></td></tr>
+<tr class="gallery"><td colspan="3">
+<div class="kuvaRivi"><div class="kuvaLeft"><div class="kuvaDiv">
+  <a class="kuvalinkki" href="https://kuvat.kennelliitto.fi/showimages/13780/BIS_1.jpg"><img class="pikkukuva"/></a>
+</div>
+<div class="kuvaTeksti">
+  1. fieldspanieli<br/>
+  <a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17" target="_blank">Field Of Dreams</a><br/>
+  Om. Omistaja F
+</div></div></div>
+</td></tr>
+<tr class="otsikko"><td colspan="3"><div class="floatleft">Paras kasvattajaryhmä</div></td></tr>
+<tr class="gallery"><td colspan="3">
+<div class="kuvaRivi"><div class="kuvaLeft"><div class="kuvaDiv">
+  <a class="kuvalinkki" href="https://kuvat.kennelliitto.fi/showimages/13780/BREEDER_1.jpg"><img class="pikkukuva"/></a>
+</div>
+<div class="kuvaTeksti">
+  1. walesinspringerspanieli<br/>
+  Sunnystorm<br/>
+  Om. Vainikainen Noora
+</div></div></div>
+</td></tr>
+</table>
+</div>
+"""
+
 SAMPLE_EMPTY_FINALS_PAGE_HTML = """
 <div id="divContent">
 <table class="tulostaulukko"></table>
@@ -2461,6 +2528,104 @@ def _finals_probe(ryp_html=None, bis_html=None, show_id=14014):
             "sections": _parse_finals_page(BeautifulSoup(html, "html.parser"), show_id)["sections"],
         }
     return {"checked_at": 1000.0, "pages": pages}
+
+
+def test_parse_finals_page_reads_a_final_rendered_as_a_photo_gallery():
+    """A final is rendered two ways and the second one is the lasting one.
+
+    Showlink swaps a final's placement rows for a captioned photo gallery once
+    the pictures are uploaded, which happens within hours of the ring. Reading
+    only the row form makes every show's finals pages go blank to us shortly
+    after it ends: show 13780's `R=RYP` parsed as zero sections at 18:24 on
+    2026-09-20 while holding all ten groups, four placements each."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    parsed = _parse_finals_page(
+        BeautifulSoup(SAMPLE_GALLERY_RYP_PAGE_HTML, "html.parser"), 13780)
+    assert len(parsed["sections"]) == 1
+    section = parsed["sections"][0]
+    assert section["heading"] == "FCI 3 - Terrierit"
+    assert section["fci_groups"] == ["3"]
+    assert section["judge"] == "Igoris Zizevskis"
+    # The caption gives the same four facts the row form did, reg id included —
+    # which is the identity a winner is reconciled to a captured row by.
+    assert [(p["place"], p["breed_name"], p["name"], p["reg_id"]) for p in section["placements"]] == [
+        (1, "amerikanstaffordshirenterrieri", "Mama Mia", "FI48866/23"),
+        (2, "skotlanninterrieri", "Piccola Strega", "FI24070/26"),
+    ]
+    assert section["placements"][0]["owner"] == "Lapuerta Katharina"
+
+
+def test_a_gallery_breeder_group_places_a_kennel_with_no_registration():
+    """The breeder-group final places a kennel in either rendering, so it carries
+    no dog link and no reg id — and must still count as a published placement,
+    because the finals plainly exist, while never becoming an obligation on a
+    breed row that can never hold it."""
+    from bs4 import BeautifulSoup
+
+    from app.dog_show.parsers import _parse_finals_page
+
+    sections = _parse_finals_page(
+        BeautifulSoup(SAMPLE_GALLERY_BIS_PAGE_HTML, "html.parser"), 13780)["sections"]
+    assert [s["heading"] for s in sections] == ["Best in show", "Paras kasvattajaryhmä"]
+    kennel = sections[1]["placements"][0]
+    assert (kennel["name"], kennel["reg_id"]) == ("Sunnystorm", "")
+
+
+def test_a_show_whose_finals_went_to_photos_still_reaches_its_terminal():
+    """End to end on the shape that matters: once the photos are up, the pages
+    are the *only* record still being served, so a show settles off the gallery
+    or not at all."""
+    breeds = [
+        {"name": "amerikanstaffordshirenterrieri", "count": 1, "group": "3", "breed_id": "192", "has_results": True},
+        {"name": "skotlanninterrieri", "count": 1, "group": "3", "breed_id": "191", "has_results": True},
+        {"name": "fieldspanieli", "count": 1, "group": "8", "breed_id": "121", "has_results": True},
+        {"name": "walesinspringerspanieli", "count": 1, "group": "8", "breed_id": "130", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "3", "breedId": "192", "awards": "SA, ROP, RYP-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI48866%2F23"},
+            {"breedGroup": "3", "breedId": "191", "awards": "SA, ROP, RYP-2",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI24070%2F26"},
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP, RYP-1, BIS-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17"},
+        ],
+        "finals_probe": _finals_probe(SAMPLE_GALLERY_RYP_PAGE_HTML, SAMPLE_GALLERY_BIS_PAGE_HTML, show_id=13780),
+    }
+    analysis = dog_finals.analyze(doc, breeds)
+    assert analysis["probe_authoritative"] is True
+    assert analysis["probe"]["main_bis_awarded"] is True
+    assert analysis["probe"]["missing_keys"] == []
+    assert analysis["target_met"] is True
+
+
+def test_a_group_crowned_only_on_a_breed_row_still_counts_as_crowned():
+    """Crowned groups are unioned from the page and from the rows.
+
+    Each is a partial view: a combined `FCI 5/6` ring is visible only on the
+    page, and a show that leaves its pages empty says it only on the rows. The
+    check is suspended just for the show that crowns no group anywhere — and
+    suspending it whenever the *page* named none would settle an all-breed show
+    the moment its BIS page published."""
+    breeds = [
+        {"name": "fieldspanieli", "count": 1, "group": "8", "breed_id": "121", "has_results": True},
+        {"name": "venäjänajokoira", "count": 1, "group": "6", "breed_id": "64", "has_results": True},
+    ]
+    doc = {
+        "results": [
+            {"breedGroup": "8", "breedId": "121", "awards": "SA, ROP, RYP-1, BIS-1",
+             "reg_url": "https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo=FI49208%2F17"},
+            {"breedGroup": "6", "breedId": "64", "awards": "SA, ROP"},
+        ],
+        # The BIS page has published; the RYP page holds nothing.
+        "finals_probe": _finals_probe(SAMPLE_EMPTY_FINALS_PAGE_HTML, SAMPLE_GALLERY_BIS_PAGE_HTML, show_id=13780),
+    }
+    analysis = dog_finals.analyze(doc, breeds)
+    assert analysis["probe"]["main_bis_awarded"] is True
+    assert analysis["target_met"] is False, "group 6 is crowned nowhere"
 
 
 def test_parse_finals_page_reads_rings_winners_and_reg_ids():

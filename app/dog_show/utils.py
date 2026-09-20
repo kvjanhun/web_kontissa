@@ -196,16 +196,13 @@ def _terminal_status(doc, indexed_breeds):
     finals_published = bool(probe["seen"] and probe["published"] and not probe["missing_keys"])
     judging_finished = _nothing_left_to_judge(doc, indexed_breeds)
 
-    if probe["published"]:
-        # The pages name every winner: they decide, against what the entries
-        # oblige the show to award.
-        target_met = judging_finished and analysis["target_met"]
-    elif probe["seen"] and analysis["finals_observed"]:
-        # Pages empty, but the captured rows already carry RYP or BIS tokens, so
-        # this show plainly awards finals and simply does not publish them on
-        # `R=RYP` / `R=BIS` — many append them to the winners' breed rows only.
-        # Reading that silence as "awards no finals" settles an all-breed show
-        # the moment its last ring lands and loses every final it had left.
+    if probe["published"] or (probe["seen"] and analysis["finals_observed"]):
+        # This show awards finals, either because its pages name winners or
+        # because its captured rows already carry RYP or BIS tokens — some shows
+        # publish them only there. Either way the structure decides, against what
+        # the entries oblige the show to award. Reading empty pages as "awards no
+        # finals" settles an all-breed show the moment its last ring lands and
+        # loses every final it had left.
         target_met = judging_finished and analysis["target_met"]
     elif probe["seen"]:
         # Pages read, nothing on them, no finals token anywhere: awards none.

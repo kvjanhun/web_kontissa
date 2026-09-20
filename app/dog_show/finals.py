@@ -447,10 +447,16 @@ def analyze(doc, indexed_breeds):
         # is what keeps combined rings, group-only shows and specialty clusters
         # from being special cases, without also blinding us to groups that have
         # entries and no ring yet.
-        uncrowned_groups = (
-            result_groups - set(probe["ryp_groups_awarded"])
-            if probe["ryp_groups_awarded"] else set()
-        )
+        # Crowned groups come from both places that know: the page's ring
+        # headings, which are the only witness to a combined `FCI 5/6` ring, and
+        # the `RYP-1` tokens on captured rows, which is where a show that never
+        # populates its pages says it. Only an empty union suspends the check,
+        # and that is the one shape it cannot be asked of — a specialty cluster
+        # crowns BIS-1 with no group stage at all. Suspending it whenever the
+        # *page* names no group instead hands a settle to any all-breed show the
+        # moment its BIS page publishes, every group unaccounted for.
+        crowned_groups = set(probe["ryp_groups_awarded"]) | ryp1_groups
+        uncrowned_groups = (result_groups - crowned_groups) if crowned_groups else set()
         target_met = (
             not probe["missing_keys"]
             and not uncrowned_groups

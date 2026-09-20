@@ -186,14 +186,58 @@ def _finals_heading_groups(heading):
     return [part.strip() for part in match.group(1).split("/") if part.strip()]
 
 
+def _finals_placement(place, breed_name, name, owner, reg_url):
+    """One placement, from either rendering of a final."""
+    if reg_url and not reg_url.startswith("http"):
+        reg_url = "https://jalostus.kennelliitto.fi" + reg_url
+    return {
+        "place": int(place),
+        "breed_name": breed_name,
+        "name": name,
+        "owner": owner,
+        "reg_url": reg_url,
+        "reg_id": _parse_reg_id(reg_url),
+    }
+
+
+def _finals_gallery_placement(caption):
+    """One placement from the photo-gallery rendering of a final.
+
+    The caption carries the same three facts in the same order as the row form —
+    `1. breed`, the dog, `Om. owner` — one per line. The dog is linked except
+    where the final places a *kennel* (the breeder group), which has no
+    registration number in either rendering.
+    """
+    lines = [line.strip() for line in caption.get_text("\n", strip=True).split("\n") if line.strip()]
+    if not lines:
+        return None
+    head = re.match(r"^(\d+)\.\s*(.+)$", lines[0])
+    if not head:
+        return None
+    rest = lines[1:]
+    owner = next((re.sub(r"^Om\.\s*", "", line) for line in rest if line.startswith("Om.")), "")
+    name = next((line for line in rest if not line.startswith("Om.")), "")
+    dog_link = caption.find("a", href=True)
+    return _finals_placement(
+        head.group(1), head.group(2).strip(), name, owner,
+        dog_link.get("href", "") if dog_link else "")
+
+
 def _parse_finals_page(soup, show_id):
     """Parse a show's `R=RYP` or `R=BIS` page.
 
     Both use the same shape: one `table.tulostaulukko` of `tr.otsikko` section
     headings (the ring or final, plus its judge) each followed by up to four
-    placement rows of `place | breed name | dog (+ owner)`. The dog link carries
-    the Kennelliitto registration number, so a winner named here reconciles to a
-    captured `dog_result` row by `reg_id` rather than by name.
+    placements. The dog link carries the Kennelliitto registration number, so a
+    winner named here reconciles to a captured `dog_result` row by `reg_id`
+    rather than by name.
+
+    **A final is rendered two ways and both must be read.** Until its photos are
+    uploaded it is `place | breed name | dog (+ owner)` rows; afterwards Showlink
+    replaces those with a `tr.gallery` of captioned photos. Every show does this,
+    within hours of the ring, so reading only the row form makes a show's finals
+    pages go blank to us shortly after it ends — which looks exactly like a
+    source that never published them.
 
     An empty list of sections means the page exists but holds no finals yet —
     which is a different fact from the nav not offering the page at all, and the
@@ -223,6 +267,15 @@ def _parse_finals_page(soup, show_id):
                 sections.append(current)
                 continue
 
+            if "gallery" in classes:
+                if current is None:
+                    continue
+                for caption in row.select("div.kuvaTeksti"):
+                    placement = _finals_gallery_placement(caption)
+                    if placement:
+                        current["placements"].append(placement)
+                continue
+
             cells = row.find_all("td")
             if current is None or len(cells) < 3:
                 continue
@@ -239,14 +292,8 @@ def _parse_finals_page(soup, show_id):
             owner_split = re.split(r",?\s*Om\.\s*", dog_text, maxsplit=1)
             name = dog_link.get_text(strip=True) if dog_link else owner_split[0].strip()
             owner = owner_split[1].strip() if len(owner_split) > 1 else ""
-            current["placements"].append({
-                "place": int(place_text),
-                "breed_name": cells[1].get_text(" ", strip=True),
-                "name": name,
-                "owner": owner,
-                "reg_url": reg_url,
-                "reg_id": _parse_reg_id(reg_url),
-            })
+            current["placements"].append(_finals_placement(
+                place_text, cells[1].get_text(" ", strip=True), name, owner, reg_url))
 
     return {
         "show_id": show_id,
