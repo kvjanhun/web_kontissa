@@ -2638,6 +2638,44 @@ def test_a_refilled_finals_section_replaces_the_day_it_supersedes(monkeypatch):
     assert dog_finals.probe_state(doc, _two_day_show_breeds())["missing_keys"] == ["3:191"]
 
 
+def _one_section_bis_page(heading, reg_no):
+    return f"""
+<div id="divContent">
+<table class="tulostaulukko">
+<tr class="otsikko"><td colspan="3"><div class="floatleft">{heading}</div></td></tr>
+<tr><td>1.</td><td>basenji</td>
+  <td><a href="https://jalostus.kennelliitto.fi/frmKoira.aspx?RekNo={reg_no}">Voittaja</a> Om. Omistaja A</td></tr>
+</table>
+</div>
+"""
+
+
+def test_a_page_showing_one_final_at_a_time_is_only_ever_seen_whole_by_accumulating(monkeypatch):
+    """Some shows publish a final, clear it, and publish the next.
+
+    Show 13885 put `Paras pentu` on `R=BIS` at 16:28 on 2026-09-20, an empty page
+    at 16:30, `Paras kasvattajaryhmä` at 16:38, empty again at 16:40, and `Paras
+    veteraani` at 16:42 — each visible for about one pass. No single read of that
+    page ever holds more than one of them, so accumulating is not merely a guard
+    against losing history here: it is the only way the show's award set is ever
+    knowable at all."""
+    empty = SAMPLE_EMPTY_FINALS_PAGE_HTML
+    doc = _probe_weekend(monkeypatch, [
+        (empty, _one_section_bis_page("Paras pentu", "FI11111%2F20")),
+        (empty, empty),
+        (empty, _one_section_bis_page("Paras kasvattajaryhmä", "FI22222%2F21")),
+        (empty, empty),
+        (empty, _one_section_bis_page("Paras veteraani", "FI33333%2F22")),
+        (empty, empty),
+    ])
+
+    headings = [s["heading"] for s in doc["finals_probe"]["pages"]["BIS"]["sections"]]
+    assert headings == ["Paras pentu", "Paras kasvattajaryhmä", "Paras veteraani"]
+    # And the show is still readable as having published finals once the page
+    # has gone quiet again, which is the state it ends the day in.
+    assert dog_finals.probe_state(doc, _two_day_show_breeds())["published"] is True
+
+
 def test_the_probe_cadence_follows_the_page_not_the_accumulated_record(monkeypatch):
     """Placements-on-the-page means finals are landing, so probe every pass. The
     accumulated record says nothing about that, and reading a page that has been
