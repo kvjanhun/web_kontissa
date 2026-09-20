@@ -511,8 +511,19 @@ def _result_breeds_for_live_cache(show_id, breeds, doc, availability, now=None):
     return selected + probes
 
 def _finals_probe_placements(doc):
-    """How many placements the last probe saw across both finals pages."""
-    pages = ((doc or {}).get("finals_probe") or {}).get("pages") or {}
+    """How many placements the last *read* of the finals pages held.
+
+    This paces the probe, so it asks what the pages are doing now rather than
+    what the show has awarded. The two differ across a multi-day show's day
+    boundary: the stored record accumulates (`finals.merge_probe_sections`) while
+    the pages themselves go back to empty, and re-reading an emptied page every
+    pass through the following morning buys nothing.
+    """
+    probe = (doc or {}).get("finals_probe") or {}
+    last = probe.get("last_placements")
+    if last is not None:
+        return _safe_int(last) or 0
+    pages = probe.get("pages") or {}
     return sum(
         len(section.get("placements") or [])
         for page in pages.values()
@@ -549,12 +560,20 @@ def _probe_finals_pages(show_id, doc, delay=0.0):
     which dog won what. Everything downstream — the settle ladder, the targeted
     re-fetch — reads this rather than inferring structure from the breed index.
 
+    What each page shows is accumulated rather than replaced, because the pages
+    are a current-day view that the source clears at a multi-day show's day
+    boundary, in the middle of fetch hours — `finals.merge_probe_sections` owns
+    that rule. `last_placements` keeps the unaccumulated count, which is what the
+    probe's own cadence should follow.
+
     Failures are recorded and left: a probe that could not be read this pass is
     not evidence that the finals do not exist, and must never be allowed to look
     like it."""
     probe = dict(doc.get("finals_probe") or {})
     pages = dict(probe.get("pages") or {})
     errors = {}
+    read_placements = 0
+    read_any = False
     for target in FINALS_TARGETS:
         if delay:
             time.sleep(delay)
@@ -565,11 +584,19 @@ def _probe_finals_pages(show_id, doc, delay=0.0):
             logger.warning("dog_finals_probe_failed", show_id=show_id, target=target, error=errors[target])
             continue
         parsed = _parse_finals_page(soup, show_id)
-        pages[target] = {"sections": parsed["sections"]}
+        read_any = True
+        read_placements += sum(len(s.get("placements") or []) for s in parsed["sections"])
+        pages[target] = {
+            "sections": finals.merge_probe_sections(
+                (pages.get(target) or {}).get("sections"), parsed["sections"]
+            )
+        }
 
     probe["pages"] = pages
     probe["checked_at"] = time.time()
     probe["errors"] = errors
+    if read_any:
+        probe["last_placements"] = read_placements
     doc["finals_probe"] = probe
     return probe
 
