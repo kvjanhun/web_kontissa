@@ -39,6 +39,7 @@ delay so Showlink sees the same polite client it already knows.
 """
 
 import argparse
+import collections
 import datetime
 import hashlib
 import json
@@ -68,6 +69,7 @@ from app.dog_show.parsers import (  # noqa: E402
 # reimplemented: a measurement that disagreed with the code being measured would
 # answer question 2 about the wrong thing.
 from app.dog_show.result_cache import _breed_bob_awarded  # noqa: E402
+from app.dog_show.utils import _parse_show_date_range  # noqa: E402
 from app.dog_show.showlink import _fetch_page, _source_url  # noqa: E402
 
 DEFAULT_CHEAP_INTERVAL = 120
@@ -162,6 +164,12 @@ def _finals_page_signal(soup, show_id):
     exists but holds no finals yet — and it is a different fact from the landing
     nav not offering the page at all. Question 1 is exactly which of those two
     Showlink does before the finals are judged, so both are recorded separately.
+
+    `renderings` counts the sections served as placement rows against those
+    served as a photo gallery. A final swaps from the first to the second when
+    its pictures are uploaded, and the parser reading only one of them is a bug
+    that has already cost a weekend of wrong conclusions, so the swap is measured
+    rather than inferred.
     """
     if soup is None:
         return {}
@@ -181,6 +189,8 @@ def _finals_page_signal(soup, show_id):
             }
             for section in sections for placement in section["placements"]
         ],
+        "renderings": collections.Counter(
+            section.get("rendering") or "none" for section in sections),
         "digest": _digest(soup.get_text(" ", strip=True)),
     }
 
@@ -391,15 +401,32 @@ def _parse_until(value):
     return end.timestamp()
 
 
+def _snapshot_dir(args):
+    """Where RYP/BIS snapshots go: beside the output file unless overridden.
+
+    Deriving it from `--out` rather than defaulting to a relative path means one
+    flag places both, which matters because this runs in the crawler container
+    against a bind mount — a relative default silently resolves inside the image
+    and the run dies on the first write. An explicit empty string disables it.
+    """
+    if args.html_dir is not None:
+        return args.html_dir or None
+    return os.path.join(os.path.dirname(os.path.abspath(args.out)), "html")
+
+
 def _print_show_list():
     soup, _, error = _fetch(BASE_URL)
     if error:
         print(f"show list fetch failed: {error}")
         return 1
     today = datetime.date.today()
-    label = f"{today.day:02d}.{today.month:02d}."
     for show in _parse_show_list(soup):
-        marker = "*" if show["date"].startswith(label) or label in show["date"] else " "
+        # Reuse the crawler's own range parser: a two-day show is listed as one
+        # range, so matching a formatted day against the string misses its first
+        # day, which is exactly the day worth observing.
+        start_date, end_date = _parse_show_date_range(show, today=today)
+        runs_today = bool(start_date and end_date and start_date <= today <= end_date)
+        marker = "*" if runs_today else " "
         print(f"{marker} {show['id']:>6}  {show['date']:<14} {show['name']}")
     print("\n* = runs today. Pick shows of different shapes (question 7).")
     return 0
@@ -411,7 +438,7 @@ def _dry_run(show_ids, args):
     Worth more than unit tests here: it proves the selectors still match today's
     Showlink markup, which is the only way this tool can silently record nothing.
     """
-    recorder = Recorder(args.out, html_dir=args.html_dir, echo=True)
+    recorder = Recorder(args.out, html_dir=_snapshot_dir(args), echo=True)
     try:
         for show_id in show_ids:
             observer = ShowObserver(show_id, recorder, args)
@@ -440,8 +467,9 @@ def main():
                         help="Fetch each page type once, print what was extracted, exit.")
     parser.add_argument("--out", default="observations/dog-live.jsonl",
                         help="JSONL output path (appended to).")
-    parser.add_argument("--html-dir", default="observations/html",
-                        help="Directory for RYP/BIS page snapshots; empty to disable.")
+    parser.add_argument("--html-dir", default=None,
+                        help="Directory for RYP/BIS page snapshots; defaults to "
+                             "an `html/` beside --out, empty string to disable.")
     parser.add_argument("--cheap-interval", type=int, default=DEFAULT_CHEAP_INTERVAL,
                         help="Seconds between cheap-page passes (default 120).")
     parser.add_argument("--breed-interval", type=int, default=DEFAULT_BREED_INTERVAL,
@@ -466,7 +494,7 @@ def main():
         return _dry_run(args.show, args)
 
     end_ts = _parse_until(args.until)
-    recorder = Recorder(args.out, html_dir=args.html_dir or None, echo=True)
+    recorder = Recorder(args.out, html_dir=_snapshot_dir(args), echo=True)
     observers = [ShowObserver(show_id, recorder, args) for show_id in args.show]
     recorder.record(
         "meta", note="run started", shows=args.show,

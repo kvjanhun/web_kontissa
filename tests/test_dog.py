@@ -2556,6 +2556,9 @@ def test_parse_finals_page_reads_a_final_rendered_as_a_photo_gallery():
         (2, "skotlanninterrieri", "Piccola Strega", "FI24070/26"),
     ]
     assert section["placements"][0]["owner"] == "Lapuerta Katharina"
+    # Which rendering served the section is recorded, because a final changing
+    # shape is the failure this parser has been blind to once already.
+    assert section["rendering"] == "gallery"
 
 
 def test_a_gallery_breeder_group_places_a_kennel_with_no_registration():
@@ -2646,6 +2649,7 @@ def test_parse_finals_page_reads_rings_winners_and_reg_ids():
     ]
     assert [section["fci_groups"] for section in sections] == [["3"], ["5", "6"], ["8"]]
     assert sections[0]["judge"] == "Igoris Zizevskis"
+    assert sections[0]["rendering"] == "rows"
     assert sections[0]["placements"][0] == {
         "place": 1,
         "breed_name": "amerikanstaffordshirenterrieri",

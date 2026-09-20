@@ -262,6 +262,11 @@ def _parse_finals_page(soup, show_id):
                     "heading": re.sub(r"\s+", " ", heading).strip(),
                     "fci_groups": _finals_heading_groups(heading),
                     "judge": judge,
+                    # Which of the two renderings served this section. Recorded
+                    # because a final silently changing shape is the failure mode
+                    # this parser has already been blind to once, and the stored
+                    # probe is where that would be diagnosed next time.
+                    "rendering": "",
                     "placements": [],
                 }
                 sections.append(current)
@@ -273,6 +278,7 @@ def _parse_finals_page(soup, show_id):
                 for caption in row.select("div.kuvaTeksti"):
                     placement = _finals_gallery_placement(caption)
                     if placement:
+                        current["rendering"] = "gallery"
                         current["placements"].append(placement)
                 continue
 
@@ -292,6 +298,7 @@ def _parse_finals_page(soup, show_id):
             owner_split = re.split(r",?\s*Om\.\s*", dog_text, maxsplit=1)
             name = dog_link.get_text(strip=True) if dog_link else owner_split[0].strip()
             owner = owner_split[1].strip() if len(owner_split) > 1 else ""
+            current["rendering"] = "rows"
             current["placements"].append(_finals_placement(
                 place_text, cells[1].get_text(" ", strip=True), name, owner, reg_url))
 
