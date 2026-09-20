@@ -228,42 +228,8 @@ def _token_satisfies(token, family, place):
     return _is_any_final(token) and token.endswith(suffix)
 
 
-def merge_probe_sections(retained, fresh):
-    """Fold a freshly read finals page into what that page has shown before.
-
-    The finals pages are a *current-day* view, not the show's award record. A
-    multi-day show's pages are cleared at the day boundary and refilled with the
-    next day's rings, and that happens inside fetch hours: show 13774 served day
-    one's three side finals on `R=BIS` until 15:44 on 2026-09-20 and day two's
-    single breeder-group ring two minutes later, with none of day one's dogs on
-    it. Storing only the latest read would drop the earlier day's awards, leave
-    its groups looking uncrowned for the rest of the show, and un-award a main
-    BIS the settle ladder had already accepted.
-
-    So sections accumulate, keyed by heading, and a section holding placements is
-    never displaced by one holding none. A refilled section still replaces the
-    one it supersedes, so corrections land; an emptied page can then only lose
-    obligations, never invent them, which keeps the merge from blocking a settle
-    it cannot justify.
-
-    Sections the page leaves unnamed cannot be identified across reads, so they
-    are taken from the fresh read alone.
-    """
-    merged = {}
-    for section in list(retained or []) + list(fresh or []):
-        heading = str(section.get("heading") or "").strip()
-        if not heading:
-            continue
-        previous = merged.get(heading)
-        if previous and (previous.get("placements") or []) and not (section.get("placements") or []):
-            continue
-        merged[heading] = section
-    unnamed = [s for s in (fresh or []) if not str(s.get("heading") or "").strip()]
-    return list(merged.values()) + unnamed
-
-
 def _probe_sections(doc):
-    """Every finals-page section the crawler has seen, as (page, section) pairs."""
+    """The finals-page sections the crawler last saw, as (page, section) pairs."""
     probe = (doc or {}).get("finals_probe") or {}
     pages = probe.get("pages") or {}
     for page in ("RYP", "BIS"):
@@ -305,24 +271,19 @@ def _captured_tokens_by_key(results):
 def probe_state(doc, indexed_breeds):
     """What the finals pages say, reconciled against what we have captured.
 
-    The pages are cleared and refilled at a multi-day show's day boundary, so
-    what is stored is the union of every read (see `merge_probe_sections`) and
-    everything below describes the show, not today's page.
-
     Returns the pieces the ladder and the targeted re-fetch need:
 
     - `seen`: the probe has run at least once (absent on an old cache);
-    - `published`: a finals page has held at least one placement — the source's
-      own statement that the finals exist, which no amount of breed-page reading
-      can give;
+    - `published`: a finals page holds at least one placement — the source's own
+      statement that the finals exist, which no amount of breed-page reading can
+      give;
     - `expected_ryp_rings` / `ryp_rings_awarded`: rings as the RYP page groups
       them, so a combined `FCI 5/6` ring counts once and not twice;
     - `ryp_groups_awarded`: the FCI groups those crowned rings actually cover,
       to be checked against the groups the index says have entries;
     - `main_bis_awarded`: a placement in the *main* Best in show section. A side
       final (BIS JUN / BIS VET) is not it, and on a two-day show those land a
-      whole day before the main one — day one's side finals are still on the
-      accumulated page when day two's main BIS is the thing being waited for;
+      whole day before the main one;
     - `missing_keys`: exactly the breed pages whose captured rows are missing a
       token the finals pages have already promised. This is the re-fetch list —
       the whole of it.
@@ -486,23 +447,10 @@ def analyze(doc, indexed_breeds):
         # is what keeps combined rings, group-only shows and specialty clusters
         # from being special cases, without also blinding us to groups that have
         # entries and no ring yet.
-        #
-        # A two-day show splits its groups over the two days and `result_groups`
-        # spans both, so this is only ever satisfiable because the probe
-        # accumulates across the day boundary rather than following the page.
-        # Crowned groups are unioned from both places they show up, for the same
-        # reason the pages accumulate: each is a partial view. A show may publish
-        # its group winners only as tokens on the winners' breed rows and leave
-        # `R=RYP` empty all weekend, and an accumulated page still misses a ring
-        # crowned while the crawler was down.
-        #
-        # Only an empty union suspends the check, and that is the one shape it
-        # cannot be asked of: a specialty cluster crowns BIS-1 with no group
-        # stage at all, so there is no RYP to wait for. Suspending it whenever
-        # the *page* is empty would instead hand a settle to any all-breed show
-        # the moment its BIS page published, with every group unaccounted for.
-        crowned_groups = set(probe["ryp_groups_awarded"]) | ryp1_groups
-        uncrowned_groups = (result_groups - crowned_groups) if crowned_groups else set()
+        uncrowned_groups = (
+            result_groups - set(probe["ryp_groups_awarded"])
+            if probe["ryp_groups_awarded"] else set()
+        )
         target_met = (
             not probe["missing_keys"]
             and not uncrowned_groups
